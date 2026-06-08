@@ -116,3 +116,13 @@ void listen<string>("quote-captured", (event) => {
   appendToEnd(editor, insert);
 });
 
+void listen("accessibility-needed", () => {
+  if (document.querySelector("#a11y-banner")) return;
+  const banner = document.createElement("div");
+  banner.id = "a11y-banner";
+  banner.textContent =
+    "需要「辅助功能」权限才能抓取划线：系统设置 → 隐私与安全性 → 辅助功能，勾选 FloatNote 后重试。";
+  banner.addEventListener("click", () => banner.remove());
+  app.prepend(banner);
+});
+

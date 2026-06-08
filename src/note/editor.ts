@@ -45,6 +45,10 @@ export function setDoc(view: EditorView, content: string) {
 
 export function appendToEnd(view: EditorView, text: string) {
   const end = view.state.doc.length;
-  view.dispatch({ changes: { from: end, insert: text } });
+  view.dispatch({
+    changes: { from: end, insert: text },
+    selection: { anchor: end + text.length },
+    scrollIntoView: true,
+  });
 }
 
