@@ -16,10 +16,12 @@ v1 刻意**不做**：浏览器页面上下文绑定（URL/标题）、语音转
 
 - **Tauri v2**：单窗口桌面应用。
 - **Rust 后端**：全局快捷键、窗口置顶/显隐、划线文字抓取、Markdown 文件读写、配置持久化。
-- **Web 前端**：Markdown 编辑器（CodeMirror 6）+ 备忘录风格 UI + 设置面板。
+- **Web 前端**：**Vanilla TypeScript + Vite，不用 UI 框架**。Markdown 编辑器（CodeMirror 6）+ 备忘录风格 UI + 设置面板。
 - 前后端通过 Tauri command（前端调后端）和 event（后端通知前端，如「已追加引用」）通信。
 
 主要依赖：`tauri-plugin-global-shortcut`、剪贴板能力（Tauri clipboard）、文件读写（Rust std 或 `tauri-plugin-fs`）。前端：CodeMirror 6（markdown 语言包 + 自定义主题）。
+
+**前端框架决策（Vanilla TS）**：v1 交互面很小——重活由 CodeMirror 扛（框架无关，直接挂 DOM），其余响应式状态仅「当前笔记 + 笔记列表 + 设置」几项，手写管理足够。不用框架可保持包小、构建快、依赖少，贴合极简气质。若 v2 引入收件箱/分类等复杂 UI，再考虑迁移到 Svelte（CodeMirror 部分无需改动）。用 Tauri 的 `vanilla-ts` 脚手架模板。
 
 平台：v1 仅针对 macOS（划线抓取、辅助功能权限、窗口置顶均按 macOS 实现）。
 
@@ -111,7 +113,7 @@ FloatNote/
 │   │   ├── notes.rs        # 笔记文件读写、文件名派生、列表
 │   │   └── config.rs       # 配置读写
 │   └── tauri.conf.json
-├── src/                # Web 前端
+├── src/                # Web 前端（Vanilla TS + Vite）
 │   ├── editor/         # CodeMirror 集成 + 备忘录主题
 │   ├── notes/          # 当前笔记状态、切换、自动保存
 │   └── settings/       # 设置面板
