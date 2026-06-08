@@ -1,0 +1,57 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export interface NoteEntry {
+  name: string;
+  path: string;
+}
+
+export interface Config {
+  working_dir: string | null;
+  shortcut_capture: string;
+  shortcut_toggle: string;
+  font_size: number;
+  launch_at_login: boolean;
+}
+
+export interface CurrentNote {
+  dir: string;
+  entry: NoteEntry;
+}
+
+export async function getConfig(): Promise<Config> {
+  return invoke<Config>("get_config");
+}
+
+export async function setWorkingDir(dir: string): Promise<void> {
+  await invoke("set_working_dir", { dir });
+}
+
+export async function listNotes(dir: string): Promise<NoteEntry[]> {
+  return invoke<NoteEntry[]>("list_notes", { dir });
+}
+
+export async function readNote(path: string): Promise<string> {
+  return invoke<string>("read_note", { path });
+}
+
+export async function createNote(dir: string): Promise<NoteEntry> {
+  return invoke<NoteEntry>("create_note", { dir });
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function scheduleSave(path: string, content: string) {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    invoke("write_note", { path, content }).catch((error) => console.error("save failed", error));
+  }, 500);
+}
+
+export async function resolveStartDir(config: Config): Promise<string> {
+  if (config.working_dir) return config.working_dir;
+  const { homeDir } = await import("@tauri-apps/api/path");
+  const dir = `${await homeDir()}/FloatNote`;
+  await setWorkingDir(dir);
+  return dir;
+}
+

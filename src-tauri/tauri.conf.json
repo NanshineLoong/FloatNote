@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FloatNote",
+  "version": "0.1.0",
+  "identifier": "com.floatnote.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "FloatNote",
+        "width": 380,
+        "height": 520,
+        "visible": false,
+        "alwaysOnTop": true,
+        "url": "index.html"
+      },
+      {
+        "label": "settings",
+        "title": "FloatNote 设置",
+        "width": 420,
+        "height": 340,
+        "visible": false,
+        "url": "settings.html"
+      }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "app",
+    "icon": ["icons/icon.png"]
+  }
+}
