@@ -34,9 +34,6 @@ async function render() {
       <label>显示/隐藏快捷键
         <input id="toggle" value="${escapeHtml(config.shortcut_toggle)}" />
       </label>
-      <label>字体大小
-        <input id="font" type="number" min="10" max="28" value="${config.font_size}" />
-      </label>
       <label class="row">
         <input id="autostart" type="checkbox" ${config.launch_at_login ? "checked" : ""} />
         开机自启动
@@ -49,7 +46,6 @@ async function render() {
   document.querySelector<HTMLButtonElement>("#save")!.onclick = async () => {
     const capture = document.querySelector<HTMLInputElement>("#capture")!.value.trim();
     const toggle = document.querySelector<HTMLInputElement>("#toggle")!.value.trim();
-    const fontSize = Number.parseInt(document.querySelector<HTMLInputElement>("#font")!.value, 10);
     const launchAtLogin = document.querySelector<HTMLInputElement>("#autostart")!.checked;
     const errEl = document.querySelector<HTMLElement>("#err")!;
     errEl.textContent = "";
@@ -65,7 +61,6 @@ async function render() {
       ...config,
       shortcut_capture: capture,
       shortcut_toggle: toggle,
-      font_size: fontSize,
       launch_at_login: launchAtLogin,
     };
     await invoke("set_config", { newConfig });

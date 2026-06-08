@@ -3,6 +3,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView, keymap } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { livePreview } from "./preview";
 
 const highlight = HighlightStyle.define([
   { tag: tags.heading, fontWeight: "600" },
@@ -30,6 +31,7 @@ export function createEditor(parent: HTMLElement, onChange: (doc: string) => voi
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown(),
       syntaxHighlighting(highlight),
+      ...livePreview(),
       theme,
       EditorView.lineWrapping,
       EditorView.updateListener.of((update) => {

@@ -1,4 +1,5 @@
 import "@phosphor-icons/web/regular";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { buildAppendInsert } from "./append";
@@ -102,9 +103,37 @@ renderTopbar(document.querySelector("#topbar-root")!, {
   },
 });
 
+const FONT_MIN = 10;
+const FONT_MAX = 28;
+let currentFontSize = 15;
+
+function applyFontSize(size: number) {
+  currentFontSize = Math.min(FONT_MAX, Math.max(FONT_MIN, size));
+  document.documentElement.style.setProperty("--editor-font", `${currentFontSize}px`);
+}
+
+async function saveFontSize() {
+  const config = await getConfig();
+  await invoke("set_config", { newConfig: { ...config, font_size: currentFontSize } });
+}
+
+document.addEventListener("keydown", (e) => {
+  const mod = e.metaKey || e.ctrlKey;
+  if (!mod) return;
+  if (e.key === "=" || e.key === "+") {
+    e.preventDefault();
+    applyFontSize(currentFontSize + 1);
+    void saveFontSize();
+  } else if (e.key === "-") {
+    e.preventDefault();
+    applyFontSize(currentFontSize - 1);
+    void saveFontSize();
+  }
+});
+
 async function init() {
   const config = await getConfig();
-  document.documentElement.style.setProperty("--editor-font", `${config.font_size}px`);
+  applyFontSize(config.font_size);
   const dir = await resolveStartDir(config);
   setDirLabel(basename(dir), dir);
   const notes = await listNotes(dir);
