@@ -17,7 +17,7 @@ const theme = EditorView.theme({
   ".cm-content": {
     fontFamily: '-apple-system, "SF Pro Text", system-ui, sans-serif',
     lineHeight: "1.6",
-    padding: "12px 16px",
+    padding: "16px 14px",
   },
   "&.cm-focused": { outline: "none" },
 });

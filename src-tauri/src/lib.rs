@@ -9,7 +9,7 @@ mod windows;
 
 use commands::AppState;
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Manager, WindowEvent};
 
 pub fn run() {
     tauri::Builder::default()
@@ -31,6 +31,17 @@ pub fn run() {
             let _ = app
                 .handle()
                 .set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // Hide instead of close the note window so it can be re-opened later.
+            if let Some(note_win) = app.get_webview_window("main") {
+                let win = note_win.clone();
+                note_win.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = win.hide();
+                    }
+                });
+            }
 
             tray::build_tray(app.handle())?;
 

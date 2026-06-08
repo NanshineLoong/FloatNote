@@ -14,6 +14,7 @@ import {
   type CurrentNote,
   type NoteEntry,
 } from "./notes-state";
+import { initScrollbar } from "./scrollbar";
 import { renderTopbar, setDirLabel, setNoteLabel } from "./topbar";
 
 const app = document.querySelector<HTMLElement>("#app")!;
@@ -22,9 +23,11 @@ app.innerHTML = `<div id="topbar-root"></div><div id="editor-root"></div>`;
 let current: CurrentNote | null = null;
 let menuEl: HTMLElement | null = null;
 
-const editor = createEditor(document.querySelector("#editor-root")!, (doc) => {
+const editorRoot = document.querySelector<HTMLElement>("#editor-root")!;
+const editor = createEditor(editorRoot, (doc) => {
   if (current) scheduleSave(current.entry.path, doc);
 });
+requestAnimationFrame(() => initScrollbar(editorRoot));
 
 function basename(path: string): string {
   const parts = path.replace(/\/+$/, "").split("/");

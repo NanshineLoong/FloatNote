@@ -7,12 +7,13 @@ export interface TopbarCallbacks {
 export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
   root.innerHTML = `
     <div class="topbar">
-      <button class="dir-name" id="dir-name" title=""><span id="dir-label">-</span></button>
-      <span class="sep">/</span>
+      <div class="topbar-left">
+        <button class="dir-name" id="dir-name" title=""><i class="ph ph-folder"></i><span id="dir-label">-</span></button>
+        <span class="sep">/</span>
+      </div>
       <button class="note-name" id="note-name">
         <span id="note-label">-</span><i class="ph ph-caret-down"></i>
       </button>
-      <span class="spacer"></span>
       <button class="new-btn" id="new-btn" title="新建笔记"><i class="ph ph-plus"></i></button>
     </div>
   `;

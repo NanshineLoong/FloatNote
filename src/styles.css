@@ -31,26 +31,30 @@ input {
 }
 
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 7px 10px;
+  min-height: 40px;
+  padding: 4px 12px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   font-size: 13px;
   -webkit-user-select: none;
   user-select: none;
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .topbar button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  max-width: 160px;
   padding: 3px 6px;
   border: none;
   border-radius: 6px;
-  overflow: hidden;
   background: transparent;
   color: #374151;
   cursor: pointer;
@@ -62,7 +66,12 @@ input {
   white-space: nowrap;
 }
 
-.topbar button:hover {
+.topbar .dir-name {
+  max-width: 160px;
+  overflow: hidden;
+}
+
+.topbar .dir-name:hover {
   background: rgba(0, 0, 0, 0.06);
 }
 
@@ -70,20 +79,65 @@ input {
   color: #9ca3af;
 }
 
-.topbar .spacer {
-  flex: 1;
+.note-name {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 200px;
+  padding: 4px 10px !important;
+  border: 1px solid rgba(0, 0, 0, 0.10) !important;
+  border-radius: 8px !important;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.note-name:hover {
+  border-color: rgba(0, 0, 0, 0.20) !important;
+  background: rgba(0, 0, 0, 0.04) !important;
 }
 
 .new-btn {
-  width: 28px;
+  width: 32px;
+  height: 32px;
   justify-content: center;
+  border-radius: 50% !important;
+  margin-left: auto;
+}
+
+.new-btn:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
 }
 
 #editor-root {
+  position: relative;
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+  background: #fafafa;
 }
+
+.cm-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.scroll-thumb {
+  position: absolute;
+  right: 3px;
+  top: 0;
+  width: 4px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.scroll-thumb.visible {
+  opacity: 1;
+}
+
+
 
 .switch-menu {
   position: fixed;
@@ -180,9 +234,31 @@ input {
     color: #d1d5db;
   }
 
-  .topbar button:hover {
+  .topbar .dir-name:hover {
     background: rgba(255, 255, 255, 0.08);
   }
+
+  .note-name {
+    border-color: rgba(255, 255, 255, 0.14) !important;
+  }
+
+  .note-name:hover {
+    border-color: rgba(255, 255, 255, 0.28) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .new-btn:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  #editor-root {
+    background: #1e1e1e;
+  }
+
+  .scroll-thumb {
+    background: rgba(255, 255, 255, 0.28);
+  }
+
 
   .switch-menu {
     border-color: rgba(255, 255, 255, 0.12);
