@@ -96,6 +96,28 @@ input {
   background: rgba(0, 0, 0, 0.04) !important;
 }
 
+.note-name-input {
+  width: 8em;
+  padding: 0;
+  border: none;
+  border-bottom: 1.5px solid #2563eb;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  outline: none;
+  text-align: center;
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.note-name-input.rename-error {
+  border-bottom-color: #dc2626;
+  color: #dc2626;
+}
+
 .new-btn {
   width: 32px;
   height: 32px;
@@ -245,6 +267,11 @@ input {
   .note-name:hover {
     border-color: rgba(255, 255, 255, 0.28) !important;
     background: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .note-name-input.rename-error {
+    border-bottom-color: #f87171;
+    color: #f87171;
   }
 
   .new-btn:hover {

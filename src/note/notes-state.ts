@@ -38,6 +38,10 @@ export async function createNote(dir: string): Promise<NoteEntry> {
   return invoke<NoteEntry>("create_note", { dir });
 }
 
+export async function renameNote(dir: string, oldName: string, newStem: string): Promise<string> {
+  return invoke<string>("rename_note", { dir, oldName, newStem });
+}
+
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function scheduleSave(path: string, content: string) {

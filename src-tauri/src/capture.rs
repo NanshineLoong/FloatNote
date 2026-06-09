@@ -79,6 +79,13 @@ pub fn run_capture(app: &AppHandle) {
 
     let block = crate::quote::format_quote(trimmed);
     let _ = app.emit_to("main", "quote-captured", block);
+
+    if let Some(window) = crate::windows::note_window(app) {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]

@@ -9,6 +9,7 @@ import {
   getConfig,
   listNotes,
   readNote,
+  renameNote,
   resolveStartDir,
   scheduleSave,
   setWorkingDir,
@@ -101,6 +102,12 @@ renderTopbar(document.querySelector("#topbar-root")!, {
   onNew: () => {
     void newNote();
   },
+  onRename: async (newName) => {
+    if (!current) return;
+    const newPath = await renameNote(current.dir, current.entry.name, newName);
+    current.entry = { name: newName, path: newPath };
+    setNoteLabel(newName);
+  },
 });
 
 const FONT_MIN = 10;
@@ -146,6 +153,13 @@ void init();
 void listen<string>("quote-captured", (event) => {
   const insert = buildAppendInsert(editor.state.doc.toString(), event.payload);
   appendToEnd(editor, insert);
+  const pos = editor.state.doc.length;
+  editor.dispatch({
+    changes: { from: pos, insert: "\n" },
+    selection: { anchor: pos + 1 },
+    scrollIntoView: true,
+  });
+  editor.focus();
 });
 
 void listen("accessibility-needed", () => {
