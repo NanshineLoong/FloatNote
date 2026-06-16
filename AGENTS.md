@@ -26,6 +26,12 @@ Use TypeScript ES modules with explicit imports and focused modules. Existing co
 
 Rust code uses `rustfmt`, snake_case module and function names, and Tauri commands in `src-tauri/src/commands.rs`. Keep command payloads serializable with `serde`.
 
+## Cross-Platform & Documentation
+
+FloatNote ships on both Windows and macOS, so develop with both targets in mind. Avoid platform-specific assumptions: handle path separators and line endings portably, guard OS-specific APIs (tray, global shortcuts, accessibility, window decorations) behind capability or platform checks, and verify any behavior that differs between the two before relying on it. When a change touches platform-sensitive areas, note the platform impact and, where feasible, exercise the flow on both.
+
+When you are unsure about a Tauri, plugin, or other library API — or need to confirm current behavior, configuration, or migration details — use Context7 to pull the official, up-to-date documentation instead of relying on memory. Prefer this over guesswork whenever an API's exact signature, capability, or version-specific behavior matters.
+
 ## Testing Guidelines
 
 Frontend tests use Vitest and are named `*.test.ts` next to the code they cover, for example `src/note/append.test.ts`. Prefer focused tests for pure helpers and state transitions. Run `npm test` before submitting TypeScript behavior changes.
