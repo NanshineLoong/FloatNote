@@ -1,3 +1,4 @@
+mod agent;
 mod capture;
 mod commands;
 mod config;
@@ -26,7 +27,19 @@ pub fn run() {
             app.manage(AppState {
                 config: Mutex::new(config),
                 config_path: path,
+                agent: Mutex::new(None),
+                agent_ready: Mutex::new(false),
+                active_note: Mutex::new(None),
+                agent_seq: std::sync::atomic::AtomicU64::new(0),
             });
+
+            // 拉起 agent-sidecar；失败仅打印，不阻断 app 启动。
+            match agent::spawn(app.handle()) {
+                Ok(handle) => {
+                    *app.state::<AppState>().agent.lock().unwrap() = Some(handle);
+                }
+                Err(error) => eprintln!("agent sidecar spawn failed: {error}"),
+            }
 
             #[cfg(target_os = "macos")]
             let _ = app
@@ -69,6 +82,9 @@ pub fn run() {
             commands::list_versions,
             commands::snapshot_note,
             commands::restore_version,
+            commands::agent_configure,
+            commands::agent_send,
+            commands::agent_cancel,
             commands::apply_shortcuts,
         ])
         .run(tauri::generate_context!())
