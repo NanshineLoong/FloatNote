@@ -26,8 +26,33 @@ input {
 
 #app {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100%;
+}
+
+#note-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+#assistant-pane {
+  display: none;
+  flex: 0 0 340px;
+  height: 100%;
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+#app.embedded #assistant-pane {
+  display: flex;
+}
+
+@media (prefers-color-scheme: dark) {
+  #assistant-pane {
+    border-left-color: rgba(255, 255, 255, 0.1);
+  }
 }
 
 .topbar {
@@ -127,6 +152,24 @@ input {
 }
 
 .new-btn:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
+.assistant-btn {
+  width: 32px;
+  height: 32px;
+  justify-content: center;
+  padding: 3px !important;
+  border-radius: 50% !important;
+}
+
+.assistant-btn svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.assistant-btn:hover {
   background: rgba(0, 0, 0, 0.06) !important;
 }
 
@@ -275,6 +318,10 @@ input {
   }
 
   .new-btn:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .assistant-btn:hover {
     background: rgba(255, 255, 255, 0.08) !important;
   }
 

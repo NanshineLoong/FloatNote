@@ -1,4 +1,5 @@
 mod agent;
+mod assistant_window;
 mod capture;
 mod commands;
 mod config;
@@ -31,6 +32,7 @@ pub fn run() {
                 agent_ready: Mutex::new(false),
                 active_note: Mutex::new(None),
                 agent_seq: std::sync::atomic::AtomicU64::new(0),
+                fullscreen: Mutex::new(false),
             });
 
             // 拉起 agent-sidecar；失败仅打印，不阻断 app 启动。
@@ -47,14 +49,28 @@ pub fn run() {
                 .set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             // Hide instead of close the note window so it can be re-opened later.
+            // 同时：分离模式下笔记窗移动/缩放时让独立助手窗跟随吸附。
             if let Some(note_win) = app.get_webview_window("main") {
                 let win = note_win.clone();
-                note_win.on_window_event(move |event| {
-                    if let WindowEvent::CloseRequested { api, .. } = event {
+                let handle = app.handle().clone();
+                note_win.on_window_event(move |event| match event {
+                    WindowEvent::CloseRequested { api, .. } => {
                         api.prevent_close();
                         let _ = win.hide();
                     }
+                    WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
+                        assistant_window::handle_main_geometry_change(&handle);
+                    }
+                    _ => {}
                 });
+            }
+
+            // 启动恢复助手状态（若上次为展开）。
+            {
+                let open = app.state::<AppState>().config.lock().unwrap().assistant_open;
+                if open {
+                    assistant_window::apply_effective(app.handle());
+                }
             }
 
             tray::build_tray(app.handle())?;
@@ -85,6 +101,11 @@ pub fn run() {
             commands::agent_configure,
             commands::agent_send,
             commands::agent_cancel,
+            commands::set_active_note,
+            commands::get_active_note,
+            commands::get_assistant_state,
+            commands::toggle_assistant,
+            commands::set_assistant_mode,
             commands::apply_shortcuts,
         ])
         .run(tauri::generate_context!())
