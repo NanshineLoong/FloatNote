@@ -160,6 +160,53 @@ pub fn agent_send(
     Ok(request_id)
 }
 
+/// 助手挂载状态（mode + open），供前端启动时读取。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistantState {
+    pub mode: String,
+    pub open: bool,
+}
+
+#[tauri::command]
+pub fn get_assistant_state(state: State<AppState>) -> AssistantState {
+    let config = state.config.lock().unwrap();
+    AssistantState {
+        mode: config.assistant_mode.clone(),
+        open: config.assistant_open,
+    }
+}
+
+/// 折叠/展开助手（顶栏 robot_icon 单击）。
+#[tauri::command]
+pub fn toggle_assistant(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
+    let (mode, open) = {
+        let mut config = state.config.lock().unwrap();
+        config.assistant_open = !config.assistant_open;
+        crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
+        (config.assistant_mode.clone(), config.assistant_open)
+    };
+    crate::assistant_window::apply(&app, &mode, open);
+    Ok(())
+}
+
+/// 切换分离/嵌入模式（顶栏 robot_icon Option+单击）。
+#[tauri::command]
+pub fn set_assistant_mode(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    mode: String,
+) -> Result<(), String> {
+    let open = {
+        let mut config = state.config.lock().unwrap();
+        config.assistant_mode = mode.clone();
+        crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
+        config.assistant_open
+    };
+    crate::assistant_window::apply(&app, &mode, open);
+    Ok(())
+}
+
 /// 笔记窗发布当前活动笔记，供独立助手窗查询与 apply_write 定位文件。
 #[tauri::command]
 pub fn set_active_note(state: State<AppState>, dir: String, note_id: String, path: String) {

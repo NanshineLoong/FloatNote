@@ -9,6 +9,10 @@ pub struct Config {
     pub shortcut_toggle: String,
     pub font_size: u32,
     pub launch_at_login: bool,
+    /// 助手挂载模式："detached"（独立吸附窗）或 "embedded"（笔记窗内右侧栏）。
+    pub assistant_mode: String,
+    /// 助手是否展开显示（折叠则隐藏）。
+    pub assistant_open: bool,
 }
 
 impl Default for Config {
@@ -19,6 +23,8 @@ impl Default for Config {
             shortcut_toggle: "Alt+Cmd+N".to_string(),
             font_size: 15,
             launch_at_login: false,
+            assistant_mode: "detached".to_string(),
+            assistant_open: false,
         }
     }
 }

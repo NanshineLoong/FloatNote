@@ -140,6 +140,8 @@ async function newNote() {
   editor.focus();
 }
 
+let assistantMode = "detached";
+
 renderTopbar(document.querySelector("#topbar-root")!, {
   onPickDir: pickDir,
   onToggleMenu: (anchor) => {
@@ -154,6 +156,18 @@ renderTopbar(document.querySelector("#topbar-root")!, {
     current.entry = { name: newName, path: newPath };
     setNoteLabel(newName);
   },
+  onAssistantToggle: () => {
+    void invoke("toggle_assistant");
+  },
+  onAssistantModeSwitch: () => {
+    assistantMode = assistantMode === "detached" ? "embedded" : "detached";
+    void invoke("set_assistant_mode", { mode: assistantMode });
+  },
+});
+
+// 嵌入栏显隐由 Rust 广播驱动（与窗口宽度调整一致）。
+void listen<{ embedded: boolean; open: boolean }>("assistant://embedded", (event) => {
+  app.classList.toggle("embedded", event.payload.embedded);
 });
 
 renderVersionBar(document.querySelector("#version-root")!, {
@@ -211,6 +225,10 @@ async function init() {
   const notes = await listNotes(dir);
   const entry = notes[0] ?? (await createNote(dir));
   await openNote(dir, entry);
+
+  const assistant = await invoke<{ mode: string; open: boolean }>("get_assistant_state");
+  assistantMode = assistant.mode;
+  app.classList.toggle("embedded", assistant.open && assistant.mode === "embedded");
 }
 
 void init();
