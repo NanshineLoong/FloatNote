@@ -1,7 +1,5 @@
 # Sprint 2 — Node agent-sidecar + Pi 接入 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans. 本文档为任务级计划；执行前用 Context7 拉取 `@earendil-works/pi-coding-agent` 当前文档，核对事件/类型字段，再把每个任务展开为 bite-sized 步骤。
-
 **Goal:** 写一个独立的 Node 程序 `agent-sidecar`，内部用 Pi SDK 跑一个 tutor 会话：从 stdin 收行分隔 JSON（prompt + 当前笔记全文），把流式回复和工具调用以行分隔 JSON 写回 stdout；提供 `read_note` / `write_note` 两个自定义工具（写盘动作委托给宿主，不直接落盘）。本 sprint 让它能用 CLI 独立跑通，不依赖 Tauri。
 
 **Architecture:** 独立 npm 子包 `sidecar/`（自带 package.json，便于单独打包）。一个 `Protocol` 层负责 stdio JSONL 编解码；一个 `agent.ts` 用 `createAgentSession` + `defineTool` + `DefaultResourceLoader` 组装会话；`write_note` 工具通过协议向宿主发 `apply_write` 请求并 await 宿主回执（本 sprint 用一个 mock 宿主 harness 验证）。provider/model/key 从启动参数/env 读。

@@ -1,7 +1,5 @@
 # Sprint 3 — Rust 中枢 + 协议接线 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: subagent-driven-development / executing-plans。执行前展开为 bite-sized 步骤。依赖 Sprint 1（versions）与 Sprint 2（sidecar 协议）。
-
 **Goal:** 让 Rust 后端拉起 agent-sidecar 子进程、按协议双向通信，把前端的"发消息"转发给 sidecar、把 sidecar 的流式事件经 Tauri 事件广播给所有助手视图；并把 `apply_write` 接到 Sprint 1 的快照库——AI 每次覆盖笔记自动留版本。本 sprint 用 devtools 调通全链路，UI 留到 Sprint 4。
 
 **Architecture:** 新增 `agent.rs`：用 `std::process` 起 sidecar，单独线程读 stdout 按行解析协议，写 stdin 发命令；`AgentState`（放进 `AppState` 或独立 manage）持有子进程句柄、stdin、待写映射。Tauri 命令 `agent_send` / `agent_cancel` / `agent_configure`；Tauri 事件 `agent://event` 把协议消息转发给前端。`apply_write` 在 Rust 侧执行：`versions::snapshot(dir, note_id, 旧内容, "ai")` → 写新内容到笔记文件 → emit `note://updated` → 回 sidecar `apply_write_result`。

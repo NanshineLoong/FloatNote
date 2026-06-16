@@ -1,6 +1,5 @@
 # Sprint 1 — 版本快照库 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 给每篇笔记加一个自建的全文快照版本库，用户可手动打快照、查看版本列表、回退到任意版本——为后续"AI 覆盖自动留版本"打好底座。
 

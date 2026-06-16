@@ -1,7 +1,5 @@
 # Sprint 6 — 打包 / 跨平台 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: subagent-driven-development / executing-plans。执行前展开为 bite-sized 步骤。依赖前 5 个 sprint。执行前用 Context7 确认 Tauri 2 sidecar（external binary）当前配置方式与 `tauri.conf.json` 字段。
-
 **Goal:** 把 Node agent-sidecar 打成自带运行时的单可执行文件，作为 Tauri sidecar 随应用分发；让 `npm run tauri build` 在 macOS 与 Windows 都能产出可直接运行（无需用户预装 Node）的安装包；把开发期的 `npx tsx` 路径切换为生产期的打包二进制。
 
 **Architecture:** 用 `bun build --compile`（或 Node SEA）把 `sidecar/` 编译为各平台单文件二进制，命名遵循 Tauri sidecar 的 `name-<target-triple>` 约定，放入 `src-tauri/binaries/`。`tauri.conf.json` 的 `bundle.externalBin` 声明它；`capabilities` 放行 `shell:allow-execute`/sidecar 权限。`agent.rs` 改用 `tauri_plugin_shell` 的 sidecar API（或 `app.shell().sidecar(...)`) 启动，dev/prod 用同一路径。

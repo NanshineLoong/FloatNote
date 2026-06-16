@@ -1,7 +1,5 @@
 # Sprint 5 — 设置页多 provider Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: subagent-driven-development / executing-plans。执行前展开为 bite-sized 步骤。依赖 Sprint 3（`agent_configure`）。
-
 **Goal:** 在设置页让用户选择 AI provider（Anthropic / OpenAI 等 Pi 支持的）、为每个 provider 填 API key、选择具体 model；保存后热应用到 sidecar（重新 `agent_configure`）。key 持久化到用户配置，不进 git。
 
 **Architecture:** 扩展 `config.rs` 的 `Config` 增加 agent 相关字段（当前 provider、model、各 provider 的 key map）。设置页新增"AI 助手"分区：provider 下拉 → 联动 model 下拉 → key 输入。保存走现有 `set_config`，再调 `agent_configure` 推给 sidecar。provider/model 清单作为前端常量（执行时按 Pi 实际支持核对）。

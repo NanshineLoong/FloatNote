@@ -1,6 +1,5 @@
 # Sprint 4 — 助手 UI + 双窗口模式 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: subagent-driven-development / executing-plans。执行前展开为 bite-sized 步骤。依赖 Sprint 3（agent 命令与事件）。UI 视觉参考 `docs/refer_frontend.png`。建议在此 sprint 用 `frontend-design` 技能打磨样式。
 
 **Goal:** 实现参考图样式的 AI 助手界面（聊天气泡、输入框、流式渲染、工具调用提示），并实现"分离/嵌入"双模式：默认独立窗口吸附在笔记窗右侧，右上角胶囊可折叠/切换，全屏时自动切为笔记窗内右侧栏。
 
