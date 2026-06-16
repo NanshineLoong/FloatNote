@@ -35,8 +35,9 @@
 
 ## Task 2: mountAssistant + 样式
 
-- [ ] `assistant.ts`：`mountAssistant(root, { send, subscribe })`：渲染消息区 + 底部输入框（Enter 发送、Shift+Enter 换行）；订阅事件经 `reduceEvents` 更新；发送时调 `send(text)`。`deps` 注入便于两个挂载点共用、便于测试。
-- [ ] `styles.css`：参考图——右侧浅色气泡（用户）、左侧/居中助手气泡、底部圆角输入框、机器人头像占位；与 `src/styles.css` 变量协调。用 `frontend-design` 技能产出高质量样式。
+- [ ] `assistant.ts`：`mountAssistant(root, { send, subscribe })`：渲染消息区 + 底部 dock（机器人头像 `robot.svg` + 按需展开的输入框）；订阅事件经 `reduceEvents` 更新；发送时调 `send(text)`。`deps` 注入便于两个挂载点共用、便于测试。
+- [ ] **输入框按需展开**：默认 dock 只有机器人头像，输入框 `max-width:0; opacity:0`（DOM 存在但收起）。点击头像 toggle：展开（`max-width` 0→满 + 淡入 + 轻微 translateX，约 340ms `cubic-bezier(.22,1,.36,1)`），机器人轻微缩放应答，展开后 focus 输入框；再次点击收起。Enter 发送、Shift+Enter 换行。展开/收起为纯 CSS class 切换，状态在模块内。
+- [ ] `styles.css`：AI 气泡纯白（白底 + 0.5px 边、左对齐、左下小尖角）；用户气泡单一浅蓝色调（右对齐）；底部 dock 圆角输入框 + 机器人头像；与 `src/styles.css` 变量协调。用 `frontend-design` 技能产出高质量样式。视觉/动画基准为已确认的 mockup（`floatnote_assistant_panel_reveal`）。
 - [ ] 提交：`feat(assistant): mountable assistant component + styles`。
 
 ## Task 3: 独立窗口入口
@@ -53,9 +54,9 @@
 - [ ] 监听 `note://updated`：用 `setDoc` 热刷新编辑器、刷新版本条（与外部覆盖一致）。注意避免和本地 autosave 互相打架（更新来自 AI 时直接覆盖编辑器内容）。
 - [ ] 提交：`feat(assistant): embedded pane in note window`。
 
-## Task 5: 胶囊按钮 + 模式切换 + 吸附
+## Task 5: 顶栏 robot_icon 开关 + 模式切换 + 吸附
 
-- [ ] `topbar.ts`：右上角加胶囊按钮（折叠/展开 + 切换分离/嵌入）。回调进 `main.ts`。
+- [ ] `topbar.ts`：在顶栏最右侧（红绿灯系统按钮那一行的最右）加 `robot_icon.svg` 按钮——开/关整个助手（显示/隐藏分离窗或嵌入栏）。长按/右键或单独的小切换控件用于切换分离/嵌入模式（保持简洁，主功能是开关）。回调进 `main.ts`。
 - [ ] 新命令 `set_assistant_mode(mode)` / `toggle_assistant()`：Rust 据此显隐 assistant 窗或嵌入列，并存 `config.assistant_mode`。
 - [ ] `assistant_window.rs`：detached 时监听笔记窗 `Moved`/`Resized` 事件，把 assistant 窗 position 设为笔记窗右缘（吸附）；初始定位同理。
 - [ ] 提交：`feat(assistant): capsule toggle + mode switch + docking`。
