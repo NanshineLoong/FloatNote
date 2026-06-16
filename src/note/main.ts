@@ -18,9 +18,11 @@ import {
 } from "./notes-state";
 import { initScrollbar } from "./scrollbar";
 import { renderTopbar, setDirLabel, setNoteLabel } from "./topbar";
+import { renderVersionBar } from "./version-bar";
+import { listVersions, restoreVersion, snapshotNote } from "./versions";
 
 const app = document.querySelector<HTMLElement>("#app")!;
-app.innerHTML = `<div id="topbar-root"></div><div id="editor-root"></div>`;
+app.innerHTML = `<div id="topbar-root"></div><div id="editor-root"></div><div id="version-root"></div>`;
 
 let current: CurrentNote | null = null;
 let menuEl: HTMLElement | null = null;
@@ -107,6 +109,25 @@ renderTopbar(document.querySelector("#topbar-root")!, {
     const newPath = await renameNote(current.dir, current.entry.name, newName);
     current.entry = { name: newName, path: newPath };
     setNoteLabel(newName);
+  },
+});
+
+renderVersionBar(document.querySelector("#version-root")!, {
+  loadVersions: () => (current ? listVersions(current.dir, current.entry.name) : Promise.resolve([])),
+  onSnapshot: async () => {
+    if (!current) return;
+    await snapshotNote(current.dir, current.entry.name, editor.state.doc.toString(), "manual");
+  },
+  onRestore: async (v) => {
+    if (!current) return;
+    const restored = await restoreVersion(
+      current.dir,
+      current.entry.name,
+      current.entry.path,
+      editor.state.doc.toString(),
+      v,
+    );
+    setDoc(editor, restored);
   },
 });
 
