@@ -1,7 +1,10 @@
 import "@phosphor-icons/web/regular";
+import "../assistant/styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { mountAssistant } from "../assistant/assistant";
+import { agentSend, onAgentEvent, onNoteUpdated } from "./agent";
 import { buildAppendInsert } from "./append";
 import { appendToEnd, createEditor, setDoc } from "./editor";
 import {
@@ -22,16 +25,55 @@ import { renderVersionBar } from "./version-bar";
 import { listVersions, restoreVersion, snapshotNote } from "./versions";
 
 const app = document.querySelector<HTMLElement>("#app")!;
-app.innerHTML = `<div id="topbar-root"></div><div id="editor-root"></div><div id="version-root"></div>`;
+app.innerHTML = `
+  <div id="note-col">
+    <div id="topbar-root"></div>
+    <div id="editor-root"></div>
+    <div id="version-root"></div>
+  </div>
+  <div id="assistant-pane"></div>
+`;
+
+const noteCol = document.querySelector<HTMLElement>("#note-col")!;
+const assistantPane = document.querySelector<HTMLElement>("#assistant-pane")!;
 
 let current: CurrentNote | null = null;
 let menuEl: HTMLElement | null = null;
+/** AI 改写热刷新期间置位，避免编辑器变更回灌 autosave。 */
+let applyingRemote = false;
 
 const editorRoot = document.querySelector<HTMLElement>("#editor-root")!;
 const editor = createEditor(editorRoot, (doc) => {
+  if (applyingRemote) return;
   if (current) scheduleSave(current.entry.path, doc);
 });
 requestAnimationFrame(() => initScrollbar(editorRoot));
+
+/** 用 AI/外部写入的新内容覆盖编辑器，不触发本地 autosave。 */
+function applyRemoteDoc(content: string) {
+  applyingRemote = true;
+  setDoc(editor, content);
+  applyingRemote = false;
+}
+
+mountAssistant(assistantPane, {
+  send: (text) => {
+    if (!current) return;
+    return agentSend({
+      dir: current.dir,
+      noteId: current.entry.name,
+      path: current.entry.path,
+      noteText: editor.state.doc.toString(),
+      userText: text,
+    });
+  },
+  subscribe: (cb) => onAgentEvent(cb),
+});
+
+void onNoteUpdated(async (payload) => {
+  if (!current || payload.path !== current.entry.path) return;
+  applyRemoteDoc(await readNote(current.entry.path));
+});
 
 function basename(path: string): string {
   const parts = path.replace(/\/+$/, "").split("/");
@@ -48,6 +90,8 @@ async function openNote(dir: string, entry: NoteEntry) {
   setDirLabel(basename(dir), dir);
   setNoteLabel(entry.name);
   setDoc(editor, await readNote(entry.path));
+  // 发布活动笔记，供独立助手窗 / apply_write 定位。
+  void invoke("set_active_note", { dir, noteId: entry.name, path: entry.path });
 }
 
 async function showSwitcher(anchor: HTMLElement) {
@@ -190,6 +234,6 @@ void listen("accessibility-needed", () => {
   banner.textContent =
     "需要「辅助功能」权限才能抓取划线：系统设置 → 隐私与安全性 → 辅助功能，勾选 FloatNote 后重试。";
   banner.addEventListener("click", () => banner.remove());
-  app.prepend(banner);
+  noteCol.prepend(banner);
 });
 
