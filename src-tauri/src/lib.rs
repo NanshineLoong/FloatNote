@@ -5,6 +5,7 @@ mod notes;
 mod quote;
 mod shortcuts;
 mod tray;
+mod versions;
 mod windows;
 
 use commands::AppState;
@@ -65,6 +66,9 @@ pub fn run() {
             commands::write_note,
             commands::create_note,
             commands::rename_note,
+            commands::list_versions,
+            commands::snapshot_note,
+            commands::restore_version,
             commands::apply_shortcuts,
         ])
         .run(tauri::generate_context!())

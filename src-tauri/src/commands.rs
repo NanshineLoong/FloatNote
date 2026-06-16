@@ -1,4 +1,4 @@
-use crate::{config::Config, notes};
+use crate::{config::Config, notes, versions};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{Manager, State};
@@ -58,8 +58,45 @@ pub fn create_note(dir: String) -> Result<notes::NoteEntry, String> {
 
 #[tauri::command]
 pub fn rename_note(dir: String, old_name: String, new_stem: String) -> Result<String, String> {
-    notes::rename_note(std::path::Path::new(&dir), &old_name, &new_stem)
+    let dir_path = std::path::Path::new(&dir);
+    let new_path =
+        notes::rename_note(dir_path, &old_name, &new_stem).map_err(|error| error.to_string())?;
+    versions::rename(dir_path, &old_name, &new_stem).map_err(|error| error.to_string())?;
+    Ok(new_path)
+}
+
+#[tauri::command]
+pub fn list_versions(dir: String, note_id: String) -> Vec<versions::VersionEntry> {
+    versions::list(std::path::Path::new(&dir), &note_id)
+}
+
+#[tauri::command]
+pub fn snapshot_note(
+    dir: String,
+    note_id: String,
+    content: String,
+    source: String,
+) -> Result<u32, String> {
+    versions::snapshot(std::path::Path::new(&dir), &note_id, &content, &source)
         .map_err(|error| error.to_string())
+}
+
+/// 回退：先把"当前内容"留为安全版本，再把第 v 版写回笔记文件，并返回其内容。
+#[tauri::command]
+pub fn restore_version(
+    dir: String,
+    note_id: String,
+    path: String,
+    current_content: String,
+    v: u32,
+) -> Result<String, String> {
+    let dir_path = std::path::Path::new(&dir);
+    versions::snapshot(dir_path, &note_id, &current_content, "manual")
+        .map_err(|error| error.to_string())?;
+    let restored =
+        versions::read_version(dir_path, &note_id, v).map_err(|error| error.to_string())?;
+    std::fs::write(&path, &restored).map_err(|error| error.to_string())?;
+    Ok(restored)
 }
 
 #[tauri::command]
