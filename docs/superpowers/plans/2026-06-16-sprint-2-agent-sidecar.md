@@ -110,7 +110,7 @@
 
 ## API 核对（据安装包 .d.ts 实测，2026-06-16）
 
-- **Pi 包版本**：`@earendil-works/pi-coding-agent@0.79.4`、`@earendil-works/pi-ai@0.79.4`（核心类型来自其内嵌依赖 `@earendil-works/pi-agent-core`）。TypeBox 实际包名是 `@sinclair/typebox`（导出 `Type`/`Static`/`TSchema`），不是 `typebox`。
+- **Pi 包版本**：`@earendil-works/pi-coding-agent@0.79.4`、`@earendil-works/pi-ai@0.79.4`（均为 npm 最新版，发布于 2026-06-15；核心类型来自其内嵌依赖 `@earendil-works/pi-agent-core`）。**TypeBox 用 v1 的 `typebox` 包**（Pi 的 `ToolDefinition` 从 `"typebox"` 导入 `Static`/`TSchema`，内置 `typebox@1.1.38`），**不是** v0.x 的 `@sinclair/typebox`——本项目须依赖 `typebox@^1`，否则工具参数 schema 形状与 Pi 校验路径不一致。
 - **createAgentSession 实际入参**（`CreateAgentSessionOptions`，全部可选）：`model?: Model<any>`、`tools?: string[]`（白名单）、`excludeTools?: string[]`、`customTools?: ToolDefinition[]`、`noTools?: "all"|"builtin"`、`resourceLoader?`、`authStorage?: AuthStorage`、`modelRegistry?: ModelRegistry`、`sessionManager?`、`settingsManager?`、`thinkingLevel?`、`cwd?`、`agentDir?`。返回 `Promise<{ session: AgentSession, extensionsResult, modelFallbackMessage? }>`。
 - **禁用内置工具**：用 `noTools: "builtin"`（禁 read/bash/edit/write，保留 customTools）。本项目只注册 `read_note`/`write_note`，同时再传 `tools` 白名单更稳妥。
 - **defineTool**：`defineTool<TParams extends TSchema>({ name, label, description, parameters, execute, ... })`。`execute(toolCallId, params, signal, onUpdate, ctx): Promise<AgentToolResult>`，其中 `AgentToolResult = { content: (TextContent|ImageContent)[], details: T, terminate?: boolean }`，文本结果用 `{ type:"text", text }`。`parameters` 为 TypeBox schema（`Type.Object({...})`）。

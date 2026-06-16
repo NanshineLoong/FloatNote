@@ -1,5 +1,5 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 /** Result of asking the host to apply a note write. */
 export interface WriteResult {
