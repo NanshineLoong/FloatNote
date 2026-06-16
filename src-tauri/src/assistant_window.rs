@@ -5,6 +5,7 @@
 //! - 显隐独立助手窗并吸附到笔记窗右缘；
 //! - 广播 `assistant://embedded` 事件让笔记窗前端切换嵌入栏。
 
+use crate::commands::AppState;
 use serde::Serialize;
 use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewWindow,
@@ -23,6 +24,25 @@ struct EmbeddedEvent {
     open: bool,
 }
 
+/// 计算有效挂载状态：全屏时强制 embedded，否则用用户偏好 assistant_mode。
+fn effective(app: &AppHandle) -> (String, bool) {
+    let state = app.state::<AppState>();
+    let fullscreen = *state.fullscreen.lock().unwrap();
+    let config = state.config.lock().unwrap();
+    let mode = if fullscreen {
+        "embedded".to_string()
+    } else {
+        config.assistant_mode.clone()
+    };
+    (mode, config.assistant_open)
+}
+
+/// 按当前有效状态落地（供命令与启动恢复调用）。
+pub fn apply_effective(app: &AppHandle) {
+    let (mode, open) = effective(app);
+    apply(app, &mode, open);
+}
+
 /// 根据 mode/open 落地助手的显隐与布局。
 pub fn apply(app: &AppHandle, mode: &str, open: bool) {
     let Some(main) = app.get_webview_window("main") else {
@@ -33,8 +53,10 @@ pub fn apply(app: &AppHandle, mode: &str, open: bool) {
     let embedded = open && mode == "embedded";
     let detached = open && mode == "detached";
 
-    // 嵌入时加宽笔记窗以容纳右侧栏，否则恢复基础宽度。
-    set_main_width(&main, if embedded { NOTE_WIDTH + PANE_WIDTH } else { NOTE_WIDTH });
+    // 嵌入时加宽笔记窗以容纳右侧栏，否则恢复基础宽度；全屏时窗口尺寸固定，跳过。
+    if !main.is_fullscreen().unwrap_or(false) {
+        set_main_width(&main, if embedded { NOTE_WIDTH + PANE_WIDTH } else { NOTE_WIDTH });
+    }
 
     if let Some(assistant) = &assistant {
         if detached {
@@ -46,6 +68,26 @@ pub fn apply(app: &AppHandle, mode: &str, open: bool) {
     }
 
     let _ = app.emit("assistant://embedded", EmbeddedEvent { embedded, open });
+}
+
+/// 笔记窗几何变化处理：检测全屏切换（进入→强制嵌入，退出→恢复偏好），
+/// 否则在分离展开态下让独立窗跟随吸附。
+pub fn handle_main_geometry_change(app: &AppHandle) {
+    let Some(main) = app.get_webview_window("main") else {
+        return;
+    };
+    let fullscreen_now = main.is_fullscreen().unwrap_or(false);
+
+    let state = app.state::<AppState>();
+    let fullscreen_prev = *state.fullscreen.lock().unwrap();
+
+    if fullscreen_now != fullscreen_prev {
+        *state.fullscreen.lock().unwrap() = fullscreen_now;
+        apply_effective(app);
+    } else {
+        let (mode, open) = effective(app);
+        redock_if_detached(app, &mode, open);
+    }
 }
 
 /// 把独立助手窗贴到笔记窗右缘，并与其等高。

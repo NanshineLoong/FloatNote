@@ -16,6 +16,8 @@ pub struct AppState {
     pub active_note: Mutex<Option<ActiveNote>>,
     /// 单调递增的 requestId 计数器。
     pub agent_seq: AtomicU64,
+    /// 笔记窗当前是否全屏；全屏时助手强制嵌入（不改用户偏好 assistant_mode）。
+    pub fullscreen: Mutex<bool>,
 }
 
 #[tauri::command]
@@ -180,13 +182,12 @@ pub fn get_assistant_state(state: State<AppState>) -> AssistantState {
 /// 折叠/展开助手（顶栏 robot_icon 单击）。
 #[tauri::command]
 pub fn toggle_assistant(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
-    let (mode, open) = {
+    {
         let mut config = state.config.lock().unwrap();
         config.assistant_open = !config.assistant_open;
         crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
-        (config.assistant_mode.clone(), config.assistant_open)
-    };
-    crate::assistant_window::apply(&app, &mode, open);
+    }
+    crate::assistant_window::apply_effective(&app);
     Ok(())
 }
 
@@ -197,13 +198,12 @@ pub fn set_assistant_mode(
     state: State<AppState>,
     mode: String,
 ) -> Result<(), String> {
-    let open = {
+    {
         let mut config = state.config.lock().unwrap();
-        config.assistant_mode = mode.clone();
+        config.assistant_mode = mode;
         crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
-        config.assistant_open
-    };
-    crate::assistant_window::apply(&app, &mode, open);
+    }
+    crate::assistant_window::apply_effective(&app);
     Ok(())
 }
 

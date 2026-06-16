@@ -32,6 +32,7 @@ pub fn run() {
                 agent_ready: Mutex::new(false),
                 active_note: Mutex::new(None),
                 agent_seq: std::sync::atomic::AtomicU64::new(0),
+                fullscreen: Mutex::new(false),
             });
 
             // 拉起 agent-sidecar；失败仅打印，不阻断 app 启动。
@@ -58,12 +59,7 @@ pub fn run() {
                         let _ = win.hide();
                     }
                     WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
-                        let (mode, open) = {
-                            let state = handle.state::<AppState>();
-                            let config = state.config.lock().unwrap();
-                            (config.assistant_mode.clone(), config.assistant_open)
-                        };
-                        assistant_window::redock_if_detached(&handle, &mode, open);
+                        assistant_window::handle_main_geometry_change(&handle);
                     }
                     _ => {}
                 });
@@ -71,13 +67,9 @@ pub fn run() {
 
             // 启动恢复助手状态（若上次为展开）。
             {
-                let (mode, open) = {
-                    let state = app.state::<AppState>();
-                    let config = state.config.lock().unwrap();
-                    (config.assistant_mode.clone(), config.assistant_open)
-                };
+                let open = app.state::<AppState>().config.lock().unwrap().assistant_open;
                 if open {
-                    assistant_window::apply(app.handle(), &mode, open);
+                    assistant_window::apply_effective(app.handle());
                 }
             }
 
