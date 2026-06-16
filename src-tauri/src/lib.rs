@@ -85,6 +85,8 @@ pub fn run() {
             commands::agent_configure,
             commands::agent_send,
             commands::agent_cancel,
+            commands::set_active_note,
+            commands::get_active_note,
             commands::apply_shortcuts,
         ])
         .run(tauri::generate_context!())

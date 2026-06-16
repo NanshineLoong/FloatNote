@@ -68,8 +68,10 @@ pub enum SidecarToHost {
     },
 }
 
-/// agent_send 时一并记录的当前活动笔记，供 apply_write 定位 dir / path。
-#[derive(Debug, Clone)]
+/// 当前活动笔记：由笔记窗 `set_active_note` 发布、`agent_send` 也会更新，
+/// 供 apply_write 定位 dir / path，并供独立助手窗 `get_active_note` 查询。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ActiveNote {
     pub dir: String,
     pub note_id: String,

@@ -160,6 +160,18 @@ pub fn agent_send(
     Ok(request_id)
 }
 
+/// 笔记窗发布当前活动笔记，供独立助手窗查询与 apply_write 定位文件。
+#[tauri::command]
+pub fn set_active_note(state: State<AppState>, dir: String, note_id: String, path: String) {
+    *state.active_note.lock().unwrap() = Some(ActiveNote { dir, note_id, path });
+}
+
+/// 查询当前活动笔记（独立助手窗发消息前用来定位 dir / noteId / path）。
+#[tauri::command]
+pub fn get_active_note(state: State<AppState>) -> Option<ActiveNote> {
+    state.active_note.lock().unwrap().clone()
+}
+
 /// 取消进行中的对话（经 stdin 发 Cancel）。
 #[tauri::command]
 pub fn agent_cancel(state: State<AppState>, request_id: String) -> Result<(), String> {

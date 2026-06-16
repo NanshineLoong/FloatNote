@@ -1,6 +1,10 @@
 /* 助手 UI 样式：纯白 AI 气泡 + 浅蓝用户气泡 + 机器人 dock（输入框按需展开）。
    配色与 src/styles.css 的 macOS 风格协调，支持 light/dark。 */
 
+#assistant-root {
+  height: 100%;
+}
+
 .assistant {
   display: flex;
   flex-direction: column;
