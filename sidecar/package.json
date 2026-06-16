@@ -1,0 +1,24 @@
+{
+  "name": "floatnote-agent-sidecar",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "FloatNote AI tutor agent sidecar (Pi SDK over stdio JSONL)",
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "harness": "tsx test/harness.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.79.4",
+    "@earendil-works/pi-coding-agent": "^0.79.4",
+    "@sinclair/typebox": "^0.34.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

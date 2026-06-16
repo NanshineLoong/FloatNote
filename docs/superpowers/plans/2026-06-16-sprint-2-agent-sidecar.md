@@ -108,9 +108,16 @@
 - [ ] sidecar **不**使用任何网络端口、不直接写笔记文件（写动作只发 `apply_write`）
 - [ ] "API 核对"小节已据 Context7 填写实际签名
 
-## API 核对（执行时填写）
+## API 核对（据安装包 .d.ts 实测，2026-06-16）
 
-- Pi 包版本：`TODO 执行时填`
-- createAgentSession 实际入参：`TODO`
-- 事件字段实测：`TODO`
-- provider/model 标识符：`TODO`
+- **Pi 包版本**：`@earendil-works/pi-coding-agent@0.79.4`、`@earendil-works/pi-ai@0.79.4`（核心类型来自其内嵌依赖 `@earendil-works/pi-agent-core`）。TypeBox 实际包名是 `@sinclair/typebox`（导出 `Type`/`Static`/`TSchema`），不是 `typebox`。
+- **createAgentSession 实际入参**（`CreateAgentSessionOptions`，全部可选）：`model?: Model<any>`、`tools?: string[]`（白名单）、`excludeTools?: string[]`、`customTools?: ToolDefinition[]`、`noTools?: "all"|"builtin"`、`resourceLoader?`、`authStorage?: AuthStorage`、`modelRegistry?: ModelRegistry`、`sessionManager?`、`settingsManager?`、`thinkingLevel?`、`cwd?`、`agentDir?`。返回 `Promise<{ session: AgentSession, extensionsResult, modelFallbackMessage? }>`。
+- **禁用内置工具**：用 `noTools: "builtin"`（禁 read/bash/edit/write，保留 customTools）。本项目只注册 `read_note`/`write_note`，同时再传 `tools` 白名单更稳妥。
+- **defineTool**：`defineTool<TParams extends TSchema>({ name, label, description, parameters, execute, ... })`。`execute(toolCallId, params, signal, onUpdate, ctx): Promise<AgentToolResult>`，其中 `AgentToolResult = { content: (TextContent|ImageContent)[], details: T, terminate?: boolean }`，文本结果用 `{ type:"text", text }`。`parameters` 为 TypeBox schema（`Type.Object({...})`）。
+- **session.prompt**：`prompt(text: string, options?): Promise<void>`。流式输出经 `session.subscribe(listener)` 推送（返回 unsubscribe 函数）。`session.abort(): Promise<void>` 用于 cancel。
+- **事件字段实测**（`AgentSessionEvent`，扩展 `AgentEvent`）：
+  - 文本增量：`{ type:"message_update", message, assistantMessageEvent }`，其中 `assistantMessageEvent.type === "text_delta"` 时有 `delta: string`（也有 thinking_delta/toolcall_* 等，需过滤）。
+  - 工具：`{ type:"tool_execution_start", toolCallId, toolName, args }` 与 `{ type:"tool_execution_end", toolCallId, toolName, result, isError }`。
+  - 结束：`{ type:"agent_end", messages, willRetry }`。
+- **getModel / provider**：`getModel(provider, modelId)` → `Model`。provider 取自 `KnownProvider` 联合，含 `"anthropic"`、`"openai"`、`"google"`、`"deepseek"`、`"xai"`、`"groq"`、`"openrouter"`、`"mistral"` 等数十个。Anthropic 模型 id 形如 `"claude-opus-4-5"`（注意 Pi 内置模型表可能未含 `claude-opus-4-8`，需按其表实际可用 id 配置）。
+- **API key 注入**：不依赖磁盘。`const auth = AuthStorage.inMemory(); auth.setRuntimeApiKey(provider, apiKey); const registry = ModelRegistry.create(auth);` 然后 `createAgentSession({ model: getModel(...), authStorage: auth, modelRegistry: registry, ... })`。也支持从 env 解析（`getEnvApiKey(provider)`）。
