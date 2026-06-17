@@ -5,20 +5,24 @@
   "identifier": "com.floatnote.desktop",
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:1422",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
   "app": {
     "withGlobalTauri": false,
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
         "title": "",
         "width": 380,
         "height": 520,
+        "minWidth": 360,
         "visible": false,
         "alwaysOnTop": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "url": "index.html"
       },
       {
@@ -28,16 +32,6 @@
         "height": 340,
         "visible": false,
         "url": "settings.html"
-      },
-      {
-        "label": "assistant",
-        "title": "",
-        "width": 340,
-        "height": 520,
-        "visible": false,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "url": "assistant.html"
       }
     ],
     "security": { "csp": null }

@@ -23,7 +23,7 @@ impl Default for Config {
             shortcut_toggle: "Alt+Cmd+N".to_string(),
             font_size: 15,
             launch_at_login: false,
-            assistant_mode: "detached".to_string(),
+            assistant_mode: "embedded".to_string(),
             assistant_open: false,
         }
     }

@@ -7,6 +7,7 @@ import { mountAssistant } from "../assistant/assistant";
 import { agentSend, onAgentEvent, onNoteUpdated } from "./agent";
 import { buildAppendInsert } from "./append";
 import { appendToEnd, createEditor, setDoc } from "./editor";
+import { createLayoutController } from "./layout-controller";
 import {
   createNote,
   getConfig,
@@ -20,22 +21,24 @@ import {
   type NoteEntry,
 } from "./notes-state";
 import { initScrollbar } from "./scrollbar";
-import { renderTopbar, setDirLabel, setNoteLabel } from "./topbar";
+import { renderTitlebar, renderTopbar, setDirLabel, setNoteLabel } from "./topbar";
 import { renderVersionBar } from "./version-bar";
 import { listVersions, restoreVersion, snapshotNote } from "./versions";
 
 const app = document.querySelector<HTMLElement>("#app")!;
 app.innerHTML = `
-  <div id="note-col">
-    <div id="topbar-root"></div>
+  <div id="titlebar-root"></div>
+  <div id="topbar-root"></div>
+  <div id="note-body">
+    <div id="left-col"></div>
     <div id="editor-root"></div>
-    <div id="version-root"></div>
+    <div id="right-col"><div id="assistant-region"></div></div>
   </div>
-  <div id="assistant-pane"></div>
+  <div id="version-root"></div>
 `;
 
-const noteCol = document.querySelector<HTMLElement>("#note-col")!;
-const assistantPane = document.querySelector<HTMLElement>("#assistant-pane")!;
+const noteBody = document.querySelector<HTMLElement>("#note-body")!;
+const assistantRegion = document.querySelector<HTMLElement>("#assistant-region")!;
 
 let current: CurrentNote | null = null;
 let menuEl: HTMLElement | null = null;
@@ -56,7 +59,7 @@ function applyRemoteDoc(content: string) {
   applyingRemote = false;
 }
 
-mountAssistant(assistantPane, {
+mountAssistant(assistantRegion, {
   send: (text) => {
     if (!current) return;
     return agentSend({
@@ -140,7 +143,8 @@ async function newNote() {
   editor.focus();
 }
 
-let assistantMode = "detached";
+// 布局控制器：按窗口宽度分级收缩边距、决定助手嵌入/分离（init() 里用配置初始化）。
+let layoutController: ReturnType<typeof createLayoutController> | null = null;
 
 renderTopbar(document.querySelector("#topbar-root")!, {
   onPickDir: pickDir,
@@ -156,19 +160,24 @@ renderTopbar(document.querySelector("#topbar-root")!, {
     current.entry = { name: newName, path: newPath };
     setNoteLabel(newName);
   },
-  onAssistantToggle: () => {
-    void invoke("toggle_assistant");
+});
+
+// 标题栏（第一行）：左侧留给系统红绿灯、可拖拽，最右端助手 icon。
+renderTitlebar(document.querySelector("#titlebar-root")!, {
+  // 单击：开/关整个助手。
+  onAssistantToggle: async () => {
+    const next = await invoke<{ open: boolean; mode: string }>("toggle_assistant");
+    layoutController?.setOpen(next.open);
   },
+  // Option+单击：仅在重叠区切换嵌入/分离偏好。
   onAssistantModeSwitch: () => {
-    assistantMode = assistantMode === "detached" ? "embedded" : "detached";
-    void invoke("set_assistant_mode", { mode: assistantMode });
+    if (!layoutController?.canToggle()) return;
+    const mode = layoutController.toggleSticky();
+    void invoke("set_assistant_mode", { mode });
   },
 });
 
-// 嵌入栏显隐由 Rust 广播驱动（与窗口宽度调整一致）。
-void listen<{ embedded: boolean; open: boolean }>("assistant://embedded", (event) => {
-  app.classList.toggle("embedded", event.payload.embedded);
-});
+window.addEventListener("resize", () => layoutController?.apply());
 
 renderVersionBar(document.querySelector("#version-root")!, {
   loadVersions: () => (current ? listVersions(current.dir, current.entry.name) : Promise.resolve([])),
@@ -227,8 +236,11 @@ async function init() {
   await openNote(dir, entry);
 
   const assistant = await invoke<{ mode: string; open: boolean }>("get_assistant_state");
-  assistantMode = assistant.mode;
-  app.classList.toggle("embedded", assistant.open && assistant.mode === "embedded");
+  layoutController = createLayoutController(app, {
+    open: assistant.open,
+    sticky: assistant.mode === "detached" ? "detached" : "embedded",
+  });
+  layoutController.apply();
 }
 
 void init();
@@ -252,6 +264,6 @@ void listen("accessibility-needed", () => {
   banner.textContent =
     "需要「辅助功能」权限才能抓取划线：系统设置 → 隐私与安全性 → 辅助功能，勾选 FloatNote 后重试。";
   banner.addEventListener("click", () => banner.remove());
-  noteCol.prepend(banner);
+  noteBody.prepend(banner);
 });
 

@@ -3,7 +3,7 @@ import { resolve } from "path";
 
 export default defineConfig({
   clearScreen: false,
-  server: { port: 1420, strictPort: true },
+  server: { port: 1422, strictPort: true },
   build: {
     rollupOptions: {
       input: {

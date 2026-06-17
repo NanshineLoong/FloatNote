@@ -26,33 +26,59 @@ input {
 
 #app {
   display: flex;
-  flex-direction: row;
-  height: 100%;
-}
-
-#note-col {
-  display: flex;
   flex-direction: column;
-  flex: 1;
-  min-width: 0;
   height: 100%;
+  /* 由 layout-controller 按窗口宽度写入：左边距 / 正文宽 / 右边距 / 助手宽。 */
+  --left: 28px;
+  --text: 640px;
+  --right: 28px;
+  --assist: 0px;
 }
 
-#assistant-pane {
-  display: none;
-  flex: 0 0 340px;
-  height: 100%;
-  border-left: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-#app.embedded #assistant-pane {
+/* 第一行：标题栏。macOS 经 Overlay 与系统标题栏合并，左侧留位给红绿灯。 */
+.titlebar {
   display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 10px 0 78px;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  #assistant-pane {
-    border-left-color: rgba(255, 255, 255, 0.1);
-  }
+.titlebar-drag {
+  flex: 1;
+  align-self: stretch;
+}
+
+/* 内容主体：三列网格 [左边距][正文][右边距]，助手活在右边距列里。 */
+#note-body {
+  display: grid;
+  grid-template-columns: var(--left) var(--text) var(--right);
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+#left-col {
+  min-width: 0;
+}
+
+#right-col {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* 嵌入助手：默认不显示，仅 placement=embedded 时占据右边距列、右对齐。 */
+#assistant-region {
+  display: none;
+  width: var(--assist);
+  height: 100%;
+}
+
+#app.assistant-embedded #assistant-region {
+  display: flex;
 }
 
 .topbar {
@@ -156,11 +182,17 @@ input {
 }
 
 .assistant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 32px;
   height: 32px;
-  justify-content: center;
-  padding: 3px !important;
-  border-radius: 50% !important;
+  padding: 4px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }
 
 .assistant-btn svg {
@@ -175,8 +207,9 @@ input {
 
 #editor-root {
   position: relative;
-  flex: 1;
+  min-width: 0;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
   background: #fafafa;
 }

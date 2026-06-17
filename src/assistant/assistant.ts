@@ -1,6 +1,6 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import type { AgentEvent } from "../note/agent";
-import robotSvg from "../assets/robot.svg?raw";
+import socratesSvg from "../assets/socrates.svg?raw";
 import {
   type ChatEvent,
   type ChatState,
@@ -33,7 +33,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   root.innerHTML = `
     <div class="assistant-scroll"></div>
     <div class="assistant-dock">
-      <button class="assistant-bot" type="button" aria-label="展开输入框">${robotSvg}</button>
+      <button class="assistant-bot" type="button" aria-label="展开输入框">${socratesSvg}</button>
       <div class="assistant-input-wrap">
         <textarea class="assistant-input" rows="1" placeholder="和助手说点什么…"></textarea>
         <button class="assistant-send" type="button" aria-label="发送"><i class="ph ph-arrow-up"></i></button>

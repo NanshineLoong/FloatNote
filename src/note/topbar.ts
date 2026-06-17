@@ -1,14 +1,34 @@
-import robotIconSvg from "../assets/robot_icon.svg?raw";
+import socratesIconSvg from "../assets/socrates_head_icon.svg?raw";
 
 export interface TopbarCallbacks {
   onPickDir: () => void;
   onToggleMenu: (anchor: HTMLElement) => void;
   onNew: () => void;
   onRename: (newName: string) => Promise<void>;
-  /** 顶栏 robot_icon 单击：开/关助手。 */
+}
+
+export interface TitlebarCallbacks {
+  /** 助手 icon 单击：开/关助手。 */
   onAssistantToggle: () => void;
-  /** 顶栏 robot_icon Option+单击：切换分离/嵌入模式。 */
+  /** 助手 icon Option+单击：重叠区里切换嵌入/分离。 */
   onAssistantModeSwitch: () => void;
+}
+
+/**
+ * 第一行标题栏：左侧空位让系统红绿灯叠加、整行可拖拽，最右端助手 icon。
+ * macOS 经 `titleBarStyle:"Overlay"` 与系统标题栏合并为一条。
+ */
+export function renderTitlebar(root: HTMLElement, callbacks: TitlebarCallbacks) {
+  root.innerHTML = `
+    <div class="titlebar">
+      <div class="titlebar-drag" data-tauri-drag-region></div>
+      <button class="assistant-btn" id="assistant-btn" title="点击开关助手 · Option+点击切换嵌入/分离">${socratesIconSvg}</button>
+    </div>
+  `;
+  root.querySelector<HTMLElement>("#assistant-btn")!.onclick = (e) => {
+    if (e.altKey) callbacks.onAssistantModeSwitch();
+    else callbacks.onAssistantToggle();
+  };
 }
 
 export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
@@ -22,16 +42,10 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
         <span id="note-label">-</span><i class="ph ph-caret-down"></i>
       </button>
       <button class="new-btn" id="new-btn" title="新建笔记"><i class="ph ph-plus"></i></button>
-      <button class="assistant-btn" id="assistant-btn" title="点击开关助手 · Option+点击切换嵌入/分离">${robotIconSvg}</button>
     </div>
   `;
 
   root.querySelector<HTMLElement>("#dir-name")!.onclick = callbacks.onPickDir;
-
-  root.querySelector<HTMLElement>("#assistant-btn")!.onclick = (e) => {
-    if (e.altKey) callbacks.onAssistantModeSwitch();
-    else callbacks.onAssistantToggle();
-  };
 
   const noteButton = root.querySelector<HTMLElement>("#note-name")!;
   noteButton.onclick = () => callbacks.onToggleMenu(noteButton);

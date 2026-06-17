@@ -32,7 +32,6 @@ pub fn run() {
                 agent_ready: Mutex::new(false),
                 active_note: Mutex::new(None),
                 agent_seq: std::sync::atomic::AtomicU64::new(0),
-                fullscreen: Mutex::new(false),
             });
 
             // 拉起 agent-sidecar；失败仅打印，不阻断 app 启动。
@@ -51,12 +50,12 @@ pub fn run() {
             // Hide instead of close the note window so it can be re-opened later.
             // 同时：分离模式下笔记窗移动/缩放时让独立助手窗跟随吸附。
             if let Some(note_win) = app.get_webview_window("main") {
-                let win = note_win.clone();
                 let handle = app.handle().clone();
                 note_win.on_window_event(move |event| match event {
                     WindowEvent::CloseRequested { api, .. } => {
                         api.prevent_close();
-                        let _ = win.hide();
+                        // 隐藏笔记窗时一并收起独立助手窗，避免它孤立留在屏幕上。
+                        crate::windows::set_note_visible(&handle, false);
                     }
                     WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
                         assistant_window::handle_main_geometry_change(&handle);
@@ -65,12 +64,9 @@ pub fn run() {
                 });
             }
 
-            // 启动恢复助手状态（若上次为展开）。
-            {
-                let open = app.state::<AppState>().config.lock().unwrap().assistant_open;
-                if open {
-                    assistant_window::apply_effective(app.handle());
-                }
+            // 以 main 为父窗创建独立助手窗（默认隐藏）；显隐/布局由前端按内容宽度驱动。
+            if let Err(error) = assistant_window::create(app.handle()) {
+                eprintln!("assistant window create failed: {error}");
             }
 
             tray::build_tray(app.handle())?;
@@ -106,6 +102,7 @@ pub fn run() {
             commands::get_assistant_state,
             commands::toggle_assistant,
             commands::set_assistant_mode,
+            commands::set_assistant_window,
             commands::apply_shortcuts,
         ])
         .run(tauri::generate_context!())

@@ -16,8 +16,6 @@ pub struct AppState {
     pub active_note: Mutex<Option<ActiveNote>>,
     /// 单调递增的 requestId 计数器。
     pub agent_seq: AtomicU64,
-    /// 笔记窗当前是否全屏；全屏时助手强制嵌入（不改用户偏好 assistant_mode）。
-    pub fullscreen: Mutex<bool>,
 }
 
 #[tauri::command]
@@ -179,32 +177,30 @@ pub fn get_assistant_state(state: State<AppState>) -> AssistantState {
     }
 }
 
-/// 折叠/展开助手（顶栏 robot_icon 单击）。
+/// 折叠/展开助手（顶栏 robot_icon 单击）。前端据返回的新状态重算布局。
 #[tauri::command]
-pub fn toggle_assistant(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
-    {
-        let mut config = state.config.lock().unwrap();
-        config.assistant_open = !config.assistant_open;
-        crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
-    }
-    crate::assistant_window::apply_effective(&app);
-    Ok(())
+pub fn toggle_assistant(state: State<AppState>) -> Result<AssistantState, String> {
+    let mut config = state.config.lock().unwrap();
+    config.assistant_open = !config.assistant_open;
+    crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
+    Ok(AssistantState {
+        mode: config.assistant_mode.clone(),
+        open: config.assistant_open,
+    })
 }
 
-/// 切换分离/嵌入模式（顶栏 robot_icon Option+单击）。
+/// 持久化重叠区的粘性偏好（"embedded"|"detached"）。落地由前端按宽度重算驱动。
 #[tauri::command]
-pub fn set_assistant_mode(
-    app: tauri::AppHandle,
-    state: State<AppState>,
-    mode: String,
-) -> Result<(), String> {
-    {
-        let mut config = state.config.lock().unwrap();
-        config.assistant_mode = mode;
-        crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
-    }
-    crate::assistant_window::apply_effective(&app);
-    Ok(())
+pub fn set_assistant_mode(state: State<AppState>, mode: String) -> Result<(), String> {
+    let mut config = state.config.lock().unwrap();
+    config.assistant_mode = mode;
+    crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())
+}
+
+/// 显隐独立助手窗：前端在 placement 切到/离开 detached 时调用。
+#[tauri::command]
+pub fn set_assistant_window(app: tauri::AppHandle, show: bool) {
+    crate::assistant_window::set_window(&app, show);
 }
 
 /// 笔记窗发布当前活动笔记，供独立助手窗查询与 apply_write 定位文件。

@@ -1,6 +1,13 @@
 /* 助手 UI 样式：纯白 AI 气泡 + 浅蓝用户气泡 + 机器人 dock（输入框按需展开）。
    配色与 src/styles.css 的 macOS 风格协调，支持 light/dark。 */
 
+/* 独立助手窗的 document.body 必须透明：它复用了笔记窗的 styles.css
+   （含不透明的 body 背景），那层实底正是分离态下空隙处的「白色矩形遮罩」。
+   仅作用于 assistant.html（body.assistant-standalone），笔记窗 body 保持不透明。 */
+body.assistant-standalone {
+  background: transparent;
+}
+
 #assistant-root {
   height: 100%;
 }
@@ -8,9 +15,12 @@
 .assistant {
   display: flex;
   flex-direction: column;
+  width: 100%;
   height: 100%;
   min-height: 0;
-  background: #f4f5f7;
+  /* 透明：嵌入时融入笔记窗背景、分离时融入桌面（空隙可鼠标穿透）。
+     只有气泡 / 机器人 / 输入框带底。 */
+  background: transparent;
   color: #202124;
   font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
 }
@@ -196,7 +206,7 @@
 
 @media (prefers-color-scheme: dark) {
   .assistant {
-    background: #1c1c1e;
+    background: transparent;
     color: #e5e5e5;
   }
 
