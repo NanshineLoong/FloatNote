@@ -20,9 +20,58 @@ pub fn is_project_dir(dir: &Path) -> bool {
     dir.join(INBOX_FILE).is_file()
 }
 
+/// List the project-space subfolders of `root` (those containing `_inbox.md`),
+/// newest-modified first. Loose files and non-project folders are skipped.
+pub fn list_projects(root: &Path) -> std::io::Result<Vec<ProjectEntry>> {
+    let mut entries: Vec<(std::time::SystemTime, ProjectEntry)> = Vec::new();
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_dir() || !is_project_dir(&path) {
+            continue;
+        }
+        let modified = entry.metadata()?.modified()?;
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        entries.push((
+            modified,
+            ProjectEntry {
+                name,
+                path: path.to_string_lossy().to_string(),
+            },
+        ));
+    }
+    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    Ok(entries.into_iter().map(|(_, entry)| entry).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lists_only_project_folders_newest_first() {
+        let root = tempdir();
+        // A project folder.
+        let a = root.path().join("alpha");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::write(a.join(INBOX_FILE), "").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        // A newer project folder.
+        let b = root.path().join("beta");
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::write(b.join(INBOX_FILE), "").unwrap();
+        // A plain folder without _inbox.md (ignored).
+        std::fs::create_dir_all(root.path().join("plain")).unwrap();
+        // A loose markdown file at the root (ignored — not a directory).
+        std::fs::write(root.path().join("legacy.md"), "x").unwrap();
+
+        let names: Vec<String> = list_projects(root.path())
+            .unwrap()
+            .into_iter()
+            .map(|entry| entry.name)
+            .collect();
+        assert_eq!(names, vec!["beta".to_string(), "alpha".to_string()]);
+    }
 
     #[test]
     fn detects_project_by_inbox_file() {
