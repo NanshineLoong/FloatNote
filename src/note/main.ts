@@ -9,19 +9,19 @@ import { buildAppendInsert } from "./append";
 import { appendToEnd, createEditor, setDoc } from "./editor";
 import { createLayoutController } from "./layout-controller";
 import {
-  createNote,
+  createProject,
   getConfig,
-  listNotes,
+  inboxEntry,
+  listProjects,
   readNote,
-  renameNote,
   resolveStartDir,
   scheduleSave,
   setWorkingDir,
   type CurrentNote,
-  type NoteEntry,
+  type ProjectEntry,
 } from "./notes-state";
 import { initScrollbar } from "./scrollbar";
-import { renderTitlebar, renderTopbar, setDirLabel, setNoteLabel } from "./topbar";
+import { renderTitlebar, renderTopbar, setDirLabel, setProjectLabel } from "./topbar";
 import { renderVersionBar } from "./version-bar";
 import { listVersions, restoreVersion, snapshotNote } from "./versions";
 
@@ -40,6 +40,10 @@ app.innerHTML = `
 const noteBody = document.querySelector<HTMLElement>("#note-body")!;
 const assistantRegion = document.querySelector<HTMLElement>("#assistant-region")!;
 
+const DEFAULT_PROJECT_NAME = "阅读笔记";
+
+let rootDir = "";
+let currentProject: ProjectEntry | null = null;
 let current: CurrentNote | null = null;
 let menuEl: HTMLElement | null = null;
 /** AI 改写热刷新期间置位，避免编辑器变更回灌 autosave。 */
@@ -88,59 +92,98 @@ function closeMenu() {
   menuEl = null;
 }
 
-async function openNote(dir: string, entry: NoteEntry) {
-  current = { dir, entry };
-  setDirLabel(basename(dir), dir);
-  setNoteLabel(entry.name);
+async function openProject(project: ProjectEntry) {
+  currentProject = project;
+  const entry = inboxEntry(project);
+  current = { dir: project.path, entry };
+  setProjectLabel(project.name);
   setDoc(editor, await readNote(entry.path));
-  // 发布活动笔记，供独立助手窗 / apply_write 定位。
-  void invoke("set_active_note", { dir, noteId: entry.name, path: entry.path });
+  // 发布活动笔记（= 当前项目的 _inbox.md），供独立助手窗 / apply_write 定位。
+  void invoke("set_active_note", { dir: project.path, noteId: entry.name, path: entry.path });
 }
 
-async function showSwitcher(anchor: HTMLElement) {
+async function openFirstOrCreate() {
+  const projects = await listProjects(rootDir);
+  const project = projects[0] ?? (await createProject(rootDir, DEFAULT_PROJECT_NAME));
+  await openProject(project);
+}
+
+async function showProjectSwitcher(anchor: HTMLElement, startNew = false) {
   if (menuEl) {
     closeMenu();
-    return;
+    if (!startNew) return;
   }
-  if (!current) return;
 
-  const notes = await listNotes(current.dir);
+  const projects = await listProjects(rootDir);
   menuEl = document.createElement("div");
   menuEl.className = "switch-menu";
   const rect = anchor.getBoundingClientRect();
   menuEl.style.left = `${rect.left}px`;
   menuEl.style.top = `${rect.bottom + 2}px`;
 
-  for (const note of notes) {
+  for (const project of projects) {
     const item = document.createElement("button");
     item.className = "switch-item";
-    item.textContent = note.name;
-    if (note.path === current.entry.path) item.classList.add("active");
+    item.textContent = project.name;
+    if (currentProject && project.path === currentProject.path) item.classList.add("active");
     item.onclick = async () => {
       closeMenu();
-      await openNote(current!.dir, note);
+      await openProject(project);
     };
     menuEl.appendChild(item);
   }
 
+  const newItem = document.createElement("button");
+  newItem.className = "switch-item switch-new";
+  newItem.innerHTML = `<i class="ph ph-plus"></i> 新建项目`;
+  newItem.onclick = (e) => {
+    e.stopPropagation();
+    startNewProject(newItem);
+  };
+  menuEl.appendChild(newItem);
+
   document.body.appendChild(menuEl);
   setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
+
+  if (startNew) startNewProject(newItem);
+}
+
+function startNewProject(item: HTMLElement) {
+  const input = document.createElement("input");
+  input.className = "switch-new-input";
+  input.placeholder = "项目名称";
+  item.replaceWith(input);
+  input.focus();
+  // 阻止"点击外部关闭"在自己的输入框上触发。
+  input.addEventListener("click", (e) => e.stopPropagation());
+
+  let submitting = false;
+  async function confirm() {
+    if (submitting) return;
+    const name = input.value.trim();
+    if (!name) {
+      closeMenu();
+      return;
+    }
+    submitting = true;
+    const project = await createProject(rootDir, name);
+    closeMenu();
+    await openProject(project);
+  }
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); void confirm(); }
+    if (e.key === "Escape") { e.preventDefault(); closeMenu(); }
+  });
 }
 
 async function pickDir() {
   const picked = await open({ directory: true, multiple: false });
   if (typeof picked !== "string") return;
   await setWorkingDir(picked);
-  const notes = await listNotes(picked);
-  const entry = notes[0] ?? (await createNote(picked));
-  await openNote(picked, entry);
-}
-
-async function newNote() {
-  if (!current) return;
-  const entry = await createNote(current.dir);
-  await openNote(current.dir, entry);
-  editor.focus();
+  rootDir = picked;
+  setDirLabel(basename(picked), picked);
+  await openFirstOrCreate();
 }
 
 // 布局控制器：按窗口宽度分级收缩边距、决定助手嵌入/分离（init() 里用配置初始化）。
@@ -148,17 +191,11 @@ let layoutController: ReturnType<typeof createLayoutController> | null = null;
 
 renderTopbar(document.querySelector("#topbar-root")!, {
   onPickDir: pickDir,
-  onToggleMenu: (anchor) => {
-    void showSwitcher(anchor);
+  onToggleProjects: (anchor) => {
+    void showProjectSwitcher(anchor);
   },
-  onNew: () => {
-    void newNote();
-  },
-  onRename: async (newName) => {
-    if (!current) return;
-    const newPath = await renameNote(current.dir, current.entry.name, newName);
-    current.entry = { name: newName, path: newPath };
-    setNoteLabel(newName);
+  onNewProject: (anchor) => {
+    void showProjectSwitcher(anchor, true);
   },
 });
 
@@ -235,11 +272,9 @@ document.addEventListener("keydown", (e) => {
 async function init() {
   const config = await getConfig();
   applyFontSize(config.font_size);
-  const dir = await resolveStartDir(config);
-  setDirLabel(basename(dir), dir);
-  const notes = await listNotes(dir);
-  const entry = notes[0] ?? (await createNote(dir));
-  await openNote(dir, entry);
+  rootDir = await resolveStartDir(config);
+  setDirLabel(basename(rootDir), rootDir);
+  await openFirstOrCreate();
 
   const assistant = await invoke<{ open: boolean }>("get_assistant_state");
   layoutController = createLayoutController(app, { open: assistant.open });
