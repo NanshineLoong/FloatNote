@@ -1,5 +1,5 @@
 use crate::agent::{ActiveNote, AgentHandle, HostToSidecar};
-use crate::{config::Config, notes, versions};
+use crate::{config::Config, notes, project, versions};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -211,6 +211,21 @@ pub fn agent_cancel(state: State<AppState>, request_id: String) -> Result<(), St
 #[tauri::command]
 pub fn apply_shortcuts(app: tauri::AppHandle, capture: String, toggle: String) -> Result<(), String> {
     crate::shortcuts::apply(&app, &capture, &toggle)
+}
+
+#[tauri::command]
+pub fn list_projects(root: String) -> Result<Vec<project::ProjectEntry>, String> {
+    project::list_projects(std::path::Path::new(&root)).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn create_project(root: String, name: String) -> Result<project::ProjectEntry, String> {
+    project::create_project(std::path::Path::new(&root), &name).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_pieces(project_dir: String) -> Result<Vec<notes::NoteEntry>, String> {
+    project::list_pieces(std::path::Path::new(&project_dir)).map_err(|error| error.to_string())
 }
 
 pub fn config_path(app: &tauri::AppHandle) -> PathBuf {

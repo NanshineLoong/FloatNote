@@ -3,6 +3,7 @@ mod capture;
 mod commands;
 mod config;
 mod notes;
+mod project;
 mod quote;
 mod shortcuts;
 mod tray;
@@ -79,6 +80,9 @@ pub fn run() {
             commands::write_note,
             commands::create_note,
             commands::rename_note,
+            commands::list_projects,
+            commands::create_project,
+            commands::list_pieces,
             commands::list_versions,
             commands::snapshot_note,
             commands::restore_version,
