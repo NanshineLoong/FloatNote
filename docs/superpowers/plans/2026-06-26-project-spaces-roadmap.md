@@ -18,7 +18,7 @@ Each plan ships working, independently-testable software. Later plans depend on 
   - Ships: backend can enumerate/create project spaces and list a project's 成品. Cargo-tested. Not yet user-visible.
   - Depends on: nothing.
 
-- [ ] **Plan 2 — Project navigation (frontend)**
+- [x] **Plan 2 — Project navigation (frontend)** · `2026-06-26-project-spaces-frontend-nav.md` (implemented; pending interactive `tauri dev` smoke test)
   - Topbar left becomes a **project-space switcher** (lists folders from `list_projects`, switch/create); on open, load the project's `_inbox.md` as the current document. New-project flow calls `create_project`.
   - Ships: user can create/switch project spaces and edit their markdown. First user-visible milestone.
   - Depends on: Plan 1. Touches `src/note/main.ts`, `topbar.ts`, `notes-state.ts`.
