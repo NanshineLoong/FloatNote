@@ -50,6 +50,8 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   function rerender() {
     scroll.replaceChildren(renderMessages(state));
     scroll.scrollTop = scroll.scrollHeight;
+    // 无消息时不渲染聊天历史容器，避免 floating 态出现空的卡片/气泡（inline 态无副作用）。
+    root.classList.toggle("has-messages", state.messages.length > 0);
   }
 
   function dispatch(event: ChatEvent) {

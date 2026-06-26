@@ -130,17 +130,15 @@ input {
   pointer-events: auto;
 }
 
-/* floating · 收起：只露出小人，聊天历史卡片藏起来（展开时从小人上方浮出）。 */
+/* floating · 收起：只露出小人，聊天历史藏起来（展开时从小人上方浮出）。
+   与 inline 一致：容器透明，只有气泡自带底——浮在正文/桌面上，无卡片外框。 */
 #app.mode-floating #assistant-region .assistant-scroll {
   flex: 0 0 auto;
   width: 300px;
   max-height: 50vh;
   margin-bottom: 8px;
   padding: 12px;
-  border: 0.5px solid rgba(0, 0, 0, 0.12);
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  background: transparent;
   opacity: 0;
   transform: translateY(8px) scale(0.98);
   transform-origin: bottom left;
@@ -154,7 +152,13 @@ input {
   visibility: hidden;
 }
 
-/* floating · 展开：聊天历史卡片浮出。 */
+/* floating · 无消息：彻底不渲染历史容器，消除小人上方的空气泡（inline 态保留它作 flex 撑高
+   把小人压到底部，故仅在 floating 生效）。 */
+#app.mode-floating #assistant-region:not(.has-messages) .assistant-scroll {
+  display: none;
+}
+
+/* floating · 展开：聊天历史浮出。 */
 #app.mode-floating #assistant-region.expanded .assistant-scroll {
   opacity: 1;
   transform: translateY(0) scale(1);
@@ -171,14 +175,6 @@ input {
    小人左移量随之变小，不会滑到正文中央。 */
 #app.mode-floating #assistant-region .assistant-input-wrap.open {
   max-width: 240px;
-}
-
-@media (prefers-color-scheme: dark) {
-  #app.mode-floating #assistant-region .assistant-scroll {
-    border-color: rgba(255, 255, 255, 0.12);
-    background: #262628;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
-  }
 }
 
 .topbar {
@@ -311,7 +307,8 @@ input {
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  background: #fafafa;
+  /* 与 body 底色一致，消除正文列与左右边距之间的接缝。 */
+  background: #f8f8f7;
 }
 
 .cm-scroller::-webkit-scrollbar {
