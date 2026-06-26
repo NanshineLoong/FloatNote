@@ -3,6 +3,7 @@ mod capture;
 mod commands;
 mod config;
 mod notes;
+mod project;
 mod quote;
 mod shortcuts;
 mod tray;
