@@ -44,6 +44,35 @@ pub fn list_projects(root: &Path) -> std::io::Result<Vec<ProjectEntry>> {
     Ok(entries.into_iter().map(|(_, entry)| entry).collect())
 }
 
+/// List the 成品 notes inside a project folder: `.md` files whose name does not
+/// start with `_`, newest-modified first. Returns `NoteEntry` so it slots into
+/// the existing note-switching UI.
+pub fn list_pieces(project: &Path) -> std::io::Result<Vec<NoteEntry>> {
+    let mut entries: Vec<(std::time::SystemTime, NoteEntry)> = Vec::new();
+    for entry in std::fs::read_dir(project)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("md") {
+            continue;
+        }
+        let file_name = path.file_name().unwrap().to_string_lossy().to_string();
+        if file_name.starts_with('_') {
+            continue;
+        }
+        let modified = entry.metadata()?.modified()?;
+        let name = path.file_stem().unwrap().to_string_lossy().to_string();
+        entries.push((
+            modified,
+            NoteEntry {
+                name,
+                path: path.to_string_lossy().to_string(),
+            },
+        ));
+    }
+    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    Ok(entries.into_iter().map(|(_, entry)| entry).collect())
+}
+
 /// Pick a folder name under `root` that does not collide, appending " 2", " 3", …
 fn unique_dir(root: &Path, base: &str) -> PathBuf {
     let mut candidate = root.join(base);
@@ -92,6 +121,24 @@ pub fn sanitize_folder_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lists_pieces_excluding_underscore_files_newest_first() {
+        let project = tempdir();
+        std::fs::write(project.path().join(INBOX_FILE), "").unwrap();
+        std::fs::write(project.path().join(TASKS_FILE), "").unwrap();
+        std::fs::write(project.path().join("piece.md"), "").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::fs::write(project.path().join("draft.md"), "").unwrap();
+        std::fs::write(project.path().join("ignore.txt"), "x").unwrap();
+
+        let names: Vec<String> = list_pieces(project.path())
+            .unwrap()
+            .into_iter()
+            .map(|entry| entry.name)
+            .collect();
+        assert_eq!(names, vec!["draft".to_string(), "piece".to_string()]);
+    }
 
     #[test]
     fn creates_project_with_scaffold_and_unique_name() {
