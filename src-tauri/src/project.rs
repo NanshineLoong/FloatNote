@@ -44,9 +44,38 @@ pub fn list_projects(root: &Path) -> std::io::Result<Vec<ProjectEntry>> {
     Ok(entries.into_iter().map(|(_, entry)| entry).collect())
 }
 
+/// Turn a user-supplied project name into a safe, cross-platform folder name.
+/// Path separators and characters illegal on Windows become `-`; surrounding
+/// whitespace and dots are trimmed; an empty result falls back to "未命名".
+pub fn sanitize_folder_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '-',
+            _ => c,
+        })
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.').trim();
+    if trimmed.is_empty() {
+        "未命名".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sanitizes_folder_names() {
+        assert_eq!(sanitize_folder_name("阅读笔记"), "阅读笔记");
+        assert_eq!(sanitize_folder_name("a/b\\c"), "a-b-c");
+        assert_eq!(sanitize_folder_name("a:b*c?"), "a-b-c-");
+        assert_eq!(sanitize_folder_name("  trimmed  "), "trimmed");
+        assert_eq!(sanitize_folder_name("..."), "未命名");
+        assert_eq!(sanitize_folder_name("   "), "未命名");
+    }
 
     #[test]
     fn lists_only_project_folders_newest_first() {
