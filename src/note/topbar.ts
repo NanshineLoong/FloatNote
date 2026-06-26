@@ -10,8 +10,6 @@ export interface TopbarCallbacks {
 export interface TitlebarCallbacks {
   /** 助手 icon 单击：开/关助手。 */
   onAssistantToggle: () => void;
-  /** 助手 icon Option+单击：重叠区里切换嵌入/分离。 */
-  onAssistantModeSwitch: () => void;
 }
 
 /**
@@ -22,13 +20,10 @@ export function renderTitlebar(root: HTMLElement, callbacks: TitlebarCallbacks) 
   root.innerHTML = `
     <div class="titlebar">
       <div class="titlebar-drag" data-tauri-drag-region></div>
-      <button class="assistant-btn" id="assistant-btn" title="点击开关助手 · Option+点击切换嵌入/分离">${socratesIconSvg}</button>
+      <button class="assistant-btn" id="assistant-btn" title="开关助手">${socratesIconSvg}</button>
     </div>
   `;
-  root.querySelector<HTMLElement>("#assistant-btn")!.onclick = (e) => {
-    if (e.altKey) callbacks.onAssistantModeSwitch();
-    else callbacks.onAssistantToggle();
-  };
+  root.querySelector<HTMLElement>("#assistant-btn")!.onclick = () => callbacks.onAssistantToggle();
 }
 
 export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {

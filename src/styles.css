@@ -28,11 +28,14 @@ input {
   display: flex;
   flex-direction: column;
   height: 100%;
-  /* 由 layout-controller 按窗口宽度写入：左边距 / 正文宽 / 右边距 / 助手宽。 */
+  /* 由 layout-controller 按窗口宽度写入：左边距 / 正文宽 / 右边距 / 助手宽 / 小人横坐标。 */
   --left: 28px;
-  --text: 640px;
+  --text: 720px;
   --right: 28px;
   --assist: 0px;
+  /* 小人收起态横坐标，以及输入框展开时的钳左横坐标（inline/floating 共用）。 */
+  --bot-x: 772px;
+  --bot-x-open: 772px;
 }
 
 /* 第一行：标题栏。macOS 经 Overlay 与系统标题栏合并，左侧留位给红绿灯。 */
@@ -50,35 +53,132 @@ input {
   align-self: stretch;
 }
 
-/* 内容主体：三列网格 [左边距][正文][右边距]，助手活在右边距列里。 */
+/* 内容主体：三列网格 [左边距][正文][右边距]。第三列只「预留」右边距空间，
+   助手作为绝对定位的覆盖物落在其上——这样 inline↔floating 切换不牵动网格几何。 */
 #note-body {
+  position: relative;
   display: grid;
   grid-template-columns: var(--left) var(--text) var(--right);
   flex: 1;
   min-height: 0;
   width: 100%;
+  /* 裁掉 floating 收起态里仍占位（visibility:hidden）的聊天卡片，避免小人贴右缘时横向溢出。 */
+  overflow: hidden;
+  /* 离散跳变（放大窗口 / 开关助手）平滑过渡；连续拖拽时由 .resizing 关掉避免卡顿。 */
+  transition: grid-template-columns 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#note-body.resizing {
+  transition: none;
 }
 
 #left-col {
   min-width: 0;
 }
 
-#right-col {
-  display: flex;
-  justify-content: flex-end;
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* 嵌入助手：默认不显示，仅 placement=embedded 时占据右边距列、右对齐。 */
+/* 助手覆盖物：默认不显示（closed）。横向锚点恒为 --bot-x（小人坐标），inline/floating 共用，
+   故模式切换时小人零跳变；inline 向右铺满助手列，floating 浮成小人 + 上方卡片。 */
 #assistant-region {
   display: none;
-  width: var(--assist);
-  height: 100%;
+  position: absolute;
+  left: var(--bot-x);
+  /* 离散跳变（开关助手 / 展开输入框 / 窗口阶跃）平滑过渡；连续拖拽时由 .resizing 关掉。 */
+  transition:
+    left 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 150ms ease;
 }
 
-#app.assistant-embedded #assistant-region {
+#note-body.resizing #assistant-region {
+  transition: none;
+}
+
+/* inline：从小人坐标向右铺满助手列、与正文等高。右间距更宽时（对称区）助手块贴正文、
+   空白留在它右侧——这正是「AI 界面在右间距、紧挨正文」的形态。
+   bottom:16px 与 floating 的底部内缩一致 → 小人垂直锚点连续，模式切换不上下跳。 */
+#app.mode-inline #assistant-region {
   display: flex;
+  top: 0;
+  bottom: 16px;
+  /* 覆盖 .assistant 基类的 height:100%，否则 top+height 会让 bottom:16px 失效。 */
+  height: auto;
+  width: var(--assist);
+}
+
+/* floating：浮在小人处（左下锚 --bot-x），卡片在小人上方，宽高自适应内容，不占布局。 */
+#app.mode-floating #assistant-region {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  bottom: 16px;
+  width: auto;
+  height: auto;
+  max-width: min(320px, 100% - 32px);
+  max-height: calc(100% - 32px);
+  pointer-events: none;
+}
+
+/* floating · 展开输入框：小人贴窗口右缘时左滑腾位（输入框始终出现在小人右侧）。 */
+#app.mode-floating #assistant-region.expanded {
+  left: var(--bot-x-open);
+}
+
+/* floating 里只有实心元素（小人 / 浮层卡片 / 输入框）接收鼠标，其余区域可点穿到正文。 */
+#app.mode-floating #assistant-region .assistant-bot,
+#app.mode-floating #assistant-region .assistant-scroll,
+#app.mode-floating #assistant-region .assistant-input-wrap {
+  pointer-events: auto;
+}
+
+/* floating · 收起：只露出小人，聊天历史卡片藏起来（展开时从小人上方浮出）。 */
+#app.mode-floating #assistant-region .assistant-scroll {
+  flex: 0 0 auto;
+  width: 300px;
+  max-height: 50vh;
+  margin-bottom: 8px;
+  padding: 12px;
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  transform-origin: bottom left;
+  transition:
+    opacity 0.2s ease,
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+#app.mode-floating #assistant-region:not(.expanded) .assistant-scroll {
+  visibility: hidden;
+}
+
+/* floating · 展开：聊天历史卡片浮出。 */
+#app.mode-floating #assistant-region.expanded .assistant-scroll {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* floating · dock：小人在左、输入框向右展开（与 inline 同向，故输入框恒在小人右侧）。 */
+#app.mode-floating #assistant-region .assistant-dock {
+  align-self: flex-start;
+  justify-content: flex-start;
+}
+
+/* floating 输入框收紧（浮在正文上，无需 inline 那么宽）；与 layout 的 inputReserve 对齐，
+   小人左移量随之变小，不会滑到正文中央。 */
+#app.mode-floating #assistant-region .assistant-input-wrap.open {
+  max-width: 240px;
+}
+
+@media (prefers-color-scheme: dark) {
+  #app.mode-floating #assistant-region .assistant-scroll {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: #262628;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  }
 }
 
 .topbar {

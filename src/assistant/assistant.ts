@@ -10,7 +10,7 @@ import {
 } from "./render";
 
 /**
- * 与挂载点无关的助手组件。两处复用：独立窗口 `assistant.html` 与笔记窗内嵌入栏。
+ * 与挂载点无关的助手组件。挂在笔记窗内的 `#assistant-region`，inline/floating 共用同一份。
  *
  * 依赖经 `deps` 注入（发送 / 订阅），故组件本身不直接依赖 Tauri，便于测试与复用。
  * 状态用 render.ts 的纯 reducer 维护；DOM 只是状态的薄投影。
@@ -61,6 +61,8 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   function setInputOpen(open: boolean) {
     inputOpen = open;
     inputWrap.classList.toggle("open", open);
+    // floating 态下，展开/收起整块浮层（聊天历史卡片）由这个类驱动；inline 态无副作用。
+    root.classList.toggle("expanded", open);
     // 机器人轻微缩放「应答」，动画结束自动复位。
     bot.classList.remove("nudge");
     void bot.offsetWidth; // 强制重排以重启动画

@@ -1,5 +1,4 @@
 mod agent;
-mod assistant_window;
 mod capture;
 mod commands;
 mod config;
@@ -48,25 +47,14 @@ pub fn run() {
                 .set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             // Hide instead of close the note window so it can be re-opened later.
-            // 同时：分离模式下笔记窗移动/缩放时让独立助手窗跟随吸附。
             if let Some(note_win) = app.get_webview_window("main") {
                 let handle = app.handle().clone();
-                note_win.on_window_event(move |event| match event {
-                    WindowEvent::CloseRequested { api, .. } => {
+                note_win.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
-                        // 隐藏笔记窗时一并收起独立助手窗，避免它孤立留在屏幕上。
                         crate::windows::set_note_visible(&handle, false);
                     }
-                    WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
-                        assistant_window::handle_main_geometry_change(&handle);
-                    }
-                    _ => {}
                 });
-            }
-
-            // 以 main 为父窗创建独立助手窗（默认隐藏）；显隐/布局由前端按内容宽度驱动。
-            if let Err(error) = assistant_window::create(app.handle()) {
-                eprintln!("assistant window create failed: {error}");
             }
 
             tray::build_tray(app.handle())?;
@@ -101,8 +89,6 @@ pub fn run() {
             commands::get_active_note,
             commands::get_assistant_state,
             commands::toggle_assistant,
-            commands::set_assistant_mode,
-            commands::set_assistant_window,
             commands::apply_shortcuts,
         ])
         .run(tauri::generate_context!())

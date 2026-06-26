@@ -1,5 +1,6 @@
 # FloatNote v1 Implementation Plan
 
+
 **Goal:** Build a macOS tray-only, always-on-top floating Markdown note app where a global shortcut appends the current text selection (from any app) as a blockquote into the current note, with notes stored as Markdown files in a user-chosen directory.
 
 **Architecture:** Tauri v2 desktop app. Rust backend owns the tray, two windows (note + settings), global shortcuts, selection capture (simulate Cmd+C via `enigo`, read/restore clipboard via `arboard`), Markdown file I/O, and config. Pure logic (quote formatting, timestamp filenames, directory scan, config defaults) lives in small testable Rust modules. The capture flow formats the quote in Rust and **emits an event to the note window**; the frontend inserts it into the live CodeMirror buffer and autosaves — so the editor buffer stays the single source of truth and there is no file/buffer race. Frontend is Vanilla TS + Vite (two HTML entry points), CodeMirror 6 editor, Phosphor icons.

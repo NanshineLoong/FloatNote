@@ -32,7 +32,7 @@ app.innerHTML = `
   <div id="note-body">
     <div id="left-col"></div>
     <div id="editor-root"></div>
-    <div id="right-col"><div id="assistant-region"></div></div>
+    <div id="assistant-region"></div>
   </div>
   <div id="version-root"></div>
 `;
@@ -166,18 +166,24 @@ renderTopbar(document.querySelector("#topbar-root")!, {
 renderTitlebar(document.querySelector("#titlebar-root")!, {
   // 单击：开/关整个助手。
   onAssistantToggle: async () => {
-    const next = await invoke<{ open: boolean; mode: string }>("toggle_assistant");
+    const next = await invoke<{ open: boolean }>("toggle_assistant");
     layoutController?.setOpen(next.open);
-  },
-  // Option+单击：仅在重叠区切换嵌入/分离偏好。
-  onAssistantModeSwitch: () => {
-    if (!layoutController?.canToggle()) return;
-    const mode = layoutController.toggleSticky();
-    void invoke("set_assistant_mode", { mode });
   },
 });
 
-window.addEventListener("resize", () => layoutController?.apply());
+// resize 过渡门控：连续拖拽（事件间隔 <120ms）时关掉过渡保证不卡顿；
+// 离散跳变（双击标题栏放大、开关助手）是孤立事件，保留过渡 → 平滑动画。
+let lastResize = 0;
+let resizeSettle: number | undefined;
+window.addEventListener("resize", () => {
+  const now = performance.now();
+  const continuous = now - lastResize < 120;
+  lastResize = now;
+  noteBody.classList.toggle("resizing", continuous);
+  layoutController?.apply();
+  if (resizeSettle) clearTimeout(resizeSettle);
+  resizeSettle = window.setTimeout(() => noteBody.classList.remove("resizing"), 180);
+});
 
 renderVersionBar(document.querySelector("#version-root")!, {
   loadVersions: () => (current ? listVersions(current.dir, current.entry.name) : Promise.resolve([])),
@@ -235,11 +241,8 @@ async function init() {
   const entry = notes[0] ?? (await createNote(dir));
   await openNote(dir, entry);
 
-  const assistant = await invoke<{ mode: string; open: boolean }>("get_assistant_state");
-  layoutController = createLayoutController(app, {
-    open: assistant.open,
-    sticky: assistant.mode === "detached" ? "detached" : "embedded",
-  });
+  const assistant = await invoke<{ open: boolean }>("get_assistant_state");
+  layoutController = createLayoutController(app, { open: assistant.open });
   layoutController.apply();
 }
 

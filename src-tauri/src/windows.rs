@@ -11,8 +11,7 @@ pub fn toggle_note(app: &AppHandle) {
     }
 }
 
-/// 显示或隐藏笔记窗，并让独立助手窗随之显隐（隐藏时一并收起，显示时按原状态恢复）。
-/// 笔记窗的关闭按钮与托盘切换都走这里，确保助手窗不会脱离笔记窗孤立留在屏幕上。
+/// 显示或隐藏笔记窗（关闭按钮与托盘切换都走这里）。助手活在窗内，随之一并显隐。
 pub fn set_note_visible(app: &AppHandle, visible: bool) {
     let Some(window) = note_window(app) else {
         return;
@@ -20,9 +19,7 @@ pub fn set_note_visible(app: &AppHandle, visible: bool) {
     if visible {
         let _ = window.show();
         let _ = window.set_focus();
-        crate::assistant_window::restore_with_note(app);
     } else {
-        crate::assistant_window::hide_with_note(app);
         let _ = window.hide();
     }
 }
