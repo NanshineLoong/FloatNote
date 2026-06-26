@@ -23,10 +23,11 @@ Each plan ships working, independently-testable software. Later plans depend on 
   - Ships: user can create/switch project spaces and edit their markdown. First user-visible milestone.
   - Depends on: Plan 1. Touches `src/note/main.ts`, `topbar.ts`, `notes-state.ts`.
 
-- [ ] **Plan 3 — Inbox block view**
+- [x] **Plan 3 — Inbox block view** · `2026-06-26-project-spaces-inbox-blocks.md` (implemented; pending interactive `tauri dev` smoke test)
   - Parse `_inbox.md` into top-level Markdown blocks; render clip callouts / todos / text as cards with hover handles; drag-reorder and delete blocks; serialize back to Markdown. Pure parse/serialize helpers are Vitest-tested.
   - Ships: the lightweight block editor for Inbox.
   - Depends on: Plan 2. New `src/note/blocks/` module + editor wiring.
+  - Design notes folded into the plan doc (approved via brainstorming): CodeMirror stays source of truth, block view is a render+manipulate layer; structural-only (no inline text edit) + a topbar source toggle; each `- [ ]` line is its own draggable block.
 
 - [ ] **Plan 4 — 成品 multi-file switcher + rename**
   - 成品 space gets its own note switcher (uses `list_pieces`): switch among a project's 成品, create new, rename in place. Reuses existing editor/preview + rename command.
