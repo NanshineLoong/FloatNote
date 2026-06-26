@@ -77,7 +77,7 @@ pub fn run_capture(app: &AppHandle) {
         return;
     }
 
-    let block = crate::quote::format_quote(trimmed);
+    let block = crate::quote::format_clip(trimmed);
     let _ = app.emit_to("main", "quote-captured", block);
 
     if let Some(window) = crate::windows::note_window(app) {
