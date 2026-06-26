@@ -44,6 +44,32 @@ pub fn list_projects(root: &Path) -> std::io::Result<Vec<ProjectEntry>> {
     Ok(entries.into_iter().map(|(_, entry)| entry).collect())
 }
 
+/// Pick a folder name under `root` that does not collide, appending " 2", " 3", …
+fn unique_dir(root: &Path, base: &str) -> PathBuf {
+    let mut candidate = root.join(base);
+    let mut n = 2;
+    while candidate.exists() {
+        candidate = root.join(format!("{base} {n}"));
+        n += 1;
+    }
+    candidate
+}
+
+/// Create a new project-space folder under `root`, scaffolding `_inbox.md`,
+/// `_tasks.md`, and a default `piece.md` (all empty). Returns the created folder.
+pub fn create_project(root: &Path, name: &str) -> std::io::Result<ProjectEntry> {
+    let base = sanitize_folder_name(name);
+    let dir = unique_dir(root, &base);
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join(INBOX_FILE), "")?;
+    std::fs::write(dir.join(TASKS_FILE), "")?;
+    std::fs::write(dir.join(DEFAULT_PIECE), "")?;
+    Ok(ProjectEntry {
+        name: dir.file_name().unwrap().to_string_lossy().to_string(),
+        path: dir.to_string_lossy().to_string(),
+    })
+}
+
 /// Turn a user-supplied project name into a safe, cross-platform folder name.
 /// Path separators and characters illegal on Windows become `-`; surrounding
 /// whitespace and dots are trimmed; an empty result falls back to "未命名".
@@ -66,6 +92,22 @@ pub fn sanitize_folder_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn creates_project_with_scaffold_and_unique_name() {
+        let root = tempdir();
+        let entry = create_project(root.path(), "阅读笔记").unwrap();
+        assert_eq!(entry.name, "阅读笔记");
+        let dir = root.path().join("阅读笔记");
+        assert!(is_project_dir(&dir));
+        assert!(dir.join(TASKS_FILE).is_file());
+        assert!(dir.join(DEFAULT_PIECE).is_file());
+
+        // A second project with the same name gets a numeric suffix.
+        let entry2 = create_project(root.path(), "阅读笔记").unwrap();
+        assert_eq!(entry2.name, "阅读笔记 2");
+        assert!(root.path().join("阅读笔记 2").join(INBOX_FILE).is_file());
+    }
 
     #[test]
     fn sanitizes_folder_names() {
