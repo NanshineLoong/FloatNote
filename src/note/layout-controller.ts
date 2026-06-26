@@ -1,19 +1,24 @@
 import { computeLayout, DEFAULT_PREFS, type Layout, type Mode } from "./layout";
+import { canSplit, computeSplitLayout } from "./split";
 
 /**
- * 把 `computeLayout` 的结果落地到 DOM：写 CSS 变量（左边距/正文宽/右边距/助手宽）、
- * 切 `mode-inline | mode-floating | mode-closed` 类。
+ * 把布局结果落地到 DOM：写 CSS 变量、切 mode 类。
  *
- * 助手永远活在笔记窗内（无独立窗）：inline 时占右边距一栏，floating 时浮成角落小人。
- * 几何只由窗口宽度的单一连续函数决定，故 inline↔floating 不产生瞬跳。
+ * 单栏：复用 `computeLayout` 的单一连续曲线（助手 inline / floating / closed）。
+ * 分屏（够宽 + 已请求）：切到 `computeSplitLayout`（[左][Inbox][gap][成品][右]），
+ * 右槽换成成品栏，助手被强制 floating——零新增几何，只是渲染方式切换。
  *
- * 监听窗口尺寸由调用方接线（resize → `apply`）。开关也由调用方驱动。
+ * 监听窗口尺寸由调用方接线（resize → `apply`）。开关 / 分屏请求也由调用方驱动。
  */
 export interface LayoutController {
   /** 按当前窗口宽度重算并落地。 */
   apply: () => void;
   /** 开/关整个助手。 */
   setOpen: (open: boolean) => void;
+  /** 请求/取消分屏（仅在窗口够宽时实际生效）。 */
+  setSplit: (split: boolean) => void;
+  /** 当前是否真正处于分屏（够宽 + 已请求）。供调用方决定成品栏归属。 */
+  isSplit: () => boolean;
 }
 
 export function createLayoutController(
@@ -21,26 +26,53 @@ export function createLayoutController(
   init: { open: boolean },
 ): LayoutController {
   let open = init.open;
+  let splitRequested = false;
+  let splitActive = false;
 
   function apply() {
-    const prefs = { ...DEFAULT_PREFS, open };
-    const layout: Layout = computeLayout(window.innerWidth, prefs);
+    const width = window.innerWidth;
+    splitActive = splitRequested && canSplit(width);
 
+    if (splitActive) {
+      applySplit(width);
+    } else {
+      applySingle(width);
+    }
+    app.classList.toggle("split-active", splitActive);
+  }
+
+  function applySingle(width: number) {
+    const prefs = { ...DEFAULT_PREFS, open };
+    const layout: Layout = computeLayout(width, prefs);
     app.style.setProperty("--left", `${layout.leftMargin}px`);
     app.style.setProperty("--text", `${layout.textWidth}px`);
     app.style.setProperty("--right", `${layout.rightMargin}px`);
     app.style.setProperty("--assist", `${layout.assistantWidth}px`);
-
-    // 小人收起态横坐标（连续函数，inline/floating 共用）。
     app.style.setProperty("--bot-x", `${layout.botX}px`);
-    // 展开态钳左：小人若贴在窗口右缘、右侧塞不下输入框，就左移腾位（floating 形态用）。
     const botXOpen = Math.min(
       layout.botX,
-      window.innerWidth - prefs.botInset - prefs.botW - prefs.inputReserve,
+      width - prefs.botInset - prefs.botW - prefs.inputReserve,
     );
     app.style.setProperty("--bot-x-open", `${botXOpen}px`);
-
     setMode(app, layout.mode);
+  }
+
+  function applySplit(width: number) {
+    const s = computeSplitLayout(width);
+    app.style.setProperty("--left", `${s.leftMargin}px`);
+    app.style.setProperty("--text", `${s.inboxWidth}px`);
+    app.style.setProperty("--split-gap", `${s.gap}px`);
+    app.style.setProperty("--piece", `${s.pieceWidth}px`);
+    app.style.setProperty("--right", `${s.rightMargin}px`);
+    // 助手强制 floating：贴窗口右下，随右缘走。closed 时不显示。
+    const prefs = { ...DEFAULT_PREFS, open };
+    const botX = width - prefs.botInset - prefs.botW;
+    app.style.setProperty("--bot-x", `${botX}px`);
+    app.style.setProperty(
+      "--bot-x-open",
+      `${Math.min(botX, width - prefs.botInset - prefs.botW - prefs.inputReserve)}px`,
+    );
+    setMode(app, open ? "floating" : "closed");
   }
 
   return {
@@ -48,6 +80,13 @@ export function createLayoutController(
     setOpen(value) {
       open = value;
       apply();
+    },
+    setSplit(value) {
+      splitRequested = value;
+      apply();
+    },
+    isSplit() {
+      return splitActive;
     },
   };
 }

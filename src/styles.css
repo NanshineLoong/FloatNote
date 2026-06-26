@@ -59,6 +59,8 @@ input {
   position: relative;
   display: grid;
   grid-template-columns: var(--left) var(--text) var(--right);
+  --split-gap: 0px;
+  --piece: 0px;
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -81,6 +83,24 @@ input {
   min-width: 0;
   min-height: 0;
   height: 100%;
+}
+
+#piece-col {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: none;
+}
+
+/* 分屏：[左边距][Inbox][gap][成品][右边距]。助手此时为 floating，覆盖在右下。 */
+#app.split-active #note-body {
+  grid-template-columns: var(--left) var(--text) var(--split-gap) var(--piece) var(--right);
+}
+
+#app.split-active #piece-col {
+  display: block;
+  grid-column: 4;
 }
 
 /* 助手覆盖物：默认不显示（closed）。横向锚点恒为 --bot-x（小人坐标），inline/floating 共用，
