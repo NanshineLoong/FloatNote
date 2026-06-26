@@ -7,6 +7,8 @@ export interface TopbarCallbacks {
   onToggleProjects: (anchor: HTMLElement) => void;
   /** "+" 按钮：开下拉并直接进入"新建项目"输入态。 */
   onNewProject: (anchor: HTMLElement) => void;
+  /** 顶栏右侧切换：Inbox 卡片视图 ⇄ 原始 Markdown 源码。 */
+  onToggleSource: () => void;
 }
 
 export interface TitlebarCallbacks {
@@ -38,6 +40,7 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
           <span id="project-label">-</span><i class="ph ph-caret-down"></i>
         </button>
       </div>
+      <button class="src-toggle" id="src-toggle" title="切换源码 / 卡片"><i class="ph ph-cards"></i></button>
       <button class="new-btn" id="new-btn" title="新建项目"><i class="ph ph-plus"></i></button>
     </div>
   `;
@@ -46,6 +49,8 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
 
   const projectButton = root.querySelector<HTMLElement>("#project-name")!;
   projectButton.onclick = () => callbacks.onToggleProjects(projectButton);
+
+  root.querySelector<HTMLElement>("#src-toggle")!.onclick = callbacks.onToggleSource;
 
   root.querySelector<HTMLElement>("#new-btn")!.onclick = () =>
     callbacks.onNewProject(projectButton);
@@ -59,4 +64,11 @@ export function setDirLabel(name: string, fullPath: string) {
 
 export function setProjectLabel(name: string) {
   document.querySelector<HTMLElement>("#project-label")!.textContent = name;
+}
+
+export function setSourceToggle(mode: "block" | "source") {
+  const button = document.querySelector<HTMLElement>("#src-toggle")!;
+  button.innerHTML =
+    mode === "block" ? `<i class="ph ph-code"></i>` : `<i class="ph ph-cards"></i>`;
+  button.title = mode === "block" ? "查看源码" : "查看卡片";
 }

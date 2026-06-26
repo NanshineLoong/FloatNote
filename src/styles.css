@@ -76,6 +76,13 @@ input {
   min-width: 0;
 }
 
+#text-col {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
 /* 助手覆盖物：默认不显示（closed）。横向锚点恒为 --bot-x（小人坐标），inline/floating 共用，
    故模式切换时小人零跳变；inline 向右铺满助手列，floating 浮成小人 + 上方卡片。 */
 #assistant-region {
@@ -286,6 +293,18 @@ input {
   background: rgba(0, 0, 0, 0.06) !important;
 }
 
+.src-toggle {
+  width: 32px;
+  height: 32px;
+  justify-content: center;
+  border-radius: 50% !important;
+  margin-left: auto;
+}
+
+.src-toggle:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
 .assistant-btn {
   display: inline-flex;
   align-items: center;
@@ -318,6 +337,16 @@ input {
   overflow: hidden;
   /* 与 body 底色一致，消除正文列与左右边距之间的接缝。 */
   background: #f8f8f7;
+  /* 默认（卡片模式）隐藏源码编辑器，显示 Inbox 卡片视图。 */
+  display: none;
+}
+
+#app.inbox-source #editor-root {
+  display: block;
+}
+
+#app.inbox-source #inbox-root {
+  display: none;
 }
 
 .cm-scroller::-webkit-scrollbar {
@@ -630,6 +659,10 @@ input {
   }
 
   .new-btn:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .src-toggle:hover {
     background: rgba(255, 255, 255, 0.08) !important;
   }
 

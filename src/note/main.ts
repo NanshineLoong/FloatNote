@@ -7,6 +7,7 @@ import { mountAssistant } from "../assistant/assistant";
 import { agentSend, onAgentEvent, onNoteUpdated } from "./agent";
 import { buildAppendInsert } from "./append";
 import { appendToEnd, createEditor, setDoc } from "./editor";
+import { createInboxView } from "./blocks/view";
 import { createLayoutController } from "./layout-controller";
 import {
   createProject,
@@ -21,7 +22,7 @@ import {
   type ProjectEntry,
 } from "./notes-state";
 import { initScrollbar } from "./scrollbar";
-import { renderTitlebar, renderTopbar, setDirLabel, setProjectLabel } from "./topbar";
+import { renderTitlebar, renderTopbar, setDirLabel, setProjectLabel, setSourceToggle } from "./topbar";
 import { renderVersionBar } from "./version-bar";
 import { listVersions, restoreVersion, snapshotNote } from "./versions";
 
@@ -31,7 +32,10 @@ app.innerHTML = `
   <div id="topbar-root"></div>
   <div id="note-body">
     <div id="left-col"></div>
-    <div id="editor-root"></div>
+    <div id="text-col">
+      <div id="editor-root"></div>
+      <div id="inbox-root"></div>
+    </div>
     <div id="assistant-region"></div>
   </div>
   <div id="version-root"></div>
@@ -55,6 +59,29 @@ const editor = createEditor(editorRoot, (doc) => {
   if (current) scheduleSave(current.entry.path, doc);
 });
 requestAnimationFrame(() => initScrollbar(editorRoot));
+
+const inboxRoot = document.querySelector<HTMLElement>("#inbox-root")!;
+const inboxView = createInboxView(inboxRoot, {
+  // 卡片任何改动 → 重写整份 _inbox.md 到 CodeMirror（触发既有 autosave / 助手同步）。
+  setDoc: (md) => setDoc(editor, md),
+});
+
+let inboxMode: "block" | "source" = "block";
+
+function applyInboxMode() {
+  app.classList.toggle("inbox-source", inboxMode === "source");
+  setSourceToggle(inboxMode);
+  if (inboxMode === "source") {
+    editor.requestMeasure();
+  } else {
+    inboxView.render(editor.state.doc.toString());
+  }
+}
+
+function toggleSource() {
+  inboxMode = inboxMode === "block" ? "source" : "block";
+  applyInboxMode();
+}
 
 /** 用 AI/外部写入的新内容覆盖编辑器，不触发本地 autosave。 */
 function applyRemoteDoc(content: string) {
@@ -80,6 +107,7 @@ mountAssistant(assistantRegion, {
 void onNoteUpdated(async (payload) => {
   if (!current || payload.path !== current.entry.path) return;
   applyRemoteDoc(await readNote(current.entry.path));
+  if (inboxMode === "block") inboxView.render(editor.state.doc.toString());
 });
 
 function basename(path: string): string {
@@ -98,6 +126,7 @@ async function openProject(project: ProjectEntry) {
   current = { dir: project.path, entry };
   setProjectLabel(project.name);
   setDoc(editor, await readNote(entry.path));
+  inboxView.render(editor.state.doc.toString());
   // 发布活动笔记（= 当前项目的 _inbox.md），供独立助手窗 / apply_write 定位。
   void invoke("set_active_note", { dir: project.path, noteId: entry.name, path: entry.path });
 }
@@ -197,6 +226,7 @@ renderTopbar(document.querySelector("#topbar-root")!, {
   onNewProject: (anchor) => {
     void showProjectSwitcher(anchor, true);
   },
+  onToggleSource: toggleSource,
 });
 
 // 标题栏（第一行）：左侧留给系统红绿灯、可拖拽，最右端助手 icon。
@@ -279,6 +309,7 @@ async function init() {
   const assistant = await invoke<{ open: boolean }>("get_assistant_state");
   layoutController = createLayoutController(app, { open: assistant.open });
   layoutController.apply();
+  applyInboxMode();
 }
 
 void init();
@@ -292,7 +323,11 @@ void listen<string>("quote-captured", (event) => {
     selection: { anchor: pos + 1 },
     scrollIntoView: true,
   });
-  editor.focus();
+  if (inboxMode === "block") {
+    inboxView.render(editor.state.doc.toString());
+  } else {
+    editor.focus();
+  }
 });
 
 void listen("accessibility-needed", () => {
