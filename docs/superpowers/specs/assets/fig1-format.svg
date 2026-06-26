@@ -1,0 +1,50 @@
+<svg width="100%" viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, Segoe UI, sans-serif">
+  <title>同一份 Markdown，左为磁盘纯文本，右为 FloatNote 渲染的卡片</title>
+  <style>
+    .h{font-size:12px;fill:#6b6a64}
+    .m{font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;fill:#2c2c2a}
+    .md{fill:#9a9890}
+    .mt{fill:#1d9e75}
+    .s{font-size:11px;fill:#0f6e56}
+    .b{font-size:13px;fill:#2c2c2a}
+  </style>
+
+  <text class="h" x="20" y="44">硬盘上的 .md（Obsidian 也读这个）</text>
+  <rect x="20" y="58" width="300" height="222" rx="10" fill="#ffffff" stroke="#e3e1d9"/>
+  <text class="m md" x="36" y="80">---</text>
+  <text class="m md" x="36" y="97">project: 阅读笔记</text>
+  <text class="m md" x="36" y="114">---</text>
+  <text class="m md" x="36" y="131"># Inbox</text>
+  <text class="m mt" x="36" y="148">&gt; [!quote] mdn</text>
+  <text class="m mt" x="36" y="165">&gt; 进入视口异步触发回调</text>
+  <text class="m" x="36" y="199">这正好解决懒加载</text>
+  <text class="m" x="36" y="216">- [ ] 查兼容性</text>
+  <text class="m md" x="36" y="250"># 成品</text>
+  <text class="m md" x="36" y="267">...</text>
+
+  <text class="h" x="360" y="44">FloatNote 渲染成卡片</text>
+  <rect x="360" y="58" width="300" height="222" rx="10" fill="#ffffff" stroke="#e3e1d9"/>
+
+  <g fill="#cbc9c0">
+    <circle cx="382" cy="100" r="1.6"/><circle cx="388" cy="100" r="1.6"/>
+    <circle cx="382" cy="107" r="1.6"/><circle cx="388" cy="107" r="1.6"/>
+    <circle cx="382" cy="114" r="1.6"/><circle cx="388" cy="114" r="1.6"/>
+  </g>
+  <rect x="400" y="84" width="238" height="46" rx="6" fill="#e1f5ee"/>
+  <rect x="400" y="84" width="3" height="46" fill="#1d9e75"/>
+  <text class="s" x="416" y="103">mdn</text>
+  <text class="b" x="416" y="121">进入视口异步触发回调</text>
+
+  <g fill="#cbc9c0">
+    <circle cx="382" cy="152" r="1.6"/><circle cx="388" cy="152" r="1.6"/>
+    <circle cx="382" cy="159" r="1.6"/><circle cx="388" cy="159" r="1.6"/>
+  </g>
+  <text class="b" x="416" y="163">这正好解决懒加载</text>
+
+  <g fill="#cbc9c0">
+    <circle cx="382" cy="186" r="1.6"/><circle cx="388" cy="186" r="1.6"/>
+    <circle cx="382" cy="193" r="1.6"/><circle cx="388" cy="193" r="1.6"/>
+  </g>
+  <rect x="400" y="181" width="15" height="15" rx="3" fill="#ffffff" stroke="#b4b2a9"/>
+  <text class="b" x="424" y="193">查兼容性</text>
+</svg>

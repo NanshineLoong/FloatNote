@@ -1,0 +1,57 @@
+<svg width="100%" viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, Segoe UI, sans-serif">
+  <title>窄窗为采集模式单栏切换，拖宽后自动变为整理模式的 Inbox 与成品分屏</title>
+  <style>
+    .cap{font-size:13px;fill:#6b6a64}
+    .hd{font-size:10px;fill:#9a9890}
+    .pill{font-size:10px;fill:#2c2c2a}
+    .tx{font-size:11px;fill:#2c2c2a}
+    .sm{font-size:9px;fill:#0f6e56}
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#9a9890" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <rect x="24" y="40" width="180" height="180" rx="10" fill="#ffffff" stroke="#e3e1d9"/>
+  <circle cx="40" cy="56" r="3" fill="#d3d1c7"/><circle cx="50" cy="56" r="3" fill="#d3d1c7"/><circle cx="60" cy="56" r="3" fill="#d3d1c7"/>
+  <line x1="24" y1="70" x2="204" y2="70" stroke="#ece9e1"/>
+  <rect x="38" y="80" width="74" height="18" rx="6" fill="#f1efe8"/>
+  <text class="pill" x="48" y="93">阅读笔记</text>
+  <rect x="38" y="104" width="128" height="18" rx="9" fill="#f1efe8"/>
+  <rect x="40" y="106" width="60" height="14" rx="7" fill="#ffffff"/>
+  <text class="pill" x="52" y="116">Inbox</text>
+  <text class="hd" x="116" y="116">成品</text>
+  <rect x="38" y="132" width="152" height="30" rx="5" fill="#e1f5ee"/>
+  <rect x="38" y="132" width="3" height="30" fill="#1d9e75"/>
+  <text class="sm" x="50" y="145">mdn</text>
+  <text class="tx" x="50" y="158">异步触发回调</text>
+  <text class="tx" x="50" y="180">解决懒加载</text>
+  <text class="tx" x="50" y="200">□ 查兼容性</text>
+  <text class="cap" x="114" y="244" text-anchor="middle">采集 · 小窗单栏切换</text>
+
+  <line x1="226" y1="130" x2="282" y2="130" stroke="#9a9890" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text class="hd" x="254" y="122" text-anchor="middle">拖宽</text>
+
+  <rect x="304" y="34" width="352" height="192" rx="10" fill="#ffffff" stroke="#e3e1d9"/>
+  <circle cx="320" cy="50" r="3" fill="#d3d1c7"/><circle cx="330" cy="50" r="3" fill="#d3d1c7"/><circle cx="340" cy="50" r="3" fill="#d3d1c7"/>
+  <line x1="304" y1="64" x2="656" y2="64" stroke="#ece9e1"/>
+  <rect x="318" y="74" width="74" height="18" rx="6" fill="#f1efe8"/>
+  <text class="pill" x="328" y="87">阅读笔记</text>
+  <rect x="606" y="74" width="16" height="16" rx="4" fill="#f1efe8"/>
+  <rect x="628" y="74" width="16" height="16" rx="4" fill="#f1efe8"/>
+  <line x1="478" y1="100" x2="478" y2="216" stroke="#ece9e1"/>
+  <text class="hd" x="320" y="116">INBOX</text>
+  <rect x="318" y="124" width="146" height="30" rx="5" fill="#e1f5ee"/>
+  <rect x="318" y="124" width="3" height="30" fill="#1d9e75"/>
+  <text class="sm" x="330" y="137">mdn</text>
+  <text class="tx" x="330" y="150">异步触发回调</text>
+  <text class="tx" x="330" y="172">解决懒加载</text>
+  <text class="tx" x="330" y="192">□ 查兼容性</text>
+  <text class="hd" x="494" y="116">成品 · piece</text>
+  <rect x="494" y="128" width="90" height="7" rx="3" fill="#f1efe8"/>
+  <rect x="494" y="142" width="146" height="7" rx="3" fill="#f1efe8"/>
+  <rect x="494" y="156" width="120" height="7" rx="3" fill="#f1efe8"/>
+  <rect x="494" y="170" width="60" height="7" rx="3" fill="#f1efe8"/>
+  <text class="cap" x="480" y="250" text-anchor="middle">整理 · 拉宽即 Inbox｜成品 分屏</text>
+</svg>
