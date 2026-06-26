@@ -5,6 +5,27 @@ export interface NoteEntry {
   path: string;
 }
 
+export interface ProjectEntry {
+  name: string;
+  path: string;
+}
+
+export const INBOX_FILE = "_inbox.md";
+
+/** Join a project folder path with its `_inbox.md`, choosing the separator from
+ * the folder path so it stays correct on both Windows (`\\`) and POSIX (`/`). */
+export function inboxPath(projectPath: string): string {
+  const sep = projectPath.includes("\\") ? "\\" : "/";
+  const trimmed = projectPath.replace(/[\\/]+$/, "");
+  return `${trimmed}${sep}${INBOX_FILE}`;
+}
+
+/** The editor binds to a project's Inbox file. Expose it as a `NoteEntry` named
+ * `_inbox` so the existing editor / agent / version wiring keeps working. */
+export function inboxEntry(project: ProjectEntry): NoteEntry {
+  return { name: "_inbox", path: inboxPath(project.path) };
+}
+
 export interface Config {
   working_dir: string | null;
   shortcut_capture: string;
@@ -32,6 +53,18 @@ export async function listNotes(dir: string): Promise<NoteEntry[]> {
 
 export async function readNote(path: string): Promise<string> {
   return invoke<string>("read_note", { path });
+}
+
+export async function listProjects(root: string): Promise<ProjectEntry[]> {
+  return invoke<ProjectEntry[]>("list_projects", { root });
+}
+
+export async function createProject(root: string, name: string): Promise<ProjectEntry> {
+  return invoke<ProjectEntry>("create_project", { root, name });
+}
+
+export async function listPieces(projectDir: string): Promise<NoteEntry[]> {
+  return invoke<NoteEntry[]>("list_pieces", { projectDir });
 }
 
 export async function createNote(dir: string): Promise<NoteEntry> {
