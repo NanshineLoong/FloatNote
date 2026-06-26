@@ -127,15 +127,21 @@ pieceEditor.contentDOM.addEventListener("focus", () => {
   }
 });
 
-const pieceSwitcher = createPieceSwitcher(pieceMount(), {
-  dir: () => currentProject?.path ?? "",
-  current: () => currentPiece,
-  open: (entry) => void openPiece(entry),
-});
+// 成品切换器挂载在顶栏的 #piece-mount 上 —— 该节点由下方 renderTopbar 创建，
+// 故延迟到 renderTopbar 之后再 mount（见 mountPieceSwitcher）。
+let pieceSwitcher: ReturnType<typeof createPieceSwitcher> | null = null;
+
+function mountPieceSwitcher() {
+  pieceSwitcher = createPieceSwitcher(pieceMount(), {
+    dir: () => currentProject?.path ?? "",
+    current: () => currentPiece,
+    open: (entry) => void openPiece(entry),
+  });
+}
 
 async function openPiece(entry: NoteEntry) {
   currentPiece = entry;
-  pieceSwitcher.setLabel(entry.name);
+  pieceSwitcher?.setLabel(entry.name);
   applyingRemote = true;
   setDoc(pieceEditor, await readNote(entry.path));
   applyingRemote = false;
@@ -331,6 +337,9 @@ renderTopbar(document.querySelector("#topbar-root")!, {
   },
   onToggleTasks: () => tasksPanel.toggle(),
 });
+
+// 顶栏已渲染出 #piece-mount，现在挂载成品切换器。
+mountPieceSwitcher();
 
 // 标题栏（第一行）：左侧留给系统红绿灯、可拖拽，最右端助手 icon。
 renderTitlebar(document.querySelector("#titlebar-root")!, {
