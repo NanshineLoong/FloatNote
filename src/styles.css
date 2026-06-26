@@ -399,6 +399,154 @@ input {
   outline: none;
 }
 
+#inbox-root {
+  height: 100%;
+  overflow: auto;
+  padding: 12px 14px;
+  background: #f8f8f7;
+}
+
+.inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inbox-empty {
+  padding: 24px 8px;
+  color: #9ca3af;
+  font-size: 13px;
+  text-align: center;
+}
+
+.inbox-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px 1fr 24px;
+  align-items: start;
+  gap: 6px;
+}
+
+.inbox-row.inbox-dragging {
+  opacity: 0.85;
+  z-index: 5;
+}
+
+.inbox-handle,
+.inbox-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 24px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.inbox-handle {
+  cursor: grab;
+}
+
+.inbox-row:hover .inbox-handle,
+.inbox-row:hover .inbox-del {
+  opacity: 1;
+}
+
+.inbox-handle:hover,
+.inbox-del:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #374151;
+}
+
+.inbox-body {
+  min-width: 0;
+}
+
+.inbox-card {
+  padding: 8px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.inbox-callout-card {
+  border-left: 3px solid #6b7280;
+  background: rgba(107, 114, 128, 0.06);
+}
+
+.inbox-callout-title {
+  margin-bottom: 2px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.inbox-callout-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.inbox-quote-card {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.inbox-todo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 2px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.inbox-todo input {
+  flex: none;
+}
+
+.inbox-todo input:checked + .inbox-todo-text {
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.inbox-drop-indicator {
+  height: 2px;
+  margin: 0 24px 0 26px;
+  border-radius: 1px;
+  background: #2563eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  #inbox-root {
+    background: #1e1e1e;
+  }
+
+  .inbox-card {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: #262626;
+  }
+
+  .inbox-callout-card {
+    border-left-color: #9ca3af;
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .inbox-handle:hover,
+  .inbox-del:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #d1d5db;
+  }
+}
+
 .settings {
   display: flex;
   flex-direction: column;
