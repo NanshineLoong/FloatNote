@@ -9,6 +9,12 @@ export interface TopbarCallbacks {
   onNewProject: (anchor: HTMLElement) => void;
   /** 顶栏右侧切换：Inbox 卡片视图 ⇄ 原始 Markdown 源码。 */
   onToggleSource: () => void;
+  /** 单栏分段切换：显示 Inbox 还是 成品。 */
+  onSelectSurface: (surface: "inbox" | "piece") => void;
+  /** 分屏开关（仅宽窗生效）。 */
+  onToggleSplit: () => void;
+  /** 清单面板开关。 */
+  onToggleTasks: () => void;
 }
 
 export interface TitlebarCallbacks {
@@ -39,9 +45,18 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
         <button class="project-name" id="project-name" title="切换项目空间">
           <span id="project-label">-</span><i class="ph ph-caret-down"></i>
         </button>
+        <div class="surface-seg" id="surface-seg">
+          <button class="seg-btn active" data-surface="inbox">Inbox</button>
+          <button class="seg-btn" data-surface="piece">成品</button>
+        </div>
       </div>
-      <button class="src-toggle" id="src-toggle" title="切换源码 / 卡片"><i class="ph ph-cards"></i></button>
-      <button class="new-btn" id="new-btn" title="新建项目"><i class="ph ph-plus"></i></button>
+      <div class="piece-mount" id="piece-mount"></div>
+      <div class="topbar-right">
+        <button class="icon-btn" id="tasks-toggle" title="清单"><i class="ph ph-list-checks"></i></button>
+        <button class="icon-btn" id="split-toggle" title="分屏（Inbox ｜ 成品）"><i class="ph ph-columns"></i></button>
+        <button class="icon-btn" id="src-toggle" title="切换源码 / 卡片"><i class="ph ph-cards"></i></button>
+        <button class="icon-btn" id="new-btn" title="新建项目"><i class="ph ph-plus"></i></button>
+      </div>
     </div>
   `;
 
@@ -51,9 +66,14 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
   projectButton.onclick = () => callbacks.onToggleProjects(projectButton);
 
   root.querySelector<HTMLElement>("#src-toggle")!.onclick = callbacks.onToggleSource;
+  root.querySelector<HTMLElement>("#split-toggle")!.onclick = callbacks.onToggleSplit;
+  root.querySelector<HTMLElement>("#tasks-toggle")!.onclick = callbacks.onToggleTasks;
 
-  root.querySelector<HTMLElement>("#new-btn")!.onclick = () =>
-    callbacks.onNewProject(projectButton);
+  root.querySelectorAll<HTMLElement>(".seg-btn").forEach((btn) => {
+    btn.onclick = () => callbacks.onSelectSurface(btn.dataset.surface as "inbox" | "piece");
+  });
+
+  root.querySelector<HTMLElement>("#new-btn")!.onclick = () => callbacks.onNewProject(projectButton);
 }
 
 export function setDirLabel(name: string, fullPath: string) {
@@ -71,4 +91,22 @@ export function setSourceToggle(mode: "block" | "source") {
   button.innerHTML =
     mode === "block" ? `<i class="ph ph-code"></i>` : `<i class="ph ph-cards"></i>`;
   button.title = mode === "block" ? "查看源码" : "查看卡片";
+}
+
+export function setSurfaceSeg(surface: "inbox" | "piece") {
+  document.querySelectorAll<HTMLElement>(".seg-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.surface === surface);
+  });
+}
+
+export function setSplitToggle(active: boolean) {
+  document.querySelector<HTMLElement>("#split-toggle")!.classList.toggle("on", active);
+}
+
+export function setTasksToggle(open: boolean) {
+  document.querySelector<HTMLElement>("#tasks-toggle")!.classList.toggle("on", open);
+}
+
+export function pieceMount(): HTMLElement {
+  return document.querySelector<HTMLElement>("#piece-mount")!;
 }

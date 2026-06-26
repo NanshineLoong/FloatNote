@@ -9,20 +9,36 @@ import { buildAppendInsert } from "./append";
 import { appendToEnd, createEditor, setDoc } from "./editor";
 import { createInboxView } from "./blocks/view";
 import { createLayoutController } from "./layout-controller";
+import { createPieceSwitcher } from "./piece-switcher";
+import { createTasksPanel } from "./tasks-panel";
 import {
+  createNote,
   createProject,
   getConfig,
   inboxEntry,
+  listPieces,
   listProjects,
   readNote,
   resolveStartDir,
   scheduleSave,
   setWorkingDir,
+  tasksPath,
   type CurrentNote,
+  type NoteEntry,
   type ProjectEntry,
 } from "./notes-state";
 import { initScrollbar } from "./scrollbar";
-import { renderTitlebar, renderTopbar, setDirLabel, setProjectLabel, setSourceToggle } from "./topbar";
+import {
+  pieceMount,
+  renderTitlebar,
+  renderTopbar,
+  setDirLabel,
+  setProjectLabel,
+  setSourceToggle,
+  setSplitToggle,
+  setSurfaceSeg,
+  setTasksToggle,
+} from "./topbar";
 import { renderVersionBar } from "./version-bar";
 import { listVersions, restoreVersion, snapshotNote } from "./versions";
 
@@ -35,6 +51,9 @@ app.innerHTML = `
     <div id="text-col">
       <div id="editor-root"></div>
       <div id="inbox-root"></div>
+    </div>
+    <div id="piece-col">
+      <div id="piece-editor-root"></div>
     </div>
     <div id="assistant-region"></div>
   </div>
@@ -59,6 +78,7 @@ const editor = createEditor(editorRoot, (doc) => {
   if (current) scheduleSave(current.entry.path, doc);
 });
 requestAnimationFrame(() => initScrollbar(editorRoot));
+editor.contentDOM.addEventListener("focus", () => publishInboxActive());
 
 const inboxRoot = document.querySelector<HTMLElement>("#inbox-root")!;
 const inboxView = createInboxView(inboxRoot, {
@@ -82,6 +102,78 @@ function toggleSource() {
   inboxMode = inboxMode === "block" ? "source" : "block";
   applyInboxMode();
 }
+
+// 布局控制器：按窗口宽度分级收缩边距、决定助手嵌入/分离/分屏（init() 里用配置初始化）。
+let layoutController: ReturnType<typeof createLayoutController> | null = null;
+
+// ── 成品 surface ──────────────────────────────────────────────────────────
+const pieceEditorRoot = document.querySelector<HTMLElement>("#piece-editor-root")!;
+let currentPiece: NoteEntry | null = null;
+
+const pieceEditor = createEditor(pieceEditorRoot, (doc) => {
+  if (applyingRemote) return;
+  if (currentPiece) scheduleSave(currentPiece.path, doc);
+});
+requestAnimationFrame(() => initScrollbar(pieceEditorRoot));
+
+// 焦点跟随：哪个 surface 获得焦点，助手 active_note 就指向它（成品=润色面）。
+pieceEditor.contentDOM.addEventListener("focus", () => {
+  if (currentProject && currentPiece) {
+    void invoke("set_active_note", {
+      dir: currentProject.path,
+      noteId: currentPiece.name,
+      path: currentPiece.path,
+    });
+  }
+});
+
+const pieceSwitcher = createPieceSwitcher(pieceMount(), {
+  dir: () => currentProject?.path ?? "",
+  current: () => currentPiece,
+  open: (entry) => void openPiece(entry),
+});
+
+async function openPiece(entry: NoteEntry) {
+  currentPiece = entry;
+  pieceSwitcher.setLabel(entry.name);
+  applyingRemote = true;
+  setDoc(pieceEditor, await readNote(entry.path));
+  applyingRemote = false;
+}
+
+async function loadFirstPiece() {
+  const dir = currentProject!.path;
+  const pieces = await listPieces(dir);
+  const first = pieces[0] ?? (await createNote(dir));
+  await openPiece(first);
+}
+
+function publishInboxActive() {
+  if (!currentProject || !current) return;
+  void invoke("set_active_note", {
+    dir: currentProject.path,
+    noteId: current.entry.name,
+    path: current.entry.path,
+  });
+}
+
+// 单栏可见面 + 分屏请求。
+type Surface = "inbox" | "piece";
+let surface: Surface = "inbox";
+let splitOn = false;
+
+function applySurface() {
+  const split = layoutController?.isSplit() ?? false;
+  // 分屏时 Inbox 恒在左、成品恒在右；单栏时按 surface 选一个。
+  app.classList.toggle("show-piece", !split && surface === "piece");
+  app.classList.toggle("show-inbox", split || surface === "inbox");
+  setSurfaceSeg(surface);
+}
+
+const tasksPanel = createTasksPanel(noteBody, {
+  tasksPath: () => (currentProject ? tasksPath(currentProject.path) : null),
+  onOpenChange: (open) => setTasksToggle(open),
+});
 
 /** 用 AI/外部写入的新内容覆盖编辑器，不触发本地 autosave。 */
 function applyRemoteDoc(content: string) {
@@ -127,6 +219,9 @@ async function openProject(project: ProjectEntry) {
   setProjectLabel(project.name);
   setDoc(editor, await readNote(entry.path));
   inboxView.render(editor.state.doc.toString());
+  await loadFirstPiece();
+  tasksPanel.reload();
+  applySurface();
   // 发布活动笔记（= 当前项目的 _inbox.md），供独立助手窗 / apply_write 定位。
   void invoke("set_active_note", { dir: project.path, noteId: entry.name, path: entry.path });
 }
@@ -215,9 +310,6 @@ async function pickDir() {
   await openFirstOrCreate();
 }
 
-// 布局控制器：按窗口宽度分级收缩边距、决定助手嵌入/分离（init() 里用配置初始化）。
-let layoutController: ReturnType<typeof createLayoutController> | null = null;
-
 renderTopbar(document.querySelector("#topbar-root")!, {
   onPickDir: pickDir,
   onToggleProjects: (anchor) => {
@@ -227,6 +319,17 @@ renderTopbar(document.querySelector("#topbar-root")!, {
     void showProjectSwitcher(anchor, true);
   },
   onToggleSource: toggleSource,
+  onSelectSurface: (next) => {
+    surface = next;
+    applySurface();
+  },
+  onToggleSplit: () => {
+    splitOn = !splitOn;
+    layoutController?.setSplit(splitOn);
+    setSplitToggle(layoutController?.isSplit() ?? false);
+    applySurface();
+  },
+  onToggleTasks: () => tasksPanel.toggle(),
 });
 
 // 标题栏（第一行）：左侧留给系统红绿灯、可拖拽，最右端助手 icon。
@@ -248,6 +351,8 @@ window.addEventListener("resize", () => {
   lastResize = now;
   noteBody.classList.toggle("resizing", continuous);
   layoutController?.apply();
+  setSplitToggle(layoutController?.isSplit() ?? false);
+  applySurface();
   if (resizeSettle) clearTimeout(resizeSettle);
   resizeSettle = window.setTimeout(() => noteBody.classList.remove("resizing"), 180);
 });
@@ -310,6 +415,7 @@ async function init() {
   layoutController = createLayoutController(app, { open: assistant.open });
   layoutController.apply();
   applyInboxMode();
+  applySurface();
 }
 
 void init();

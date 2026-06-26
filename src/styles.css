@@ -820,3 +820,155 @@ input {
   cursor: default;
 }
 
+
+/* ── Project-spaces: 顶栏分段切换 / 图标按钮 / 成品药丸 / 清单面板 ── */
+
+/* 顶栏分段切换 Inbox / 成品 */
+.surface-seg {
+  display: inline-flex;
+  margin-left: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.seg-btn {
+  padding: 3px 10px !important;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  border-radius: 0 !important;
+}
+
+.seg-btn.active {
+  background: rgba(0, 0, 0, 0.06);
+  color: #111827;
+  font-weight: 500;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  justify-content: center;
+  border-radius: 50% !important;
+}
+
+.icon-btn:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
+.icon-btn.on {
+  background: rgba(37, 99, 235, 0.12) !important;
+  color: #2563eb;
+}
+
+/* 成品名药丸挂载点（居中），复用 .note-name 样式 */
+.piece-mount {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+}
+
+#app.show-piece .piece-mount,
+#app.split-active .piece-mount {
+  display: block;
+}
+
+/* 成品编辑器铺满其所在列 */
+#piece-editor-root {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  background: #fff;
+}
+
+/* 单栏显示成品：把成品编辑器覆盖到 text-col 上（inbox 藏） */
+#app.show-piece:not(.split-active) #editor-root,
+#app.show-piece:not(.split-active) #inbox-root {
+  display: none !important;
+}
+
+/* 单栏显示成品：成品栏借 text-col 的网格位（col 2）铺满 */
+#app.show-piece:not(.split-active) #piece-col {
+  display: block;
+  grid-column: 2;
+}
+
+/* 清单浮层面板 */
+.tasks-panel {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+  max-height: 60%;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.tasks-head {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.tasks-list {
+  flex: 1;
+  overflow: auto;
+}
+
+.tasks-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 14px;
+}
+
+.tasks-text.done {
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.tasks-empty {
+  padding: 12px 2px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.tasks-add {
+  margin-top: 6px;
+}
+
+.tasks-input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 7px;
+  font-size: 13px;
+  outline: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .seg-btn.active { background: rgba(255, 255, 255, 0.1); color: #f3f4f6; }
+  .icon-btn:hover { background: rgba(255, 255, 255, 0.08) !important; }
+  .icon-btn.on { background: rgba(96, 165, 250, 0.2) !important; color: #60a5fa; }
+  #piece-editor-root { background: #1e1e1e; }
+  .tasks-panel { background: #262626; border-color: rgba(255, 255, 255, 0.12); }
+  .tasks-input { background: #1e1e1e; color: #e5e7eb; border-color: rgba(255, 255, 255, 0.14); }
+}

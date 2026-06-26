@@ -11,6 +11,18 @@ export interface ProjectEntry {
 }
 
 export const INBOX_FILE = "_inbox.md";
+export const TASKS_FILE = "_tasks.md";
+
+/** Join a project folder path with a child file, OS-correct separator. */
+export function projectFilePath(projectPath: string, file: string): string {
+  const sep = projectPath.includes("\\") ? "\\" : "/";
+  const trimmed = projectPath.replace(/[\\/]+$/, "");
+  return `${trimmed}${sep}${file}`;
+}
+
+export function tasksPath(projectPath: string): string {
+  return projectFilePath(projectPath, TASKS_FILE);
+}
 
 /** Join a project folder path with its `_inbox.md`, choosing the separator from
  * the folder path so it stays correct on both Windows (`\\`) and POSIX (`/`). */
