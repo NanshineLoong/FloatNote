@@ -32,14 +32,13 @@ import {
 import { parentDir, pushRecent } from "./recent-projects";
 import { initScrollbar } from "./scrollbar";
 import {
-  pieceMount,
   renderTitlebar,
   renderTopbar,
   setProjectLabel,
-  setSplitToggle,
-  setSurfaceSeg,
   setTasksToggle,
+  setViewSeg,
 } from "./topbar";
+import { canSplit } from "./split";
 import { renderVersionBar } from "./version-bar";
 import { listVersions, restoreVersion, snapshotNote } from "./versions";
 
@@ -53,6 +52,7 @@ app.innerHTML = `
       <div id="editor-root"></div>
     </div>
     <div id="piece-col">
+      <div id="piece-header"></div>
       <div id="piece-editor-root"></div>
     </div>
     <div id="assistant-region"></div>
@@ -117,12 +117,12 @@ pieceEditor.contentDOM.addEventListener("focus", () => {
   }
 });
 
-// 成品切换器挂载在顶栏的 #piece-mount 上 —— 该节点由下方 renderTopbar 创建，
-// 故延迟到 renderTopbar 之后再 mount（见 mountPieceSwitcher）。
+// 成品切换器挂载在「写作」栏自己的顶部 #piece-header（属于内容区，非顶栏）。
 let pieceSwitcher: ReturnType<typeof createPieceSwitcher> | null = null;
 
 function mountPieceSwitcher() {
-  pieceSwitcher = createPieceSwitcher(pieceMount(), {
+  const header = document.querySelector<HTMLElement>("#piece-header")!;
+  pieceSwitcher = createPieceSwitcher(header, {
     dir: () => currentProject?.path ?? "",
     current: () => currentPiece,
     open: (entry) => void openPiece(entry),
@@ -153,17 +153,17 @@ function publishInboxActive() {
   });
 }
 
-// 单栏可见面 + 分屏请求。
+// 单栏可见面（采集/写作）。双栏由 layoutController 持有；surface 始终记着「上次的
+// 单栏面」，作为窗口变窄、双栏放不下时的回落目标。
 type Surface = "inbox" | "piece";
 let surface: Surface = "inbox";
-let splitOn = false;
 
-function applySurface() {
+function applyView() {
   const split = layoutController?.isSplit() ?? false;
-  // 分屏时 Inbox 恒在左、成品恒在右；单栏时按 surface 选一个。
+  // 双栏时采集恒在左、写作恒在右；单栏时按 surface 选一个。
   app.classList.toggle("show-piece", !split && surface === "piece");
   app.classList.toggle("show-inbox", split || surface === "inbox");
-  setSurfaceSeg(surface);
+  setViewSeg(split ? "split" : surface, canSplit(window.innerWidth));
 }
 
 const tasksPanel = createTasksPanel(noteBody, {
@@ -217,7 +217,7 @@ async function openProject(project: ProjectEntry) {
   setDoc(editor, await readNote(entry.path));
   await loadFirstPiece();
   tasksPanel.reload();
-  applySurface();
+  applyView();
   // 发布活动笔记（= 当前项目的 _inbox.md），供独立助手窗 / apply_write 定位。
   void invoke("set_active_note", { dir: project.path, noteId: entry.name, path: entry.path });
 }
@@ -345,20 +345,20 @@ renderTopbar(document.querySelector("#topbar-root")!, {
   onToggleProjects: (anchor) => {
     void showProjectSwitcher(anchor);
   },
-  onSelectSurface: (next) => {
-    surface = next;
-    applySurface();
-  },
-  onToggleSplit: () => {
-    splitOn = !splitOn;
-    layoutController?.setSplit(splitOn);
-    setSplitToggle(layoutController?.isSplit() ?? false);
-    applySurface();
+  onSelectView: (view) => {
+    if (view === "split") {
+      layoutController?.setSplit(true);
+    } else {
+      // 选中采集/写作即退出双栏，并记住这一面作为回落目标。
+      surface = view;
+      layoutController?.setSplit(false);
+    }
+    applyView();
   },
   onToggleTasks: () => tasksPanel.toggle(),
 });
 
-// 顶栏已渲染出 #piece-mount，现在挂载成品切换器。
+// #piece-header 已在 app.innerHTML 中就位，挂载成品切换器到「写作」栏顶部。
 mountPieceSwitcher();
 
 // 标题栏（第一行）：左侧留给系统红绿灯、可拖拽，最右端助手 icon。
@@ -380,8 +380,7 @@ window.addEventListener("resize", () => {
   lastResize = now;
   noteBody.classList.toggle("resizing", continuous);
   layoutController?.apply();
-  setSplitToggle(layoutController?.isSplit() ?? false);
-  applySurface();
+  applyView();
   if (resizeSettle) clearTimeout(resizeSettle);
   resizeSettle = window.setTimeout(() => noteBody.classList.remove("resizing"), 180);
 });
@@ -441,7 +440,7 @@ async function init() {
   const assistant = await invoke<{ open: boolean }>("get_assistant_state");
   layoutController = createLayoutController(app, { open: assistant.open });
   layoutController.apply();
-  applySurface();
+  applyView();
 }
 
 void init();

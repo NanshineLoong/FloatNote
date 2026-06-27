@@ -1,12 +1,13 @@
 import socratesIconSvg from "../assets/socrates_head_icon.svg?raw";
 
+/** 顶栏居中三段视图：采集（_inbox.md）/ 写作（piece）/ 双栏（并排）。 */
+export type ViewSeg = "inbox" | "piece" | "split";
+
 export interface TopbarCallbacks {
   /** 项目名按钮：开/关项目空间下拉（含切换最近项目、新建项目）。 */
   onToggleProjects: (anchor: HTMLElement) => void;
-  /** 单栏分段切换：显示 Inbox 还是 成品。 */
-  onSelectSurface: (surface: "inbox" | "piece") => void;
-  /** 分屏开关（仅宽窗生效）。 */
-  onToggleSplit: () => void;
+  /** 三段视图切换：采集 / 写作 / 双栏。 */
+  onSelectView: (view: ViewSeg) => void;
   /** 清单面板开关。 */
   onToggleTasks: () => void;
 }
@@ -37,15 +38,14 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
         <button class="project-name" id="project-name" title="切换项目空间">
           <i class="ph ph-folder"></i><span id="project-label">-</span><i class="ph ph-caret-down"></i>
         </button>
-        <div class="surface-seg" id="surface-seg">
-          <button class="seg-btn active" data-surface="inbox">Inbox</button>
-          <button class="seg-btn" data-surface="piece">成品</button>
-        </div>
       </div>
-      <div class="piece-mount" id="piece-mount"></div>
+      <div class="view-seg" id="view-seg">
+        <button class="seg-btn active" data-view="inbox">采集</button>
+        <button class="seg-btn" data-view="piece">写作</button>
+        <button class="seg-btn" data-view="split" title="双栏（采集 ｜ 写作）">双栏</button>
+      </div>
       <div class="topbar-right">
         <button class="icon-btn" id="tasks-toggle" title="清单"><i class="ph ph-list-checks"></i></button>
-        <button class="icon-btn" id="split-toggle" title="分屏（Inbox ｜ 成品）"><i class="ph ph-columns"></i></button>
       </div>
     </div>
   `;
@@ -53,11 +53,10 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
   const projectButton = root.querySelector<HTMLElement>("#project-name")!;
   projectButton.onclick = () => callbacks.onToggleProjects(projectButton);
 
-  root.querySelector<HTMLElement>("#split-toggle")!.onclick = callbacks.onToggleSplit;
   root.querySelector<HTMLElement>("#tasks-toggle")!.onclick = callbacks.onToggleTasks;
 
   root.querySelectorAll<HTMLElement>(".seg-btn").forEach((btn) => {
-    btn.onclick = () => callbacks.onSelectSurface(btn.dataset.surface as "inbox" | "piece");
+    btn.onclick = () => callbacks.onSelectView(btn.dataset.view as ViewSeg);
   });
 }
 
@@ -66,20 +65,15 @@ export function setProjectLabel(name: string) {
 }
 
 
-export function setSurfaceSeg(surface: "inbox" | "piece") {
-  document.querySelectorAll<HTMLElement>(".seg-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.surface === surface);
+/** 高亮当前视图段；窄窗（放不下两栏）时禁用「双栏」段。 */
+export function setViewSeg(view: ViewSeg, splitAllowed: boolean) {
+  document.querySelectorAll<HTMLButtonElement>(".seg-btn").forEach((btn) => {
+    const v = btn.dataset.view as ViewSeg;
+    btn.classList.toggle("active", v === view);
+    if (v === "split") btn.disabled = !splitAllowed;
   });
-}
-
-export function setSplitToggle(active: boolean) {
-  document.querySelector<HTMLElement>("#split-toggle")!.classList.toggle("on", active);
 }
 
 export function setTasksToggle(open: boolean) {
   document.querySelector<HTMLElement>("#tasks-toggle")!.classList.toggle("on", open);
-}
-
-export function pieceMount(): HTMLElement {
-  return document.querySelector<HTMLElement>("#piece-mount")!;
 }

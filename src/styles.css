@@ -91,6 +91,18 @@ input {
   min-height: 0;
   height: 100%;
   display: none;
+  flex-direction: column;
+}
+
+/* 双栏分隔线：落在两栏之间 gap 的正中（gap=24，故偏移半个 gap）。 */
+#app.split-active #piece-col::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(0, 0, 0, 0.08);
 }
 
 /* 分屏：[左边距][Inbox][gap][成品][右边距]。助手此时为 floating，覆盖在右下。 */
@@ -99,7 +111,7 @@ input {
 }
 
 #app.split-active #piece-col {
-  display: block;
+  display: flex;
   grid-column: 4;
 }
 
@@ -703,27 +715,47 @@ input {
 /* ── Project-spaces: 顶栏分段切换 / 图标按钮 / 成品药丸 / 清单面板 ── */
 
 /* 顶栏分段切换 Inbox / 成品 */
-.surface-seg {
+/* 顶栏居中三段控件（采集 ｜ 写作 ｜ 双栏）。绝对居中，不受左右两侧宽度影响。 */
+.view-seg {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: inline-flex;
-  margin-left: 8px;
   border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 7px;
+  border-radius: 8px;
   overflow: hidden;
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .seg-btn {
-  padding: 3px 10px !important;
+  min-width: 52px;
+  padding: 4px 0 !important;
+  justify-content: center !important;
   border: none;
+  border-radius: 0 !important;
   background: transparent;
   color: #6b7280;
+  font-size: 12px;
   cursor: pointer;
-  border-radius: 0 !important;
+}
+
+.seg-btn + .seg-btn {
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.seg-btn:not(:disabled):hover {
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .seg-btn.active {
   background: rgba(0, 0, 0, 0.06);
   color: #111827;
   font-weight: 500;
+}
+
+.seg-btn:disabled {
+  color: #c4c8cf;
+  cursor: default;
 }
 
 .topbar-right {
@@ -749,23 +781,28 @@ input {
   color: #2563eb;
 }
 
-/* 成品名药丸挂载点（居中），复用 .note-name 样式 */
-.piece-mount {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  display: none;
+/* 「写作」栏顶部：成品名切换器的小标题条（属于内容区，居中放置） */
+#piece-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 4px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-#app.show-piece .piece-mount,
-#app.split-active .piece-mount {
-  display: block;
+/* 在内容区内时药丸是常规流式居中（不再像顶栏那样绝对居中） */
+#piece-header .piece-pill {
+  position: static;
+  transform: none;
 }
 
-/* 成品编辑器铺满其所在列 */
+/* 成品编辑器铺满 header 以下的剩余高度 */
 #piece-editor-root {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   background: #fff;
 }
@@ -777,7 +814,7 @@ input {
 
 /* 单栏显示成品：成品栏借 text-col 的网格位（col 2）铺满 */
 #app.show-piece:not(.split-active) #piece-col {
-  display: block;
+  display: flex;
   grid-column: 2;
 }
 
@@ -843,9 +880,15 @@ input {
 }
 
 @media (prefers-color-scheme: dark) {
+  .view-seg { border-color: rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.03); }
+  .seg-btn + .seg-btn { border-left-color: rgba(255, 255, 255, 0.1); }
+  .seg-btn:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); }
   .seg-btn.active { background: rgba(255, 255, 255, 0.1); color: #f3f4f6; }
+  .seg-btn:disabled { color: rgba(255, 255, 255, 0.28); }
   .icon-btn:hover { background: rgba(255, 255, 255, 0.08) !important; }
   .icon-btn.on { background: rgba(96, 165, 250, 0.2) !important; color: #60a5fa; }
+  #piece-header { border-bottom-color: rgba(255, 255, 255, 0.08); }
+  #app.split-active #piece-col::before { background: rgba(255, 255, 255, 0.1); }
   #piece-editor-root { background: #1e1e1e; }
   .tasks-panel { background: #262626; border-color: rgba(255, 255, 255, 0.12); }
   .tasks-input { background: #1e1e1e; color: #e5e7eb; border-color: rgba(255, 255, 255, 0.14); }
