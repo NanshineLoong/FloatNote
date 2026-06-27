@@ -5,7 +5,8 @@
 FloatNote is a Tauri 2 desktop app with a Vanilla TypeScript/Vite frontend.
 
 - `src/` contains frontend code. Note-window modules live in `src/note/`; settings UI code lives in `src/settings/`; shared styles are in `src/styles.css`.
-- `src-tauri/` contains the Rust backend, Tauri commands, tray/window wiring, shortcuts, note file handling, and app configuration.
+- `src-tauri/` contains the Rust backend, Tauri commands, tray/window wiring, shortcuts, note file handling, and app configuration. `src-tauri/src/notes.rs` is the key module for listing project spaces and reading/writing note files.
+- A **project space** is a subfolder inside the working directory. Each project space holds up to three kinds of Markdown files: `_inbox.md` (block-style drafts), `_tasks.md` (checklist), and one or more **piece** files (any `.md` without a `_` prefix, defaulting to `piece.md`). The `_` prefix is the sole convention distinguishing system files from pieces — no other metadata is used. Loose `.md` files at the working-directory root are legacy flat notes and co-exist with project spaces.
 - `index.html` and `settings.html` are the two Vite entry pages configured by `vite.config.ts`.
 - `docs/` stores design and planning notes.
 - `dist/` and `src-tauri/target/` are generated build artifacts; avoid editing them by hand.
@@ -24,7 +25,7 @@ Run commands from the repository root unless a Tauri/Rust command specifically r
 
 Use TypeScript ES modules with explicit imports and focused modules. Existing code uses two-space indentation, double quotes, semicolons, and camelCase function names such as `buildAppendInsert`. Keep DOM/window logic near the related entry module.
 
-Rust code uses `rustfmt`, snake_case module and function names, and Tauri commands in `src-tauri/src/commands.rs`. Keep command payloads serializable with `serde`.
+Rust code uses `rustfmt`, snake_case module and function names, and Tauri commands in `src-tauri/src/commands.rs`. Keep command payloads serializable with `serde`. When adding project-space operations, extend `notes.rs` rather than adding ad-hoc file logic in `commands.rs`.
 
 ## Cross-Platform & Documentation
 
