@@ -44,6 +44,7 @@ export interface Config {
   shortcut_toggle: string;
   font_size: number;
   launch_at_login: boolean;
+  recent_projects: string[];
 }
 
 export interface CurrentNote {
@@ -69,6 +70,18 @@ export async function readNote(path: string): Promise<string> {
 
 export async function listProjects(root: string): Promise<ProjectEntry[]> {
   return invoke<ProjectEntry[]>("list_projects", { root });
+}
+
+/** Resolve an MRU list of project paths to the ones that still exist on disk,
+ * preserving order. Backs the project switcher menu. */
+export async function resolveProjects(paths: string[]): Promise<ProjectEntry[]> {
+  return invoke<ProjectEntry[]>("resolve_projects", { paths });
+}
+
+/** Persist the recent-projects MRU list (without touching other config). */
+export async function setRecentProjects(recent: string[]): Promise<void> {
+  const config = await getConfig();
+  await invoke("set_config", { newConfig: { ...config, recent_projects: recent } });
 }
 
 export async function createProject(root: string, name: string): Promise<ProjectEntry> {

@@ -44,6 +44,26 @@ pub fn list_projects(root: &Path) -> std::io::Result<Vec<ProjectEntry>> {
     Ok(entries.into_iter().map(|(_, entry)| entry).collect())
 }
 
+/// Given an ordered list of candidate project paths (MRU), keep only those that
+/// still exist as project folders, preserving order. Used to back the switcher
+/// menu from `config.recent_projects` while silently dropping deleted projects.
+pub fn resolve_projects(paths: &[String]) -> Vec<ProjectEntry> {
+    paths
+        .iter()
+        .filter_map(|raw| {
+            let path = Path::new(raw);
+            if !is_project_dir(path) {
+                return None;
+            }
+            let name = path.file_name()?.to_string_lossy().to_string();
+            Some(ProjectEntry {
+                name,
+                path: path.to_string_lossy().to_string(),
+            })
+        })
+        .collect()
+}
+
 /// List the 成品 notes inside a project folder: `.md` files whose name does not
 /// start with `_`, newest-modified first. Returns `NoteEntry` so it slots into
 /// the existing note-switching UI.
@@ -185,6 +205,32 @@ mod tests {
 
         let names: Vec<String> = list_projects(root.path())
             .unwrap()
+            .into_iter()
+            .map(|entry| entry.name)
+            .collect();
+        assert_eq!(names, vec!["beta".to_string(), "alpha".to_string()]);
+    }
+
+    #[test]
+    fn resolve_projects_keeps_existing_in_order_drops_missing() {
+        let root = tempdir();
+        let a = root.path().join("alpha");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::write(a.join(INBOX_FILE), "").unwrap();
+        let b = root.path().join("beta");
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::write(b.join(INBOX_FILE), "").unwrap();
+        // A plain folder without _inbox.md is not a project.
+        let plain = root.path().join("plain");
+        std::fs::create_dir_all(&plain).unwrap();
+
+        let paths = vec![
+            b.to_string_lossy().to_string(),
+            root.path().join("gone").to_string_lossy().to_string(),
+            plain.to_string_lossy().to_string(),
+            a.to_string_lossy().to_string(),
+        ];
+        let names: Vec<String> = resolve_projects(&paths)
             .into_iter()
             .map(|entry| entry.name)
             .collect();

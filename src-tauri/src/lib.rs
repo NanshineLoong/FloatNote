@@ -81,6 +81,7 @@ pub fn run() {
             commands::create_note,
             commands::rename_note,
             commands::list_projects,
+            commands::resolve_projects,
             commands::create_project,
             commands::list_pieces,
             commands::list_versions,

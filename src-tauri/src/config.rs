@@ -11,6 +11,9 @@ pub struct Config {
     pub launch_at_login: bool,
     /// 助手是否展开显示（折叠则隐藏）。助手始终活在笔记窗内，按窗宽自动 inline/floating。
     pub assistant_open: bool,
+    /// 最近打开过的项目空间绝对路径，最近的在前（MRU）。上限由前端维护（8 条）。
+    /// 项目可散落在磁盘任意位置，此列表是项目切换菜单的唯一数据来源。
+    pub recent_projects: Vec<String>,
 }
 
 impl Default for Config {
@@ -22,6 +25,7 @@ impl Default for Config {
             font_size: 15,
             launch_at_login: false,
             assistant_open: false,
+            recent_projects: Vec::new(),
         }
     }
 }

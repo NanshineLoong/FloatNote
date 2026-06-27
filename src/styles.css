@@ -240,19 +240,6 @@ input {
   white-space: nowrap;
 }
 
-.topbar .dir-name {
-  max-width: 160px;
-  overflow: hidden;
-}
-
-.topbar .dir-name:hover {
-  background: rgba(0, 0, 0, 0.06);
-}
-
-.topbar .sep {
-  color: #9ca3af;
-}
-
 .topbar .project-name {
   max-width: 220px;
   font-weight: 500;
@@ -299,18 +286,6 @@ input {
 .note-name-input.rename-error {
   border-bottom-color: #dc2626;
   color: #dc2626;
-}
-
-.new-btn {
-  width: 32px;
-  height: 32px;
-  justify-content: center;
-  border-radius: 50% !important;
-  margin-left: auto;
-}
-
-.new-btn:hover {
-  background: rgba(0, 0, 0, 0.06) !important;
 }
 
 .src-toggle {
@@ -432,6 +407,13 @@ input {
   padding-top: 8px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   color: #2563eb;
+}
+
+/* 第二个新建项紧跟第一个，不再重复分隔线。 */
+.switch-item.switch-new + .switch-item.switch-new {
+  margin-top: 0;
+  padding-top: 6px;
+  border-top: none;
 }
 
 .switch-new-input {
@@ -656,10 +638,6 @@ input {
     color: #d1d5db;
   }
 
-  .topbar .dir-name:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
   .topbar .project-name:hover {
     background: rgba(255, 255, 255, 0.08);
   }
@@ -676,10 +654,6 @@ input {
   .note-name-input.rename-error {
     border-bottom-color: #f87171;
     color: #f87171;
-  }
-
-  .new-btn:hover {
-    background: rgba(255, 255, 255, 0.08) !important;
   }
 
   .src-toggle:hover {

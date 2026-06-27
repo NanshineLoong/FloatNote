@@ -219,6 +219,11 @@ pub fn list_projects(root: String) -> Result<Vec<project::ProjectEntry>, String>
 }
 
 #[tauri::command]
+pub fn resolve_projects(paths: Vec<String>) -> Vec<project::ProjectEntry> {
+    project::resolve_projects(&paths)
+}
+
+#[tauri::command]
 pub fn create_project(root: String, name: String) -> Result<project::ProjectEntry, String> {
     project::create_project(std::path::Path::new(&root), &name).map_err(|error| error.to_string())
 }

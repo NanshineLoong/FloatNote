@@ -19,20 +19,21 @@ import {
   listPieces,
   listProjects,
   readNote,
+  resolveProjects,
   resolveStartDir,
   scheduleSave,
-  setWorkingDir,
+  setRecentProjects,
   tasksPath,
   type CurrentNote,
   type NoteEntry,
   type ProjectEntry,
 } from "./notes-state";
+import { parentDir, pushRecent } from "./recent-projects";
 import { initScrollbar } from "./scrollbar";
 import {
   pieceMount,
   renderTitlebar,
   renderTopbar,
-  setDirLabel,
   setProjectLabel,
   setSourceToggle,
   setSplitToggle,
@@ -65,10 +66,14 @@ const assistantRegion = document.querySelector<HTMLElement>("#assistant-region")
 
 const DEFAULT_PROJECT_NAME = "阅读笔记";
 
-let rootDir = "";
+/** 最近打开的项目路径（MRU，最近在前，上限 8）。项目可散落在磁盘任意位置，
+ * 此列表是项目切换菜单的唯一数据来源，并持久化到 config.recent_projects。 */
+let recent: string[] = [];
 let currentProject: ProjectEntry | null = null;
 let current: CurrentNote | null = null;
 let menuEl: HTMLElement | null = null;
+/** The project-name button the switcher menu is anchored to (for repositioning). */
+let menuAnchor: HTMLElement | null = null;
 /** AI 改写热刷新期间置位，避免编辑器变更回灌 autosave。 */
 let applyingRemote = false;
 
@@ -208,18 +213,20 @@ void onNoteUpdated(async (payload) => {
   if (inboxMode === "block") inboxView.render(editor.state.doc.toString());
 });
 
-function basename(path: string): string {
-  const parts = path.replace(/\/+$/, "").split("/");
-  return parts[parts.length - 1] || path;
-}
-
 function closeMenu() {
   menuEl?.remove();
   menuEl = null;
 }
 
+/** Record a project as most-recently-used and persist the capped MRU list. */
+async function rememberProject(path: string) {
+  recent = pushRecent(recent, path);
+  await setRecentProjects(recent);
+}
+
 async function openProject(project: ProjectEntry) {
   currentProject = project;
+  await rememberProject(project.path);
   const entry = inboxEntry(project);
   current = { dir: project.path, entry };
   setProjectLabel(project.name);
@@ -232,19 +239,30 @@ async function openProject(project: ProjectEntry) {
   void invoke("set_active_note", { dir: project.path, noteId: entry.name, path: entry.path });
 }
 
-async function openFirstOrCreate() {
-  const projects = await listProjects(rootDir);
-  const project = projects[0] ?? (await createProject(rootDir, DEFAULT_PROJECT_NAME));
+/** 启动时打开项目：优先 MRU 列表里仍存在的第一个；否则回退到旧的工作目录
+ * 扫描（迁移老用户的现有项目），都没有就在工作目录下建一个默认项目。 */
+async function bootstrapProjects(config: Awaited<ReturnType<typeof getConfig>>) {
+  recent = config.recent_projects ?? [];
+  const existing = await resolveProjects(recent);
+  if (existing[0]) {
+    recent = existing.map((project) => project.path);
+    await openProject(existing[0]);
+    return;
+  }
+  const startDir = await resolveStartDir(config);
+  const projects = await listProjects(startDir);
+  const project = projects[0] ?? (await createProject(startDir, DEFAULT_PROJECT_NAME));
   await openProject(project);
 }
 
-async function showProjectSwitcher(anchor: HTMLElement, startNew = false) {
+async function showProjectSwitcher(anchor: HTMLElement) {
   if (menuEl) {
     closeMenu();
-    if (!startNew) return;
+    return;
   }
 
-  const projects = await listProjects(rootDir);
+  const projects = await resolveProjects(recent);
+  menuAnchor = anchor;
   menuEl = document.createElement("div");
   menuEl.className = "switch-menu";
   const rect = anchor.getBoundingClientRect();
@@ -263,26 +281,59 @@ async function showProjectSwitcher(anchor: HTMLElement, startNew = false) {
     menuEl.appendChild(item);
   }
 
-  const newItem = document.createElement("button");
-  newItem.className = "switch-item switch-new";
-  newItem.innerHTML = `<i class="ph ph-plus"></i> 新建项目`;
-  newItem.onclick = (e) => {
-    e.stopPropagation();
-    startNewProject(newItem);
-  };
-  menuEl.appendChild(newItem);
+  // 在当前项目的同级目录新建。
+  addNewProjectEntry(`<i class="ph ph-plus"></i> 在当前目录新建`, () =>
+    currentProject ? parentDir(currentProject.path) : null,
+  );
+  // 弹系统文件夹选择器，在任意位置的某个父目录下新建。
+  addNewProjectEntry(`<i class="ph ph-folder-open"></i> 选择位置新建…`, async () => {
+    const picked = await open({ directory: true, multiple: false });
+    return typeof picked === "string" ? picked : null;
+  });
 
   document.body.appendChild(menuEl);
   setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
-
-  if (startNew) startNewProject(newItem);
 }
 
-function startNewProject(item: HTMLElement) {
+/** Append a "new project" menu entry that, when clicked, resolves a parent
+ * directory via `getParent` and then swaps itself for an inline name input. */
+function addNewProjectEntry(label: string, getParent: () => string | null | Promise<string | null>) {
+  if (!menuEl) return;
+  const item = document.createElement("button");
+  item.className = "switch-item switch-new";
+  item.innerHTML = label;
+  item.onclick = async (e) => {
+    e.stopPropagation();
+    const parent = await getParent();
+    if (!parent) {
+      closeMenu();
+      return;
+    }
+    // “选择位置”可能弹了原生对话框使菜单已被外部点击关闭，重建一个最小输入态。
+    if (!menuEl && menuAnchor) {
+      menuEl = document.createElement("div");
+      menuEl.className = "switch-menu";
+      const rect = menuAnchor.getBoundingClientRect();
+      menuEl.style.left = `${rect.left}px`;
+      menuEl.style.top = `${rect.bottom + 2}px`;
+      document.body.appendChild(menuEl);
+      setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
+      promptNewProjectName(menuEl, parent);
+      return;
+    }
+    promptNewProjectName(item, parent);
+  };
+  menuEl.appendChild(item);
+}
+
+/** Replace `host` (a menu item) — or append to it, if it is the menu — with an
+ * inline input that creates a project under `parent` on Enter. */
+function promptNewProjectName(host: HTMLElement, parent: string) {
   const input = document.createElement("input");
   input.className = "switch-new-input";
   input.placeholder = "项目名称";
-  item.replaceWith(input);
+  if (host === menuEl) host.appendChild(input);
+  else host.replaceWith(input);
   input.focus();
   // 阻止"点击外部关闭"在自己的输入框上触发。
   input.addEventListener("click", (e) => e.stopPropagation());
@@ -296,7 +347,7 @@ function startNewProject(item: HTMLElement) {
       return;
     }
     submitting = true;
-    const project = await createProject(rootDir, name);
+    const project = await createProject(parent, name);
     closeMenu();
     await openProject(project);
   }
@@ -307,22 +358,9 @@ function startNewProject(item: HTMLElement) {
   });
 }
 
-async function pickDir() {
-  const picked = await open({ directory: true, multiple: false });
-  if (typeof picked !== "string") return;
-  await setWorkingDir(picked);
-  rootDir = picked;
-  setDirLabel(basename(picked), picked);
-  await openFirstOrCreate();
-}
-
 renderTopbar(document.querySelector("#topbar-root")!, {
-  onPickDir: pickDir,
   onToggleProjects: (anchor) => {
     void showProjectSwitcher(anchor);
-  },
-  onNewProject: (anchor) => {
-    void showProjectSwitcher(anchor, true);
   },
   onToggleSource: toggleSource,
   onSelectSurface: (next) => {
@@ -416,9 +454,7 @@ document.addEventListener("keydown", (e) => {
 async function init() {
   const config = await getConfig();
   applyFontSize(config.font_size);
-  rootDir = await resolveStartDir(config);
-  setDirLabel(basename(rootDir), rootDir);
-  await openFirstOrCreate();
+  await bootstrapProjects(config);
 
   const assistant = await invoke<{ open: boolean }>("get_assistant_state");
   layoutController = createLayoutController(app, { open: assistant.open });
