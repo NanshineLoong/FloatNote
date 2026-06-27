@@ -27,9 +27,11 @@ const baseContent = {
  */
 function buildTheme(grow: boolean) {
   return EditorView.theme({
-    "&": { height: grow ? "auto" : "100%", fontSize: "var(--editor-font, 15px)" },
-    ".cm-content": grow ? { ...baseContent, minHeight: "240px" } : baseContent,
-    ".cm-scroller": grow ? { overflow: "visible" } : {},
+    "&": grow
+      ? { height: "auto", minHeight: "100%", fontSize: "var(--editor-font, 15px)" }
+      : { height: "100%", fontSize: "var(--editor-font, 15px)" },
+    ".cm-content": grow ? { ...baseContent, minHeight: "100%" } : baseContent,
+    ".cm-scroller": grow ? { overflow: "visible", minHeight: "100%" } : {},
     "&.cm-focused": { outline: "none" },
   });
 }
@@ -62,6 +64,13 @@ export function setDoc(view: EditorView, content: string) {
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
 }
 
+export function requestEditorLayout(
+  view: Pick<EditorView, "requestMeasure">,
+  schedule: (cb: FrameRequestCallback) => number = window.requestAnimationFrame,
+) {
+  schedule(() => view.requestMeasure());
+}
+
 export function appendToEnd(view: EditorView, text: string) {
   const end = view.state.doc.length;
   view.dispatch({
@@ -70,4 +79,3 @@ export function appendToEnd(view: EditorView, text: string) {
     scrollIntoView: true,
   });
 }
-

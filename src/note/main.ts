@@ -7,7 +7,7 @@ import { mountAssistant } from "../assistant/assistant";
 import { agentSend, onAgentEvent, onNoteUpdated } from "./agent";
 import { buildAppendInsert } from "./append";
 import { placeholder } from "@codemirror/view";
-import { appendToEnd, createEditor, setDoc } from "./editor";
+import { appendToEnd, createEditor, requestEditorLayout, setDoc } from "./editor";
 import { blockHandleGutter } from "./blocks/handle-gutter";
 import { createLayoutController } from "./layout-controller";
 import { createPieceHeader } from "./piece-switcher";
@@ -176,6 +176,8 @@ function applyView() {
   app.classList.toggle("show-piece", !split && surface === "piece");
   app.classList.toggle("show-inbox", split || surface === "inbox");
   setViewSeg(split ? "split" : surface, canSplit(window.innerWidth));
+  requestEditorLayout(editor);
+  requestEditorLayout(pieceEditor);
 }
 
 const tasksPanel = createTasksPanel(noteBody, {
@@ -485,4 +487,3 @@ void listen("accessibility-needed", () => {
   banner.addEventListener("click", () => banner.remove());
   noteBody.prepend(banner);
 });
-

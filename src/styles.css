@@ -33,6 +33,11 @@ input {
   --text: 720px;
   --right: 28px;
   --assist: 0px;
+  /* 分屏几何默认值（gap + 成品栏宽）。必须定义在 #app 上：layout-controller 也写在
+     #app 上，若改放到 #note-body 会被其本地声明遮蔽，导致 var(--piece) 恒为 0、
+     双栏写作栏宽度塌成 0（不可见、不可编辑）。 */
+  --split-gap: 0px;
+  --piece: 0px;
   /* 小人收起态横坐标，以及输入框展开时的钳左横坐标（inline/floating 共用）。 */
   --bot-x: 772px;
   --bot-x-open: 772px;
@@ -61,8 +66,6 @@ input {
   position: relative;
   display: grid;
   grid-template-columns: var(--left) var(--text) var(--right);
-  --split-gap: 0px;
-  --piece: 0px;
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -758,6 +761,8 @@ input {
 /* 写作栏的单一滚动容器：文档头（breadcrumb + 标题）与正文同处其中、一起滚。 */
 #piece-scroll {
   position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
@@ -840,6 +845,8 @@ input {
 /* 成品编辑器：长到内容高度（不内部滚动），由 #piece-scroll 统一滚。 */
 #piece-editor-root {
   position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* 单栏显示成品：把成品编辑器覆盖到 text-col 上（inbox 藏） */
