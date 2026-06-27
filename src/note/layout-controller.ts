@@ -13,8 +13,10 @@ import { canSplit, computeSplitLayout } from "./split";
 export interface LayoutController {
   /** 按当前窗口宽度重算并落地。 */
   apply: () => void;
-  /** 开/关整个助手。 */
-  setOpen: (open: boolean) => void;
+  /** 开/关助手内容（小人 / 对话）。 */
+  setAssistantOpen: (open: boolean) => void;
+  /** 开/关行动面板。与助手同等地「占用右栏」。 */
+  setActionOpen: (open: boolean) => void;
   /** 请求/取消分屏（仅在窗口够宽时实际生效）。 */
   setSplit: (split: boolean) => void;
   /** 当前是否真正处于分屏（够宽 + 已请求）。供调用方决定成品栏归属。 */
@@ -23,11 +25,16 @@ export interface LayoutController {
 
 export function createLayoutController(
   app: HTMLElement,
-  init: { open: boolean },
+  init: { assistantOpen: boolean },
 ): LayoutController {
-  let open = init.open;
+  let assistantOpen = init.assistantOpen;
+  let actionOpen = false;
   let splitRequested = false;
   let splitActive = false;
+
+  // 右栏几何（正文左推 / 预留列宽 / inline 态）由助手或行动「任一」打开驱动 ——
+  // 二者是同等的「占用右栏」行为，故 layout 的 open 取二者之或。
+  const railOpen = () => assistantOpen || actionOpen;
 
   function apply() {
     const width = window.innerWidth;
@@ -39,10 +46,12 @@ export function createLayoutController(
       applySingle(width);
     }
     app.classList.toggle("split-active", splitActive);
+    // 助手内容是否显示，与「右栏是否打开」解耦：只看助手自身开关。
+    app.classList.toggle("assistant-on", assistantOpen);
   }
 
   function applySingle(width: number) {
-    const prefs = { ...DEFAULT_PREFS, open };
+    const prefs = { ...DEFAULT_PREFS, open: railOpen() };
     const layout: Layout = computeLayout(width, prefs);
     app.style.setProperty("--left", `${layout.leftMargin}px`);
     app.style.setProperty("--text", `${layout.textWidth}px`);
@@ -64,21 +73,25 @@ export function createLayoutController(
     app.style.setProperty("--split-gap", `${s.gap}px`);
     app.style.setProperty("--piece", `${s.pieceWidth}px`);
     app.style.setProperty("--right", `${s.rightMargin}px`);
-    // 助手强制 floating：贴窗口右下，随右缘走。closed 时不显示。
-    const prefs = { ...DEFAULT_PREFS, open };
+    // 助手/行动强制 floating：贴窗口右下/右上，随右缘走。都没开时 closed。
+    const prefs = { ...DEFAULT_PREFS, open: railOpen() };
     const botX = width - prefs.botInset - prefs.botW;
     app.style.setProperty("--bot-x", `${botX}px`);
     app.style.setProperty(
       "--bot-x-open",
       `${Math.min(botX, width - prefs.botInset - prefs.botW - prefs.inputReserve)}px`,
     );
-    setMode(app, open ? "floating" : "closed");
+    setMode(app, railOpen() ? "floating" : "closed");
   }
 
   return {
     apply,
-    setOpen(value) {
-      open = value;
+    setAssistantOpen(value) {
+      assistantOpen = value;
+      apply();
+    },
+    setActionOpen(value) {
+      actionOpen = value;
       apply();
     },
     setSplit(value) {

@@ -37,3 +37,8 @@ export function addTask(items: TaskLine[], text: string): TaskLine[] {
   if (!trimmed) return items;
   return [...items, { kind: "todo", checked: false, text: trimmed }];
 }
+
+export function deleteTask(items: TaskLine[], index: number): TaskLine[] {
+  if (index < 0 || index >= items.length) return items;
+  return items.filter((_, i) => i !== index);
+}

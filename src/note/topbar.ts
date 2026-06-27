@@ -8,7 +8,7 @@ export interface TopbarCallbacks {
   onToggleProjects: (anchor: HTMLElement) => void;
   /** 三段视图切换：采集 / 写作 / 双栏。 */
   onSelectView: (view: ViewSeg) => void;
-  /** 清单面板开关。 */
+  /** 行动面板开关。 */
   onToggleTasks: () => void;
 }
 
@@ -45,7 +45,7 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
         <button class="seg-btn" data-view="split" title="双栏（采集 ｜ 写作）">双栏</button>
       </div>
       <div class="topbar-right">
-        <button class="icon-btn" id="tasks-toggle" title="清单"><i class="ph ph-list-checks"></i></button>
+        <button class="icon-btn" id="tasks-toggle" title="行动"><i class="ph ph-list-checks"></i></button>
       </div>
     </div>
   `;

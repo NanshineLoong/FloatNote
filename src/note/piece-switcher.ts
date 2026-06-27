@@ -1,28 +1,90 @@
 import { sanitizePieceStem } from "./piece-name";
 import { createNote, listPieces, renameNote, type NoteEntry } from "./notes-state";
 
-export interface PieceSwitcherHost {
+export interface PieceHeaderHost {
   /** 当前项目文件夹路径。 */
   dir: () => string;
   /** 当前成品（用于高亮 / 重命名旧名）。 */
   current: () => NoteEntry | null;
-  /** 切到某成品（switch / 新建后）。 */
+  /** 切到某成品（switch / 新建 / 重命名后）。 */
   open: (entry: NoteEntry) => void;
 }
 
-/** 居中成品名「药丸」+ 下拉（切换 / 新建 / 就地重命名）。返回 setLabel 钩子刷新标签。 */
-export function createPieceSwitcher(mount: HTMLElement, host: PieceSwitcherHost) {
+/**
+ * 写作栏的文档头：上方小号 breadcrumb 切换行，下方大标题（= 文件名，可编辑）。
+ * 单栏 / 双栏共用同一份 DOM，左缘与正文对齐，故两种模式表现完全一致。
+ */
+export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
   let menuEl: HTMLElement | null = null;
+  let renaming = false;
 
-  const pill = document.createElement("button");
-  pill.className = "note-name piece-pill";
-  pill.title = "切换 / 重命名成品";
-  pill.innerHTML = `<span class="piece-label">-</span>`;
-  pill.onclick = () => void openMenu();
-  mount.appendChild(pill);
+  const crumb = document.createElement("button");
+  crumb.className = "piece-breadcrumb";
+  crumb.title = "切换成品";
+  crumb.innerHTML = `
+    <i class="ph ph-file-text"></i>
+    <span class="piece-breadcrumb-label">-</span>
+    <i class="ph ph-caret-down"></i>
+  `;
+  crumb.onclick = (e) => {
+    e.stopPropagation();
+    void openMenu();
+  };
+
+  // 标题即可编辑文本框：键入像写 Notion 标题，失焦/回车提交重命名。
+  const title = document.createElement("input");
+  title.className = "piece-title-input";
+  title.spellcheck = false;
+  title.setAttribute("aria-label", "成品标题（即文件名）");
+
+  mount.appendChild(crumb);
+  mount.appendChild(title);
+
+  function fit() {
+    title.size = Math.max(title.value.length + 1, 3);
+  }
 
   function setLabel(name: string) {
-    pill.querySelector<HTMLElement>(".piece-label")!.textContent = name;
+    title.value = name;
+    crumb.querySelector<HTMLElement>(".piece-breadcrumb-label")!.textContent = name;
+    title.classList.remove("rename-error");
+    fit();
+  }
+
+  title.addEventListener("input", fit);
+  title.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      title.blur();
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      const cur = host.current();
+      if (cur) setLabel(cur.name);
+      title.blur();
+    }
+  });
+  title.addEventListener("blur", () => void commitRename());
+
+  async function commitRename() {
+    const cur = host.current();
+    if (!cur || renaming) return;
+    const stem = sanitizePieceStem(title.value);
+    // 空 / 非法 / 未改名 → 还原，不落盘。
+    if (!stem || stem === cur.name) {
+      setLabel(cur.name);
+      return;
+    }
+    renaming = true;
+    try {
+      const newPath = await renameNote(host.dir(), cur.name, stem);
+      host.open({ name: stem, path: newPath });
+    } catch {
+      title.classList.add("rename-error");
+      setTimeout(() => setLabel(cur.name), 1200);
+    } finally {
+      renaming = false;
+    }
   }
 
   function closeMenu() {
@@ -40,9 +102,21 @@ export function createPieceSwitcher(mount: HTMLElement, host: PieceSwitcherHost)
     const pieces = await listPieces(dir);
     menuEl = document.createElement("div");
     menuEl.className = "switch-menu";
-    const rect = pill.getBoundingClientRect();
+    const rect = crumb.getBoundingClientRect();
     menuEl.style.left = `${rect.left}px`;
-    menuEl.style.top = `${rect.bottom + 2}px`;
+    menuEl.style.top = `${rect.bottom + 4}px`;
+
+    // 顶部：新建图标行。
+    const newItem = document.createElement("button");
+    newItem.className = "switch-item piece-new-row";
+    newItem.innerHTML = `<i class="ph ph-plus"></i> 新建`;
+    newItem.onclick = async (e) => {
+      e.stopPropagation();
+      const entry = await createNote(host.dir());
+      closeMenu();
+      host.open(entry);
+    };
+    menuEl.appendChild(newItem);
 
     const cur = host.current();
     for (const piece of pieces) {
@@ -57,74 +131,8 @@ export function createPieceSwitcher(mount: HTMLElement, host: PieceSwitcherHost)
       menuEl.appendChild(item);
     }
 
-    const renameItem = document.createElement("button");
-    renameItem.className = "switch-item";
-    renameItem.innerHTML = `<i class="ph ph-pencil-simple"></i> 重命名当前`;
-    renameItem.onclick = (e) => {
-      e.stopPropagation();
-      void startRename();
-    };
-    menuEl.appendChild(renameItem);
-
-    const newItem = document.createElement("button");
-    newItem.className = "switch-item switch-new";
-    newItem.innerHTML = `<i class="ph ph-plus"></i> 新建成品`;
-    newItem.onclick = async (e) => {
-      e.stopPropagation();
-      const entry = await createNote(host.dir());
-      closeMenu();
-      host.open(entry);
-    };
-    menuEl.appendChild(newItem);
-
     document.body.appendChild(menuEl);
     setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
-  }
-
-  async function startRename() {
-    const cur = host.current();
-    if (!cur) return;
-    const input = document.createElement("input");
-    input.className = "note-name-input";
-    input.value = cur.name;
-    pill.replaceWith(input);
-    input.focus();
-    input.select();
-    input.addEventListener("click", (e) => e.stopPropagation());
-
-    let submitting = false;
-    const restore = () => {
-      input.replaceWith(pill);
-    };
-    async function confirm() {
-      if (submitting) return;
-      const stem = sanitizePieceStem(input.value);
-      if (!stem || stem === cur!.name) {
-        restore();
-        closeMenu();
-        return;
-      }
-      submitting = true;
-      try {
-        const newPath = await renameNote(host.dir(), cur!.name, stem);
-        closeMenu();
-        host.open({ name: stem, path: newPath });
-      } catch {
-        input.classList.add("rename-error");
-        submitting = false;
-      }
-    }
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        void confirm();
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        restore();
-        closeMenu();
-      }
-    });
   }
 
   return { setLabel, closeMenu };

@@ -10,7 +10,7 @@ import { placeholder } from "@codemirror/view";
 import { appendToEnd, createEditor, setDoc } from "./editor";
 import { blockHandleGutter } from "./blocks/handle-gutter";
 import { createLayoutController } from "./layout-controller";
-import { createPieceSwitcher } from "./piece-switcher";
+import { createPieceHeader } from "./piece-switcher";
 import { createTasksPanel } from "./tasks-panel";
 import {
   createNote,
@@ -52,8 +52,10 @@ app.innerHTML = `
       <div id="editor-root"></div>
     </div>
     <div id="piece-col">
-      <div id="piece-header"></div>
-      <div id="piece-editor-root"></div>
+      <div id="piece-scroll">
+        <div id="piece-doc-header"></div>
+        <div id="piece-editor-root"></div>
+      </div>
     </div>
     <div id="assistant-region"></div>
   </div>
@@ -98,13 +100,23 @@ let layoutController: ReturnType<typeof createLayoutController> | null = null;
 
 // ── 成品 surface ──────────────────────────────────────────────────────────
 const pieceEditorRoot = document.querySelector<HTMLElement>("#piece-editor-root")!;
+const pieceCol = document.querySelector<HTMLElement>("#piece-col")!;
+const pieceScroll = document.querySelector<HTMLElement>("#piece-scroll")!;
 let currentPiece: NoteEntry | null = null;
 
-const pieceEditor = createEditor(pieceEditorRoot, (doc) => {
-  if (applyingRemote) return;
-  if (currentPiece) scheduleSave(currentPiece.path, doc);
-});
-requestAnimationFrame(() => initScrollbar(pieceEditorRoot));
+// grow:true → 编辑器长到内容高度、不自带内部滚动，于是标题与正文共用 #piece-scroll
+// 这一个外层滚动容器（Notion 式：标题随正文一起滚）。
+const pieceEditor = createEditor(
+  pieceEditorRoot,
+  (doc) => {
+    if (applyingRemote) return;
+    if (currentPiece) scheduleSave(currentPiece.path, doc);
+  },
+  [],
+  { grow: true },
+);
+// 滑块挂在不滚动的 #piece-col 上，监听真正滚动的 #piece-scroll。
+requestAnimationFrame(() => initScrollbar(pieceCol, pieceScroll));
 
 // 焦点跟随：哪个 surface 获得焦点，助手 active_note 就指向它（成品=润色面）。
 pieceEditor.contentDOM.addEventListener("focus", () => {
@@ -117,12 +129,12 @@ pieceEditor.contentDOM.addEventListener("focus", () => {
   }
 });
 
-// 成品切换器挂载在「写作」栏自己的顶部 #piece-header（属于内容区，非顶栏）。
-let pieceSwitcher: ReturnType<typeof createPieceSwitcher> | null = null;
+// 文档头（标题 + 切换箭头）挂在「写作」栏内容区顶部，随正文一起滚。
+let pieceHeader: ReturnType<typeof createPieceHeader> | null = null;
 
-function mountPieceSwitcher() {
-  const header = document.querySelector<HTMLElement>("#piece-header")!;
-  pieceSwitcher = createPieceSwitcher(header, {
+function mountPieceHeader() {
+  const header = document.querySelector<HTMLElement>("#piece-doc-header")!;
+  pieceHeader = createPieceHeader(header, {
     dir: () => currentProject?.path ?? "",
     current: () => currentPiece,
     open: (entry) => void openPiece(entry),
@@ -131,7 +143,7 @@ function mountPieceSwitcher() {
 
 async function openPiece(entry: NoteEntry) {
   currentPiece = entry;
-  pieceSwitcher?.setLabel(entry.name);
+  pieceHeader?.setLabel(entry.name);
   applyingRemote = true;
   setDoc(pieceEditor, await readNote(entry.path));
   applyingRemote = false;
@@ -168,7 +180,11 @@ function applyView() {
 
 const tasksPanel = createTasksPanel(noteBody, {
   tasksPath: () => (currentProject ? tasksPath(currentProject.path) : null),
-  onOpenChange: (open) => setTasksToggle(open),
+  // 行动开关与助手开关同等地驱动右栏几何：打开即预留右栏、正文左推。
+  onOpenChange: (open) => {
+    setTasksToggle(open);
+    layoutController?.setActionOpen(open);
+  },
 });
 
 /** 用 AI/外部写入的新内容覆盖编辑器，不触发本地 autosave。 */
@@ -354,19 +370,21 @@ renderTopbar(document.querySelector("#topbar-root")!, {
       layoutController?.setSplit(false);
     }
     applyView();
+    tasksPanel.syncLayout();
   },
   onToggleTasks: () => tasksPanel.toggle(),
 });
 
-// #piece-header 已在 app.innerHTML 中就位，挂载成品切换器到「写作」栏顶部。
-mountPieceSwitcher();
+// #piece-doc-header 已在 app.innerHTML 中就位，挂载文档头到「写作」栏顶部。
+mountPieceHeader();
 
 // 标题栏（第一行）：左侧留给系统红绿灯、可拖拽，最右端助手 icon。
 renderTitlebar(document.querySelector("#titlebar-root")!, {
   // 单击：开/关整个助手。
   onAssistantToggle: async () => {
     const next = await invoke<{ open: boolean }>("toggle_assistant");
-    layoutController?.setOpen(next.open);
+    layoutController?.setAssistantOpen(next.open);
+    tasksPanel.syncLayout();
   },
 });
 
@@ -381,6 +399,7 @@ window.addEventListener("resize", () => {
   noteBody.classList.toggle("resizing", continuous);
   layoutController?.apply();
   applyView();
+  tasksPanel.syncLayout();
   if (resizeSettle) clearTimeout(resizeSettle);
   resizeSettle = window.setTimeout(() => noteBody.classList.remove("resizing"), 180);
 });
@@ -438,7 +457,7 @@ async function init() {
   await bootstrapProjects(config);
 
   const assistant = await invoke<{ open: boolean }>("get_assistant_state");
-  layoutController = createLayoutController(app, { open: assistant.open });
+  layoutController = createLayoutController(app, { assistantOpen: assistant.open });
   layoutController.apply();
   applyView();
 }

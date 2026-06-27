@@ -36,6 +36,8 @@ input {
   /* 小人收起态横坐标，以及输入框展开时的钳左横坐标（inline/floating 共用）。 */
   --bot-x: 772px;
   --bot-x-open: 772px;
+  /* inline 态行动面板的占高（含间隙），由 tasks-panel 写入，驱动下方助手下推。 */
+  --action-h: 0px;
 }
 
 /* 第一行：标题栏。macOS 经 Overlay 与系统标题栏合并，左侧留位给红绿灯。 */
@@ -110,9 +112,15 @@ input {
   grid-template-columns: var(--left) var(--text) var(--split-gap) var(--piece) var(--right);
 }
 
+#app.split-active #text-col {
+  grid-column: 2;
+  grid-row: 1;
+}
+
 #app.split-active #piece-col {
   display: flex;
   grid-column: 4;
+  grid-row: 1;
 }
 
 /* 助手覆盖物：默认不显示（closed）。横向锚点恒为 --bot-x（小人坐标），inline/floating 共用，
@@ -124,6 +132,7 @@ input {
   /* 离散跳变（开关助手 / 展开输入框 / 窗口阶跃）平滑过渡；连续拖拽时由 .resizing 关掉。 */
   transition:
     left 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 200ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 150ms ease;
 }
 
@@ -134,9 +143,10 @@ input {
 /* inline：从小人坐标向右铺满助手列、与正文等高。右间距更宽时（对称区）助手块贴正文、
    空白留在它右侧——这正是「AI 界面在右间距、紧挨正文」的形态。
    bottom:16px 与 floating 的底部内缩一致 → 小人垂直锚点连续，模式切换不上下跳。 */
-#app.mode-inline #assistant-region {
+#app.assistant-on.mode-inline #assistant-region {
   display: flex;
-  top: 0;
+  /* 行动面板开着时从顶部把助手下推 var(--action-h)；关着时归 0。 */
+  top: var(--action-h, 0px);
   bottom: 16px;
   /* 覆盖 .assistant 基类的 height:100%，否则 top+height 会让 bottom:16px 失效。 */
   height: auto;
@@ -144,7 +154,7 @@ input {
 }
 
 /* floating：浮在小人处（左下锚 --bot-x），卡片在小人上方，宽高自适应内容，不占布局。 */
-#app.mode-floating #assistant-region {
+#app.assistant-on.mode-floating #assistant-region {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -259,45 +269,6 @@ input {
 
 .topbar .project-name:hover {
   background: rgba(0, 0, 0, 0.06);
-}
-
-.note-name {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: 200px;
-  padding: 4px 10px !important;
-  border: 1px solid rgba(0, 0, 0, 0.10) !important;
-  border-radius: 8px !important;
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.note-name:hover {
-  border-color: rgba(0, 0, 0, 0.20) !important;
-  background: rgba(0, 0, 0, 0.04) !important;
-}
-
-.note-name-input {
-  width: 8em;
-  padding: 0;
-  border: none;
-  border-bottom: 1.5px solid #2563eb;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  font-size: 15px;
-  font-weight: 500;
-  outline: none;
-  text-align: center;
-  cursor: text;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.note-name-input.rename-error {
-  border-bottom-color: #dc2626;
-  color: #dc2626;
 }
 
 .src-toggle {
@@ -559,18 +530,21 @@ input {
     background: rgba(255, 255, 255, 0.08);
   }
 
-  .note-name {
-    border-color: rgba(255, 255, 255, 0.14) !important;
+  .piece-title-input {
+    color: #ececea;
   }
 
-  .note-name:hover {
-    border-color: rgba(255, 255, 255, 0.28) !important;
-    background: rgba(255, 255, 255, 0.06) !important;
+  .piece-title-input::placeholder {
+    color: #555;
   }
 
-  .note-name-input.rename-error {
-    border-bottom-color: #f87171;
+  .piece-title-input.rename-error {
     color: #f87171;
+  }
+
+  .piece-breadcrumb:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ccc;
   }
 
   .src-toggle:hover {
@@ -781,25 +755,8 @@ input {
   color: #2563eb;
 }
 
-/* 「写作」栏顶部：成品名切换器的小标题条（属于内容区，居中放置） */
-#piece-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 4px 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-/* 在内容区内时药丸是常规流式居中（不再像顶栏那样绝对居中） */
-#piece-header .piece-pill {
-  position: static;
-  transform: none;
-}
-
-/* 成品编辑器铺满 header 以下的剩余高度 */
-#piece-editor-root {
+/* 写作栏的单一滚动容器：文档头（breadcrumb + 标题）与正文同处其中、一起滚。 */
+#piece-scroll {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
@@ -807,39 +764,152 @@ input {
   background: #fff;
 }
 
+#piece-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* 文档头：左对齐，左缘与正文（.cm-content 的 14px 内边距）对齐。 */
+#piece-doc-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px 2px;
+}
+
+.piece-breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #8a8a86;
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.piece-breadcrumb:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #555;
+}
+
+.piece-breadcrumb-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 标题 = 文件名，直接可编辑的大号文本框；宽度由 input.size 跟随内容自适应。 */
+.piece-title-input {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #1a1a18;
+  font-family: inherit;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.3;
+  outline: none;
+  cursor: text;
+}
+
+.piece-title-input::placeholder {
+  color: #c2c2c0;
+}
+
+.piece-title-input.rename-error {
+  color: #dc2626;
+}
+
+/* 下拉顶部的「新建」行：图标 + 文案，与下方列表用分隔线隔开。 */
+.switch-item.piece-new-row {
+  margin-bottom: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  color: #2563eb;
+}
+
+/* 成品编辑器：长到内容高度（不内部滚动），由 #piece-scroll 统一滚。 */
+#piece-editor-root {
+  position: relative;
+}
+
 /* 单栏显示成品：把成品编辑器覆盖到 text-col 上（inbox 藏） */
 #app.show-piece:not(.split-active) #editor-root {
   display: none !important;
 }
 
-/* 单栏显示成品：成品栏借 text-col 的网格位（col 2）铺满 */
+/* 单栏显示成品：隐藏 text-col，让成品栏独占正文网格位。 */
+#app.show-piece:not(.split-active) #text-col {
+  display: none;
+}
+
+/* 单栏显示成品：成品栏借 text-col 的网格位（col 2 / row 1）铺满。 */
 #app.show-piece:not(.split-active) #piece-col {
   display: flex;
   grid-column: 2;
+  grid-row: 1;
 }
 
-/* 清单浮层面板 */
+/* 「行动」面板：与助手共底层 —— 横向锚点同为 --bot-x / --assist。
+   inline（宽窗）贴右栏顶部、把下方助手下推；floating/closed（窄窗 / 助手关）浮在右上角。 */
 .tasks-panel {
   position: absolute;
-  top: 8px;
-  right: 12px;
   z-index: 30;
-  display: flex;
   flex-direction: column;
-  width: 260px;
-  max-height: 60%;
-  padding: 10px 12px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 12px;
   background: #fff;
+}
+
+/* inline：贴右栏顶部，宽度与助手列对齐，高度随内容（不铺满）。 */
+#app.mode-inline .tasks-panel {
+  top: 0;
+  left: var(--bot-x);
+  width: var(--assist);
+  max-height: 60%;
+  transition: left 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+#note-body.resizing .tasks-panel {
+  transition: none;
+}
+
+/* floating / closed：浮在内容区右上角，固定宽度，带投影。 */
+#app.mode-floating .tasks-panel,
+#app.mode-closed .tasks-panel {
+  top: 8px;
+  right: 12px;
+  width: 260px;
+  max-height: 60%;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 }
 
 .tasks-head {
-  margin-bottom: 6px;
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.tasks-title {
+  font-size: 13px;
   font-weight: 600;
-  color: #6b7280;
+  color: #374151;
+}
+
+.tasks-count {
+  font-size: 11px;
+  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
 }
 
 .tasks-list {
@@ -849,34 +919,147 @@ input {
 
 .tasks-row {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 3px 0;
-  font-size: 14px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 4px;
+  border-radius: 7px;
+}
+.tasks-row:hover {
+  background: rgba(0, 0, 0, 0.035);
 }
 
-.tasks-text.done {
+/* 勾选框：18px、圆角、与首行文字顶对齐。 */
+.tasks-box {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  padding: 0;
+  border: 1.5px solid rgba(0, 0, 0, 0.28);
+  border-radius: 5px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.tasks-box i {
+  font-size: 12px;
+  opacity: 0;
+}
+.tasks-row.done .tasks-box {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+.tasks-row.done .tasks-box i {
+  opacity: 1;
+}
+
+.tasks-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #111827;
+  cursor: pointer;
+  word-break: break-word;
+}
+.tasks-row.done .tasks-text {
   color: #9ca3af;
   text-decoration: line-through;
 }
 
+/* 删除按钮：悬浮整行时淡入，红色。 */
+.tasks-del {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: -1px -2px 0 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #ef4444;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+.tasks-row:hover .tasks-del {
+  opacity: 0.85;
+}
+.tasks-del:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.12);
+}
+.tasks-del i {
+  font-size: 15px;
+}
+
 .tasks-empty {
-  padding: 12px 2px;
+  padding: 12px 4px;
   color: #9ca3af;
   font-size: 13px;
 }
 
+.tasks-foot {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+/* 「+ 添加行动」按钮：点开才展开输入框。 */
+.tasks-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: #6b7280;
+  cursor: pointer;
+}
+.tasks-add-btn:hover {
+  color: #2563eb;
+}
+.tasks-add-btn i {
+  font-size: 15px;
+}
+
 .tasks-add {
-  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tasks-add[hidden] {
+  display: none;
+}
+
+/* 输入框前的占位方框，让输入态与行动行的缩进对齐。 */
+.tasks-box-ghost {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: 1.5px dashed rgba(0, 0, 0, 0.2);
+  border-radius: 5px;
 }
 
 .tasks-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 5px 8px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.14);
   border-radius: 7px;
-  font-size: 13px;
+  font-size: 14px;
   outline: none;
+}
+.tasks-input:focus {
+  border-color: #2563eb;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -887,9 +1070,15 @@ input {
   .seg-btn:disabled { color: rgba(255, 255, 255, 0.28); }
   .icon-btn:hover { background: rgba(255, 255, 255, 0.08) !important; }
   .icon-btn.on { background: rgba(96, 165, 250, 0.2) !important; color: #60a5fa; }
-  #piece-header { border-bottom-color: rgba(255, 255, 255, 0.08); }
   #app.split-active #piece-col::before { background: rgba(255, 255, 255, 0.1); }
-  #piece-editor-root { background: #1e1e1e; }
+  #piece-scroll { background: #1e1e1e; }
   .tasks-panel { background: #262626; border-color: rgba(255, 255, 255, 0.12); }
+  .tasks-title { color: #d1d5db; }
+  .tasks-text { color: #e5e7eb; }
+  .tasks-row:hover { background: rgba(255, 255, 255, 0.05); }
+  .tasks-box { border-color: rgba(255, 255, 255, 0.3); }
+  .tasks-foot { border-top-color: rgba(255, 255, 255, 0.1); }
+  .tasks-box-ghost { border-color: rgba(255, 255, 255, 0.22); }
   .tasks-input { background: #1e1e1e; color: #e5e7eb; border-color: rgba(255, 255, 255, 0.14); }
+  .tasks-del:hover { background: rgba(239, 68, 68, 0.22); }
 }

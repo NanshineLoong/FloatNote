@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseTasks, serializeTasks, toggleTask, addTask, type TaskLine } from "./tasks";
+import { parseTasks, serializeTasks, toggleTask, addTask, deleteTask, type TaskLine } from "./tasks";
 
 describe("parseTasks", () => {
   it("parses checked + unchecked todos, one per line", () => {
@@ -48,5 +48,21 @@ describe("addTask", () => {
 
   it("ignores blank input", () => {
     expect(addTask([], "   ")).toEqual([]);
+  });
+});
+
+describe("deleteTask", () => {
+  it("removes the targeted item, immutably", () => {
+    const items: TaskLine[] = [
+      { kind: "todo", checked: false, text: "a" },
+      { kind: "todo", checked: true, text: "b" },
+    ];
+    expect(deleteTask(items, 0)).toEqual([{ kind: "todo", checked: true, text: "b" }]);
+    expect(items).toHaveLength(2);
+  });
+
+  it("returns the list unchanged for an out-of-range index", () => {
+    const items: TaskLine[] = [{ kind: "todo", checked: false, text: "a" }];
+    expect(deleteTask(items, 5)).toBe(items);
   });
 });

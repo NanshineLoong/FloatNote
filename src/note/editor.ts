@@ -14,20 +14,31 @@ const highlight = HighlightStyle.define([
   { tag: tags.list, color: "#374151" },
 ]);
 
-const theme = EditorView.theme({
-  "&": { height: "100%", fontSize: "var(--editor-font, 15px)" },
-  ".cm-content": {
-    fontFamily: '-apple-system, "SF Pro Text", system-ui, sans-serif',
-    lineHeight: "1.6",
-    padding: "16px 14px",
-  },
-  "&.cm-focused": { outline: "none" },
-});
+const baseContent = {
+  fontFamily: '-apple-system, "SF Pro Text", system-ui, sans-serif',
+  lineHeight: "1.6",
+  padding: "16px 14px",
+};
+
+/**
+ * `grow` 让编辑器长到内容高度、关掉自身的内部滚动（`.cm-scroller` overflow:visible）——
+ * 这样标题块与正文能落在同一个外层滚动容器里一起滚（写作栏的 Notion 式手感）。
+ * 默认（inbox）保持 height:100% 的内部滚动。
+ */
+function buildTheme(grow: boolean) {
+  return EditorView.theme({
+    "&": { height: grow ? "auto" : "100%", fontSize: "var(--editor-font, 15px)" },
+    ".cm-content": grow ? { ...baseContent, minHeight: "240px" } : baseContent,
+    ".cm-scroller": grow ? { overflow: "visible" } : {},
+    "&.cm-focused": { outline: "none" },
+  });
+}
 
 export function createEditor(
   parent: HTMLElement,
   onChange: (doc: string) => void,
   extras: Extension[] = [],
+  opts: { grow?: boolean } = {},
 ): EditorView {
   return new EditorView({
     parent,
@@ -37,7 +48,7 @@ export function createEditor(
       markdown(),
       syntaxHighlighting(highlight),
       ...livePreview(),
-      theme,
+      buildTheme(opts.grow ?? false),
       EditorView.lineWrapping,
       ...extras,
       EditorView.updateListener.of((update) => {
