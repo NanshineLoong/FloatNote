@@ -599,18 +599,13 @@ input {
     color: #e5e5e5;
   }
 
-  .version-bar {
-    border-top-color: rgba(255, 255, 255, 0.1);
+  .piece-version-btn {
+    color: rgba(255, 255, 255, 0.45);
   }
 
-  .version-btn,
-  .version-snap {
-    color: rgba(255, 255, 255, 0.55);
-  }
-
-  .version-btn:hover,
-  .version-snap:hover {
+  .piece-version-btn:hover {
     background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
   }
 
   .version-menu {
@@ -631,30 +626,6 @@ input {
   }
 }
 
-.version-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  font-size: 12px;
-}
-.version-btn,
-.version-snap {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: transparent;
-  border: none;
-  color: rgba(0, 0, 0, 0.55);
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 6px;
-}
-.version-btn:hover,
-.version-snap:hover {
-  background: rgba(0, 0, 0, 0.06);
-}
 .version-menu {
   position: fixed;
   background: #fff;
@@ -686,6 +657,17 @@ input {
 .version-empty {
   color: rgba(0, 0, 0, 0.4);
   cursor: default;
+}
+
+/* 版本菜单顶部的「记录当前版本」行：图标 + 文案，与下方列表用分隔线隔开。 */
+.version-item.version-snap-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  color: #2563eb;
 }
 
 
@@ -780,6 +762,33 @@ input {
   align-items: flex-start;
   gap: 6px;
   padding: 12px 14px 2px;
+}
+
+/* 切换行：左 breadcrumb、右版本入口，占满文档头宽度。 */
+.piece-crumb-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+/* 写作文档头右端的版本入口：低调时钟图标，hover 才显色。 */
+.piece-version-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 5px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #b0b0ac;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.piece-version-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #555;
 }
 
 .piece-breadcrumb {

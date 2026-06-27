@@ -1,5 +1,6 @@
 import { sanitizePieceStem } from "./piece-name";
 import { createNote, listPieces, renameNote, type NoteEntry } from "./notes-state";
+import { formatVersionLabel, type VersionEntry } from "./versions";
 
 export interface PieceHeaderHost {
   /** 当前项目文件夹路径。 */
@@ -8,6 +9,12 @@ export interface PieceHeaderHost {
   current: () => NoteEntry | null;
   /** 切到某成品（switch / 新建 / 重命名后）。 */
   open: (entry: NoteEntry) => void;
+  /** 读取当前成品的版本列表。 */
+  loadVersions: () => Promise<VersionEntry[]>;
+  /** 手动记录当前成品为一个新版本。 */
+  snapshot: () => Promise<void>;
+  /** 恢复当前成品到版本 v（恢复前当前内容已自动存为新版本）。 */
+  restore: (v: number) => Promise<void>;
 }
 
 /**
@@ -31,13 +38,29 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
     void openMenu();
   };
 
+  // 版本入口：切换行最右端的低调时钟图标，点击向下展开版本菜单。
+  const versionBtn = document.createElement("button");
+  versionBtn.className = "piece-version-btn";
+  versionBtn.title = "版本";
+  versionBtn.innerHTML = `<i class="ph ph-clock-counter-clockwise"></i>`;
+  versionBtn.onclick = (e) => {
+    e.stopPropagation();
+    void openVersionMenu();
+  };
+
+  // breadcrumb 与版本入口共处一行：左切换、右版本。
+  const crumbRow = document.createElement("div");
+  crumbRow.className = "piece-crumb-row";
+  crumbRow.appendChild(crumb);
+  crumbRow.appendChild(versionBtn);
+
   // 标题即可编辑文本框：键入像写 Notion 标题，失焦/回车提交重命名。
   const title = document.createElement("input");
   title.className = "piece-title-input";
   title.spellcheck = false;
   title.setAttribute("aria-label", "成品标题（即文件名）");
 
-  mount.appendChild(crumb);
+  mount.appendChild(crumbRow);
   mount.appendChild(title);
 
   function fit() {
@@ -92,6 +115,59 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
     menuEl = null;
   }
 
+  let versionMenuEl: HTMLElement | null = null;
+  function closeVersionMenu() {
+    versionMenuEl?.remove();
+    versionMenuEl = null;
+  }
+
+  async function openVersionMenu() {
+    if (versionMenuEl) {
+      closeVersionMenu();
+      return;
+    }
+    if (!host.current()) return;
+    const entries = await host.loadVersions();
+    const menu = document.createElement("div");
+    versionMenuEl = menu;
+    menu.className = "version-menu";
+
+    // 顶部一行：手动记录当前版本（与成品切换菜单顶部的「新建」行同构）。
+    const snap = document.createElement("button");
+    snap.className = "version-item version-snap-row";
+    snap.innerHTML = `<i class="ph ph-camera"></i> 记录当前版本`;
+    snap.onclick = async (e) => {
+      e.stopPropagation();
+      closeVersionMenu();
+      await host.snapshot();
+    };
+    menu.appendChild(snap);
+
+    if (entries.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "version-empty";
+      empty.textContent = "暂无版本";
+      menu.appendChild(empty);
+    }
+    for (const entry of [...entries].reverse()) {
+      const item = document.createElement("button");
+      item.className = "version-item";
+      item.textContent = formatVersionLabel(entry);
+      item.onclick = () => {
+        closeVersionMenu();
+        if (!window.confirm("恢复到该版本？当前内容会被覆盖（已自动存为新版本）。")) return;
+        void host.restore(entry.v);
+      };
+      menu.appendChild(item);
+    }
+
+    const rect = versionBtn.getBoundingClientRect();
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.right = `${window.innerWidth - rect.right}px`;
+    document.body.appendChild(menu);
+    setTimeout(() => document.addEventListener("click", closeVersionMenu, { once: true }), 0);
+  }
+
   async function openMenu() {
     if (menuEl) {
       closeMenu();
@@ -135,5 +211,5 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
     setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
   }
 
-  return { setLabel, closeMenu };
+  return { setLabel, closeMenu, closeVersionMenu };
 }

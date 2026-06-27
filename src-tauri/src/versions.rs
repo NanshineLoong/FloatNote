@@ -31,6 +31,11 @@ pub fn snapshot(
     content: &str,
     source: &str,
 ) -> std::io::Result<u32> {
+    // 采集面与其它系统文件（`_inbox` / `_tasks` 等，`_` 前缀约定）不做版本记录；
+    // 版本只属于写作层面的成品。返回 0 表示「未快照」。
+    if note_id.starts_with('_') {
+        return Ok(0);
+    }
     let dir = versions_dir(notes_dir, note_id);
     std::fs::create_dir_all(&dir)?;
     let mut entries = list(notes_dir, note_id);
@@ -89,6 +94,14 @@ mod tests {
         assert_eq!(read_version(dir.path(), "note", 1).unwrap(), "one");
         assert_eq!(read_version(dir.path(), "note", 2).unwrap(), "two");
         assert_eq!(list(dir.path(), "note").len(), 2);
+    }
+
+    #[test]
+    fn system_files_are_not_snapshotted() {
+        let dir = tempdir();
+        let v = snapshot(dir.path(), "_inbox", "draft", "ai").unwrap();
+        assert_eq!(v, 0);
+        assert!(list(dir.path(), "_inbox").is_empty());
     }
 
     #[test]

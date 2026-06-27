@@ -39,7 +39,6 @@ import {
   setViewSeg,
 } from "./topbar";
 import { canSplit } from "./split";
-import { renderVersionBar } from "./version-bar";
 import { listVersions, restoreVersion, snapshotNote } from "./versions";
 
 const app = document.querySelector<HTMLElement>("#app")!;
@@ -59,7 +58,6 @@ app.innerHTML = `
     </div>
     <div id="assistant-region"></div>
   </div>
-  <div id="version-root"></div>
 `;
 
 const noteBody = document.querySelector<HTMLElement>("#note-body")!;
@@ -138,6 +136,32 @@ function mountPieceHeader() {
     dir: () => currentProject?.path ?? "",
     current: () => currentPiece,
     open: (entry) => void openPiece(entry),
+    loadVersions: () =>
+      currentProject && currentPiece
+        ? listVersions(currentProject.path, currentPiece.name)
+        : Promise.resolve([]),
+    snapshot: async () => {
+      if (!currentProject || !currentPiece) return;
+      await snapshotNote(
+        currentProject.path,
+        currentPiece.name,
+        pieceEditor.state.doc.toString(),
+        "manual",
+      );
+    },
+    restore: async (v) => {
+      if (!currentProject || !currentPiece) return;
+      const restored = await restoreVersion(
+        currentProject.path,
+        currentPiece.name,
+        currentPiece.path,
+        pieceEditor.state.doc.toString(),
+        v,
+      );
+      applyingRemote = true;
+      setDoc(pieceEditor, restored);
+      applyingRemote = false;
+    },
   });
 }
 
@@ -404,25 +428,6 @@ window.addEventListener("resize", () => {
   tasksPanel.syncLayout();
   if (resizeSettle) clearTimeout(resizeSettle);
   resizeSettle = window.setTimeout(() => noteBody.classList.remove("resizing"), 180);
-});
-
-renderVersionBar(document.querySelector("#version-root")!, {
-  loadVersions: () => (current ? listVersions(current.dir, current.entry.name) : Promise.resolve([])),
-  onSnapshot: async () => {
-    if (!current) return;
-    await snapshotNote(current.dir, current.entry.name, editor.state.doc.toString(), "manual");
-  },
-  onRestore: async (v) => {
-    if (!current) return;
-    const restored = await restoreVersion(
-      current.dir,
-      current.entry.name,
-      current.entry.path,
-      editor.state.doc.toString(),
-      v,
-    );
-    setDoc(editor, restored);
-  },
 });
 
 const FONT_MIN = 10;
