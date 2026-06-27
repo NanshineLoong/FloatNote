@@ -6,8 +6,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { mountAssistant } from "../assistant/assistant";
 import { agentSend, onAgentEvent, onNoteUpdated } from "./agent";
 import { buildAppendInsert } from "./append";
+import { placeholder } from "@codemirror/view";
 import { appendToEnd, createEditor, setDoc } from "./editor";
-import { createInboxView } from "./blocks/view";
+import { blockHandleGutter } from "./blocks/handle-gutter";
 import { createLayoutController } from "./layout-controller";
 import { createPieceSwitcher } from "./piece-switcher";
 import { createTasksPanel } from "./tasks-panel";
@@ -35,7 +36,6 @@ import {
   renderTitlebar,
   renderTopbar,
   setProjectLabel,
-  setSourceToggle,
   setSplitToggle,
   setSurfaceSeg,
   setTasksToggle,
@@ -51,7 +51,6 @@ app.innerHTML = `
     <div id="left-col"></div>
     <div id="text-col">
       <div id="editor-root"></div>
-      <div id="inbox-root"></div>
     </div>
     <div id="piece-col">
       <div id="piece-editor-root"></div>
@@ -78,35 +77,21 @@ let menuAnchor: HTMLElement | null = null;
 let applyingRemote = false;
 
 const editorRoot = document.querySelector<HTMLElement>("#editor-root")!;
-const editor = createEditor(editorRoot, (doc) => {
-  if (applyingRemote) return;
-  if (current) scheduleSave(current.entry.path, doc);
-});
+// Inbox 是常驻、可直接编辑的 block 面（live preview）。每个 top-level block 在左侧
+// gutter 上有一个句柄：拖拽重排 / 单击弹菜单。无独立卡片视图、无源码切换。
+const editor = createEditor(
+  editorRoot,
+  (doc) => {
+    if (applyingRemote) return;
+    if (current) scheduleSave(current.entry.path, doc);
+  },
+  [
+    blockHandleGutter(),
+    placeholder("Inbox 还是空的 —— 划线捕获或在这里写点什么"),
+  ],
+);
 requestAnimationFrame(() => initScrollbar(editorRoot));
 editor.contentDOM.addEventListener("focus", () => publishInboxActive());
-
-const inboxRoot = document.querySelector<HTMLElement>("#inbox-root")!;
-const inboxView = createInboxView(inboxRoot, {
-  // 卡片任何改动 → 重写整份 _inbox.md 到 CodeMirror（触发既有 autosave / 助手同步）。
-  setDoc: (md) => setDoc(editor, md),
-});
-
-let inboxMode: "block" | "source" = "block";
-
-function applyInboxMode() {
-  app.classList.toggle("inbox-source", inboxMode === "source");
-  setSourceToggle(inboxMode);
-  if (inboxMode === "source") {
-    editor.requestMeasure();
-  } else {
-    inboxView.render(editor.state.doc.toString());
-  }
-}
-
-function toggleSource() {
-  inboxMode = inboxMode === "block" ? "source" : "block";
-  applyInboxMode();
-}
 
 // 布局控制器：按窗口宽度分级收缩边距、决定助手嵌入/分离/分屏（init() 里用配置初始化）。
 let layoutController: ReturnType<typeof createLayoutController> | null = null;
@@ -210,7 +195,6 @@ mountAssistant(assistantRegion, {
 void onNoteUpdated(async (payload) => {
   if (!current || payload.path !== current.entry.path) return;
   applyRemoteDoc(await readNote(current.entry.path));
-  if (inboxMode === "block") inboxView.render(editor.state.doc.toString());
 });
 
 function closeMenu() {
@@ -231,7 +215,6 @@ async function openProject(project: ProjectEntry) {
   current = { dir: project.path, entry };
   setProjectLabel(project.name);
   setDoc(editor, await readNote(entry.path));
-  inboxView.render(editor.state.doc.toString());
   await loadFirstPiece();
   tasksPanel.reload();
   applySurface();
@@ -362,7 +345,6 @@ renderTopbar(document.querySelector("#topbar-root")!, {
   onToggleProjects: (anchor) => {
     void showProjectSwitcher(anchor);
   },
-  onToggleSource: toggleSource,
   onSelectSurface: (next) => {
     surface = next;
     applySurface();
@@ -459,7 +441,6 @@ async function init() {
   const assistant = await invoke<{ open: boolean }>("get_assistant_state");
   layoutController = createLayoutController(app, { open: assistant.open });
   layoutController.apply();
-  applyInboxMode();
   applySurface();
 }
 
@@ -474,11 +455,7 @@ void listen<string>("quote-captured", (event) => {
     selection: { anchor: pos + 1 },
     scrollIntoView: true,
   });
-  if (inboxMode === "block") {
-    inboxView.render(editor.state.doc.toString());
-  } else {
-    editor.focus();
-  }
+  editor.focus();
 });
 
 void listen("accessibility-needed", () => {

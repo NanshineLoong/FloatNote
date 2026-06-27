@@ -332,20 +332,62 @@ input {
   overflow: hidden;
   /* 与 body 底色一致，消除正文列与左右边距之间的接缝。 */
   background: #f8f8f7;
-  /* 默认（卡片模式）隐藏源码编辑器，显示 Inbox 卡片视图。 */
-  display: none;
 }
 
-#app.inbox-source #editor-root {
-  display: block;
-}
-
-#app.inbox-source #inbox-root {
-  display: none;
+/* 拖拽重排时的落点指示线锚定在滚动容器内。 */
+.cm-scroller {
+  position: relative;
 }
 
 .cm-scroller::-webkit-scrollbar {
   display: none;
+}
+
+/* ── Inbox block 句柄（左侧 gutter）────────────────────────────────────────
+   每个 top-level block 在左侧 gutter 上有一个 Notion 式抓手：拖拽重排、单击弹菜单。
+   默认隐形，悬停编辑器时淡出，是未来「标签 / 加入清单」等操作的统一入口。 */
+/* 去掉 CodeMirror gutter 默认的右边框和底色，让句柄列与正文无缝。 */
+.cm-gutters {
+  border-right: none;
+  background: transparent;
+}
+
+.cm-block-gutter {
+  width: 20px;
+}
+
+.cm-block-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 1.6em; /* 对齐 .cm-content 的 line-height */
+  color: #c2c2c0;
+  cursor: grab;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.cm-editor:hover .cm-block-handle {
+  opacity: 0.5;
+}
+
+.cm-block-handle:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.06);
+  color: #555;
+}
+
+.cm-block-drop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: #2563eb;
+  pointer-events: none;
+  z-index: 5;
 }
 
 .scroll-thumb {
@@ -430,149 +472,12 @@ input {
   outline: none;
 }
 
-#inbox-root {
-  height: 100%;
-  overflow: auto;
-  padding: 12px 14px;
-  background: #f8f8f7;
-}
-
-.inbox-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.inbox-empty {
-  padding: 24px 8px;
-  color: #9ca3af;
-  font-size: 13px;
-  text-align: center;
-}
-
-.inbox-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: 20px 1fr 24px;
-  align-items: start;
-  gap: 6px;
-}
-
-.inbox-row.inbox-dragging {
-  opacity: 0.85;
-  z-index: 5;
-}
-
-.inbox-handle,
-.inbox-del {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 24px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: #9ca3af;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.inbox-handle {
-  cursor: grab;
-}
-
-.inbox-row:hover .inbox-handle,
-.inbox-row:hover .inbox-del {
-  opacity: 1;
-}
-
-.inbox-handle:hover,
-.inbox-del:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: #374151;
-}
-
-.inbox-body {
-  min-width: 0;
-}
-
-.inbox-card {
-  padding: 8px 10px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
-  background: #fff;
-  font-size: 14px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.inbox-callout-card {
-  border-left: 3px solid #6b7280;
-  background: rgba(107, 114, 128, 0.06);
-}
-
-.inbox-callout-title {
-  margin-bottom: 2px;
-  color: #6b7280;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.inbox-callout-body {
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.inbox-quote-card {
-  color: #6b7280;
-  font-style: italic;
-}
-
-.inbox-todo {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 4px 2px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.inbox-todo input {
-  flex: none;
-}
-
-.inbox-todo input:checked + .inbox-todo-text {
-  color: #9ca3af;
-  text-decoration: line-through;
-}
-
-.inbox-drop-indicator {
-  height: 2px;
-  margin: 0 24px 0 26px;
-  border-radius: 1px;
-  background: #2563eb;
-}
-
 @media (prefers-color-scheme: dark) {
-  #inbox-root {
-    background: #1e1e1e;
+  .cm-block-handle {
+    color: #555;
   }
 
-  .inbox-card {
-    border-color: rgba(255, 255, 255, 0.1);
-    background: #262626;
-  }
-
-  .inbox-callout-card {
-    border-left-color: #9ca3af;
-    background: rgba(255, 255, 255, 0.04);
-  }
-
-  .inbox-handle:hover,
-  .inbox-del:hover {
+  .cm-block-handle:hover {
     background: rgba(255, 255, 255, 0.08);
     color: #d1d5db;
   }
@@ -866,8 +771,7 @@ input {
 }
 
 /* 单栏显示成品：把成品编辑器覆盖到 text-col 上（inbox 藏） */
-#app.show-piece:not(.split-active) #editor-root,
-#app.show-piece:not(.split-active) #inbox-root {
+#app.show-piece:not(.split-active) #editor-root {
   display: none !important;
 }
 

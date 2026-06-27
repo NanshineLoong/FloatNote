@@ -3,8 +3,6 @@ import socratesIconSvg from "../assets/socrates_head_icon.svg?raw";
 export interface TopbarCallbacks {
   /** 项目名按钮：开/关项目空间下拉（含切换最近项目、新建项目）。 */
   onToggleProjects: (anchor: HTMLElement) => void;
-  /** 顶栏右侧切换：Inbox 卡片视图 ⇄ 原始 Markdown 源码。 */
-  onToggleSource: () => void;
   /** 单栏分段切换：显示 Inbox 还是 成品。 */
   onSelectSurface: (surface: "inbox" | "piece") => void;
   /** 分屏开关（仅宽窗生效）。 */
@@ -48,7 +46,6 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
       <div class="topbar-right">
         <button class="icon-btn" id="tasks-toggle" title="清单"><i class="ph ph-list-checks"></i></button>
         <button class="icon-btn" id="split-toggle" title="分屏（Inbox ｜ 成品）"><i class="ph ph-columns"></i></button>
-        <button class="icon-btn" id="src-toggle" title="切换源码 / 卡片"><i class="ph ph-cards"></i></button>
       </div>
     </div>
   `;
@@ -56,7 +53,6 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
   const projectButton = root.querySelector<HTMLElement>("#project-name")!;
   projectButton.onclick = () => callbacks.onToggleProjects(projectButton);
 
-  root.querySelector<HTMLElement>("#src-toggle")!.onclick = callbacks.onToggleSource;
   root.querySelector<HTMLElement>("#split-toggle")!.onclick = callbacks.onToggleSplit;
   root.querySelector<HTMLElement>("#tasks-toggle")!.onclick = callbacks.onToggleTasks;
 
@@ -69,12 +65,6 @@ export function setProjectLabel(name: string) {
   document.querySelector<HTMLElement>("#project-label")!.textContent = name;
 }
 
-export function setSourceToggle(mode: "block" | "source") {
-  const button = document.querySelector<HTMLElement>("#src-toggle")!;
-  button.innerHTML =
-    mode === "block" ? `<i class="ph ph-code"></i>` : `<i class="ph ph-cards"></i>`;
-  button.title = mode === "block" ? "查看源码" : "查看卡片";
-}
 
 export function setSurfaceSeg(surface: "inbox" | "piece") {
   document.querySelectorAll<HTMLElement>(".seg-btn").forEach((btn) => {

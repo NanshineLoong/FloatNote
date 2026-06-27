@@ -250,6 +250,21 @@ function buildDecorations(view: EditorView): DecorationSet {
     },
   });
 
+  // Callout marker — `> [!quote] …`. The lezer markdown grammar treats `[!type]`
+  // as plain text inside the blockquote, so hide it line-by-line: the `> ` is
+  // already removed by QuoteMark above, here we drop the `[!type] ` token so only
+  // the body reads through (minimal rendering, no boxes). Skip the cursor line so
+  // editing the marker stays possible.
+  for (let pos = view.viewport.from; pos <= view.viewport.to; ) {
+    const line = doc.lineAt(pos);
+    const m = /^(>\s*)(\[!\w+\]\s?)/.exec(line.text);
+    if (m && !cursorLines.has(line.number)) {
+      const start = line.from + m[1].length;
+      entries.push({ from: start, to: start + m[2].length, deco: hide });
+    }
+    pos = line.to + 1;
+  }
+
   entries.sort((a, b) => a.from !== b.from ? a.from - b.from : a.to - b.to);
 
   const builder = new RangeSetBuilder<Decoration>();

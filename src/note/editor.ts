@@ -1,6 +1,7 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import type { Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { livePreview } from "./preview";
@@ -23,7 +24,11 @@ const theme = EditorView.theme({
   "&.cm-focused": { outline: "none" },
 });
 
-export function createEditor(parent: HTMLElement, onChange: (doc: string) => void): EditorView {
+export function createEditor(
+  parent: HTMLElement,
+  onChange: (doc: string) => void,
+  extras: Extension[] = [],
+): EditorView {
   return new EditorView({
     parent,
     extensions: [
@@ -34,6 +39,7 @@ export function createEditor(parent: HTMLElement, onChange: (doc: string) => voi
       ...livePreview(),
       theme,
       EditorView.lineWrapping,
+      ...extras,
       EditorView.updateListener.of((update) => {
         if (update.docChanged) onChange(update.state.doc.toString());
       }),
