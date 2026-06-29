@@ -1,4 +1,5 @@
 use crate::agent::{ActiveNote, AgentHandle, HostToSidecar};
+use crate::watcher::{FileWatcher, SuppressList};
 use crate::{config::Config, notes, project, versions};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -16,6 +17,10 @@ pub struct AppState {
     pub active_note: Mutex<Option<ActiveNote>>,
     /// 单调递增的 requestId 计数器。
     pub agent_seq: AtomicU64,
+    /// 文件系统监听器；None 表示尚未初始化。
+    pub watcher: Mutex<Option<FileWatcher>>,
+    /// 自身写入抑制表，与 watcher 共享。
+    pub write_suppress: SuppressList,
 }
 
 #[tauri::command]
@@ -48,30 +53,35 @@ pub fn read_note(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn write_note(path: String, content: String) -> Result<(), String> {
-    std::fs::write(&path, content).map_err(|error| error.to_string())
+pub fn write_note(state: State<AppState>, path: String, content: String) -> Result<(), String> {
+    crate::watcher::mark_self_write(&state.write_suppress, &path);
+    std::fs::write(&path, &content).map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
-pub fn create_note(dir: String) -> Result<notes::NoteEntry, String> {
+pub fn create_note(state: State<AppState>, dir: String) -> Result<notes::NoteEntry, String> {
     let dir_path = std::path::PathBuf::from(&dir);
     std::fs::create_dir_all(&dir_path).map_err(|error| error.to_string())?;
     let stem = notes::timestamp_stem(chrono::Local::now().naive_local());
     let filename = notes::unique_filename(&dir_path, &stem);
     let path = dir_path.join(&filename);
+    let path_str = path.to_string_lossy().to_string();
+    crate::watcher::mark_self_write(&state.write_suppress, &path_str);
     std::fs::write(&path, "").map_err(|error| error.to_string())?;
     Ok(notes::NoteEntry {
         name: filename.trim_end_matches(".md").to_string(),
-        path: path.to_string_lossy().to_string(),
+        path: path_str,
     })
 }
 
 #[tauri::command]
-pub fn rename_note(dir: String, old_name: String, new_stem: String) -> Result<String, String> {
+pub fn rename_note(state: State<AppState>, dir: String, old_name: String, new_stem: String) -> Result<String, String> {
     let dir_path = std::path::Path::new(&dir);
     let new_path =
         notes::rename_note(dir_path, &old_name, &new_stem).map_err(|error| error.to_string())?;
     versions::rename(dir_path, &old_name, &new_stem).map_err(|error| error.to_string())?;
+    crate::watcher::mark_self_write(&state.write_suppress, &new_path);
     Ok(new_path)
 }
 
@@ -94,6 +104,7 @@ pub fn snapshot_note(
 /// 回退：先把"当前内容"留为安全版本，再把第 v 版写回笔记文件，并返回其内容。
 #[tauri::command]
 pub fn restore_version(
+    state: State<AppState>,
     dir: String,
     note_id: String,
     path: String,
@@ -105,6 +116,7 @@ pub fn restore_version(
         .map_err(|error| error.to_string())?;
     let restored =
         versions::read_version(dir_path, &note_id, v).map_err(|error| error.to_string())?;
+    crate::watcher::mark_self_write(&state.write_suppress, &path);
     std::fs::write(&path, &restored).map_err(|error| error.to_string())?;
     Ok(restored)
 }
@@ -231,6 +243,24 @@ pub fn create_project(root: String, name: String) -> Result<project::ProjectEntr
 #[tauri::command]
 pub fn list_pieces(project_dir: String) -> Result<Vec<notes::NoteEntry>, String> {
     project::list_pieces(std::path::Path::new(&project_dir)).map_err(|error| error.to_string())
+}
+
+/// 切换文件系统监听到指定目录；前端在打开/切换项目时调用。
+#[tauri::command]
+pub fn watch_dir(state: State<AppState>, dir: String) -> Result<(), String> {
+    let mut guard = state.watcher.lock().unwrap();
+    match guard.as_mut() {
+        Some(watcher) => watcher.watch_dir(std::path::Path::new(&dir)),
+        None => Ok(()), // watcher 不可用时静默跳过
+    }
+}
+
+/// 停止文件系统监听。
+#[tauri::command]
+pub fn unwatch_dir(state: State<AppState>) {
+    if let Some(watcher) = state.watcher.lock().unwrap().as_mut() {
+        watcher.unwatch();
+    }
 }
 
 pub fn config_path(app: &tauri::AppHandle) -> PathBuf {

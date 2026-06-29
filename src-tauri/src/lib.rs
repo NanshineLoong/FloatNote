@@ -8,6 +8,7 @@ mod quote;
 mod shortcuts;
 mod tray;
 mod versions;
+mod watcher;
 mod windows;
 
 use commands::AppState;
@@ -25,6 +26,14 @@ pub fn run() {
         .setup(|app| {
             let path = commands::config_path(app.handle());
             let config = config::load(&path);
+            let write_suppress = watcher::new_suppress_list();
+            let file_watcher = match watcher::FileWatcher::new(app.handle().clone(), write_suppress.clone()) {
+                Ok(w) => Some(w),
+                Err(e) => {
+                    eprintln!("文件监听器不可用，外部修改将不会实时刷新: {e}");
+                    None
+                }
+            };
             app.manage(AppState {
                 config: Mutex::new(config),
                 config_path: path,
@@ -32,6 +41,8 @@ pub fn run() {
                 agent_ready: Mutex::new(false),
                 active_note: Mutex::new(None),
                 agent_seq: std::sync::atomic::AtomicU64::new(0),
+                watcher: Mutex::new(file_watcher),
+                write_suppress,
             });
 
             // 拉起 agent-sidecar；失败仅打印，不阻断 app 启动。
@@ -87,6 +98,8 @@ pub fn run() {
             commands::list_versions,
             commands::snapshot_note,
             commands::restore_version,
+            commands::watch_dir,
+            commands::unwatch_dir,
             commands::agent_configure,
             commands::agent_send,
             commands::agent_cancel,

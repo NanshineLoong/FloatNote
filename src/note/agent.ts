@@ -57,3 +57,8 @@ export function onAgentEvent(cb: (event: AgentEvent) => void): Promise<UnlistenF
 export function onNoteUpdated(cb: (payload: NoteUpdated) => void): Promise<UnlistenFn> {
   return listen<NoteUpdated>("note://updated", (event) => cb(event.payload));
 }
+
+/** 订阅外部文件修改事件（Rust watcher 检测到的 .md 变更）；返回取消订阅函数。 */
+export function onFileChanged(cb: (path: string) => void): Promise<UnlistenFn> {
+  return listen<string>("file://changed", (event) => cb(event.payload));
+}

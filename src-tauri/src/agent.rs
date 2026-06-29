@@ -186,6 +186,7 @@ fn handle_apply_write(app: &AppHandle, call_id: String, _note_id: String, conten
 
     let reply = match active {
         Some(note) => {
+            crate::watcher::mark_self_write(&state.write_suppress, &note.path);
             match apply_write(
                 Path::new(&note.dir),
                 &note.note_id,

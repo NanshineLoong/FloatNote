@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { mountAssistant } from "../assistant/assistant";
-import { agentSend, onAgentEvent, onNoteUpdated } from "./agent";
+import { agentSend, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
 import { buildAppendInsert } from "./append";
 import { placeholder } from "@codemirror/view";
 import { appendToEnd, createEditor, requestEditorLayout, setDoc } from "./editor";
@@ -17,6 +17,7 @@ import {
   createProject,
   getConfig,
   inboxEntry,
+  isDirty,
   listPieces,
   listProjects,
   readNote,
@@ -239,6 +240,30 @@ void onNoteUpdated(async (payload) => {
   applyRemoteDoc(await readNote(current.entry.path));
 });
 
+// 外部文件修改：Rust watcher 检测到 .md 文件变化后广播，热刷新对应编辑器。
+// 如果编辑器有未保存的本地修改（用户正在输入），跳过刷新以避免丢失输入。
+void onFileChanged(async (changedPath) => {
+  if (isDirty(changedPath)) return;
+
+  // Inbox 被外部修改。
+  if (current && changedPath === current.entry.path) {
+    applyRemoteDoc(await readNote(current.entry.path));
+    return;
+  }
+  // 成品（piece）被外部修改。
+  if (currentPiece && changedPath === currentPiece.path) {
+    applyingRemote = true;
+    setDoc(pieceEditor, await readNote(currentPiece.path));
+    applyingRemote = false;
+    return;
+  }
+  // 行动（_tasks.md）被外部修改。
+  if (currentProject && changedPath === tasksPath(currentProject.path)) {
+    tasksPanel.reload();
+    return;
+  }
+});
+
 function closeMenu() {
   menuEl?.remove();
   menuEl = null;
@@ -262,6 +287,8 @@ async function openProject(project: ProjectEntry) {
   applyView();
   // 发布活动笔记（= 当前项目的 _inbox.md），供独立助手窗 / apply_write 定位。
   void invoke("set_active_note", { dir: project.path, noteId: entry.name, path: entry.path });
+  // 切换文件监听到新项目目录。
+  void invoke("watch_dir", { dir: project.path });
 }
 
 /** 启动时打开项目：优先 MRU 列表里仍存在的第一个；否则回退到旧的工作目录

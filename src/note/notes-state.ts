@@ -101,12 +101,26 @@ export async function renameNote(dir: string, oldName: string, newStem: string):
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+/** 有未保存修改的路径集合，用于外部文件变更时判断是否可以安全覆盖。 */
+const dirtyPaths = new Set<string>();
 
 export function scheduleSave(path: string, content: string) {
+  dirtyPaths.add(path);
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    invoke("write_note", { path, content }).catch((error) => console.error("save failed", error));
+    saveTimer = null;
+    invoke("write_note", { path, content })
+      .then(() => dirtyPaths.delete(path))
+      .catch((error) => {
+        console.error("save failed", error);
+        dirtyPaths.delete(path);
+      });
   }, 500);
+}
+
+/** 某路径是否有未保存的本地修改（用于外部文件变更时决定是否覆盖编辑器）。 */
+export function isDirty(path: string): boolean {
+  return dirtyPaths.has(path);
 }
 
 export async function resolveStartDir(config: Config): Promise<string> {
