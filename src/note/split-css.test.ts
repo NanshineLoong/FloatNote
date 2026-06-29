@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+const assistantCss = readFileSync(resolve(process.cwd(), "src/assistant/styles.css"), "utf8");
+const assistantBubbleColor = assistantCss.match(/\.chat-assistant\s*{[^}]*background:\s*(#[0-9a-fA-F]{6});/s)?.[1];
 
 describe("split view CSS placement", () => {
   it("pins both editor columns to the first grid row in split mode", () => {
@@ -32,6 +34,30 @@ describe("split view CSS placement", () => {
     );
     expect(css).toMatch(
       /#piece-editor-root\s*{[^}]*position:\s*relative;[^}]*flex:\s*1 1 auto;[^}]*min-height:\s*0;/s,
+    );
+  });
+
+  it("gives the floating assistant a soft background without bubble borders", () => {
+    expect(css).toMatch(
+      /#app\.mode-floating\s+#assistant-region\s+\.assistant-scroll\s*{[^}]*background:\s*rgba\([^;]+;[^}]*backdrop-filter:\s*blur\([^}]+;[^}]*box-shadow:/s,
+    );
+    expect(css).not.toMatch(
+      /#app\.mode-floating\s+#assistant-region\s+\.assistant-scroll::before\s*{/,
+    );
+    expect(assistantCss).toMatch(
+      /#app\.mode-floating\s+\.chat-assistant\s*{[^}]*background:\s*#[0-9a-fA-F]{6};[^}]*border:\s*none;/s,
+    );
+    expect(assistantCss.match(/#app\.mode-floating\s+\.chat-assistant\s*{[^}]*background:\s*(#[0-9a-fA-F]{6});/s)?.[1]).toBe(
+      assistantBubbleColor,
+    );
+    expect(css).toMatch(
+      /@media\s*\(prefers-color-scheme:\s*dark\)\s*{[\s\S]*#app\.mode-floating\s+#assistant-region\s+\.assistant-scroll\s*{[^}]*background:\s*rgba\([^;]+;[^}]*box-shadow:/s,
+    );
+  });
+
+  it("does not rerun message entrance animation while assistant text streams", () => {
+    expect(assistantCss).toMatch(
+      /\.chat-streaming\s*{[^}]*animation:\s*none;/s,
     );
   });
 });

@@ -184,14 +184,23 @@ input {
 }
 
 /* floating · 收起：只露出小人，聊天历史藏起来（展开时从小人上方浮出）。
-   与 inline 一致：容器透明，只有气泡自带底——浮在正文/桌面上，无卡片外框。 */
+   展开时用无边框磨砂底承托消息，避免顶部边界硬切正文。 */
 #app.mode-floating #assistant-region .assistant-scroll {
+  position: relative;
   flex: 0 0 auto;
   width: 300px;
   max-height: 50vh;
   margin-bottom: 8px;
-  padding: 12px;
-  background: transparent;
+  padding: 16px 12px 12px;
+  border-radius: 12px;
+  background: rgba(250, 250, 248, 0.88);
+  -webkit-backdrop-filter: blur(12px) saturate(1.08);
+  backdrop-filter: blur(12px) saturate(1.08);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.12),
+    inset 0 18px 24px rgba(255, 255, 255, 0.30),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.16);
+  overflow-x: hidden;
   opacity: 0;
   transform: translateY(8px) scale(0.98);
   transform-origin: bottom left;
@@ -563,6 +572,14 @@ input {
 
   .assistant-btn:hover {
     background: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  #app.mode-floating #assistant-region .assistant-scroll {
+    background: rgba(34, 34, 34, 0.86);
+    box-shadow:
+      0 16px 38px rgba(0, 0, 0, 0.34),
+      inset 0 18px 24px rgba(255, 255, 255, 0.035),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.035);
   }
 
   #editor-root {
