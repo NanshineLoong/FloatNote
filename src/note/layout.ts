@@ -58,7 +58,7 @@ export interface Layout {
 
 export const DEFAULT_PREFS: Omit<LayoutPrefs, "open"> = {
   textPref: 720,
-  pad: 28,
+  pad: 14,
   assistPref: 340,
   assistMin: 280,
   gap: 24,

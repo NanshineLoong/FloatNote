@@ -29,9 +29,9 @@ input {
   flex-direction: column;
   height: 100%;
   /* 由 layout-controller 按窗口宽度写入：左边距 / 正文宽 / 右边距 / 助手宽 / 小人横坐标。 */
-  --left: 28px;
+  --left: 14px;
   --text: 720px;
-  --right: 28px;
+  --right: 14px;
   --assist: 0px;
   /* 分屏几何默认值（gap + 成品栏宽）。必须定义在 #app 上：layout-controller 也写在
      #app 上，若改放到 #note-body 会被其本地声明遮蔽，导致 var(--piece) 恒为 0、
@@ -336,28 +336,34 @@ input {
   position: relative;
 }
 
+#editor-root .cm-scroller {
+  margin-left: -14px;
+  width: calc(100% + 14px);
+}
+
 .cm-scroller::-webkit-scrollbar {
   display: none;
 }
 
 /* ── Inbox block 句柄（左侧 gutter）────────────────────────────────────────
    每个 top-level block 在左侧 gutter 上有一个 Notion 式抓手：拖拽重排、单击弹菜单。
-   默认隐形，悬停编辑器时淡出，是未来「标签 / 加入清单」等操作的统一入口。 */
+   句柄列落在正文左侧 14px 边距里，不占用正文宽度。 */
 /* 去掉 CodeMirror gutter 默认的右边框和底色，让句柄列与正文无缝。 */
-.cm-gutters {
+#editor-root .cm-gutters {
   border-right: none;
+  border-left: none;
   background: transparent;
 }
 
 .cm-block-gutter {
-  width: 20px;
+  width: 14px;
 }
 
 .cm-block-handle {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
+  width: 14px;
   height: 1.6em; /* 对齐 .cm-content 的 line-height */
   color: #c2c2c0;
   cursor: grab;
@@ -366,8 +372,8 @@ input {
   transition: opacity 120ms ease;
 }
 
-.cm-editor:hover .cm-block-handle {
-  opacity: 0.5;
+.cm-block-gutter:hover .cm-block-handle {
+  opacity: 1;
 }
 
 .cm-block-handle:hover {
@@ -779,13 +785,13 @@ input {
   display: none;
 }
 
-/* 文档头：左对齐，左缘与正文（.cm-content 的 14px 内边距）对齐。 */
+/* 文档头：左对齐，左缘与正文对齐。 */
 #piece-doc-header {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  padding: 12px 14px 2px;
+  padding: 12px 0 2px;
 }
 
 /* 切换行：左 breadcrumb、右版本入口，占满文档头宽度。 */

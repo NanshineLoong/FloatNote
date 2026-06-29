@@ -17,7 +17,7 @@ const highlight = HighlightStyle.define([
 const baseContent = {
   fontFamily: '-apple-system, "SF Pro Text", system-ui, sans-serif',
   lineHeight: "1.6",
-  padding: "16px 14px",
+  padding: "16px 0",
 };
 
 /**

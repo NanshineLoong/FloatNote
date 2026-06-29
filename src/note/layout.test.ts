@@ -4,7 +4,7 @@ import { computeLayout, DEFAULT_PREFS, type LayoutPrefs } from "./layout";
 // 这些用例固定 textPref=640 来演算几何（与产品默认 DEFAULT_PREFS.textPref 解耦，
 // 后者可随手感调整而不影响算法断言）。
 function prefs(over: Partial<LayoutPrefs> = {}): LayoutPrefs {
-  return { ...DEFAULT_PREFS, textPref: 640, open: true, ...over };
+  return { ...DEFAULT_PREFS, textPref: 640, pad: 28, open: true, ...over };
 }
 
 // 演算参数：textPref=640, pad=28, assistPref=340, assistMin=280, gap=24
@@ -14,6 +14,14 @@ function prefs(over: Partial<LayoutPrefs> = {}): LayoutPrefs {
 //   pressRightMin（=floatMin）= 640 + 304 + 28 = 972
 //   textFitMin = 640 + 2*28 = 696
 describe("computeLayout", () => {
+  it("uses a compact 14px minimum text margin by default", () => {
+    expect(DEFAULT_PREFS.pad).toBe(14);
+    const l = computeLayout(380, { ...DEFAULT_PREFS, open: false });
+    expect(l.textWidth).toBe(352);
+    expect(l.leftMargin).toBe(14);
+    expect(l.rightMargin).toBe(14);
+  });
+
   describe("closed（助手关闭）", () => {
     it("宽窗：正文居中，无助手", () => {
       const l = computeLayout(1000, prefs({ open: false }));

@@ -51,7 +51,7 @@
 .chat-assistant {
   align-self: flex-start;
   background: #f3f1ec;
-  border: 0.5px solid rgba(0, 0, 0, 0.10);
+  border: none;
   border-radius: 14px 14px 14px 4px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
@@ -234,7 +234,7 @@
 
   .chat-assistant {
     background: #2c2c2e;
-    border-color: rgba(255, 255, 255, 0.10);
+    border: none;
     box-shadow: none;
   }
 
