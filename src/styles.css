@@ -15,7 +15,7 @@ body {
 }
 
 body {
-  background: #f8f8f7;
+  background: #ffffff;
   color: #202124;
 }
 
@@ -51,6 +51,7 @@ input {
   align-items: center;
   min-height: 38px;
   padding: 0 10px 0 78px;
+  background: #f8f8f7;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -235,6 +236,7 @@ input {
   align-items: center;
   min-height: 40px;
   padding: 4px 12px;
+  background: #f8f8f7;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   font-size: 13px;
   -webkit-user-select: none;
@@ -317,7 +319,7 @@ input {
   height: 100%;
   overflow: hidden;
   /* 与 body 底色一致，消除正文列与左右边距之间的接缝。 */
-  background: #f8f8f7;
+  background: #ffffff;
 }
 
 /* 拖拽重排时的落点指示线锚定在滚动容器内。 */
@@ -521,7 +523,12 @@ input {
     color: #e5e5e5;
   }
 
+  .titlebar {
+    background: #1e1e1e;
+  }
+
   .topbar {
+    background: #1e1e1e;
     border-color: rgba(255, 255, 255, 0.1);
   }
 
@@ -748,7 +755,7 @@ input {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  background: #fff;
+  background: #ffffff;
 }
 
 #piece-scroll::-webkit-scrollbar {
