@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   const handle = async (msg: HostToSidecar): Promise<void> => {
     switch (msg.type) {
       case "configure":
-        await runner.configure({ provider: msg.provider, model: msg.model, apiKey: msg.apiKey });
+        await runner.configure({ provider: msg.provider, model: msg.model, apiKey: msg.apiKey, baseUrl: msg.baseUrl });
         break;
       case "prompt":
         try {

@@ -1,0 +1,433 @@
+/* ── FloatNote Settings Page ──────────────────────────────────────────────── */
+
+/* ── Page layout ── */
+
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 20px 24px 16px;
+  font-size: 13px;
+  font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  color: #202124;
+  overflow-y: auto;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+/* ── Sections ── */
+
+.settings-section {
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.settings-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.settings-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #202124;
+  letter-spacing: 0.01em;
+}
+
+.settings-section-header i {
+  font-size: 16px;
+  color: #6b7280;
+}
+
+/* ── Rows ── */
+
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.settings-row:last-child {
+  margin-bottom: 0;
+}
+
+.settings-row-inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.settings-control-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-control-row input[type="text"],
+.settings-control-row input[type="password"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-value {
+  min-width: 24px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #6b7280;
+}
+
+/* ── Text & password inputs ── */
+
+.settings-page input[type="text"],
+.settings-page input[type="password"],
+.settings-page input:not([type]) {
+  padding: 6px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  background: #fff;
+  color: #202124;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.settings-page input[type="text"]:focus,
+.settings-page input[type="password"]:focus {
+  border-color: #2563eb;
+}
+
+.settings-page input[readonly] {
+  background: #f8f8f7;
+  cursor: default;
+}
+
+/* ── Range slider ── */
+
+.settings-page input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 2px;
+  outline: none;
+}
+
+.settings-page input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2563eb;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+/* ── Select dropdown ── */
+
+.settings-select {
+  padding: 6px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  background: #fff;
+  color: #202124;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+
+.settings-select:focus {
+  border-color: #2563eb;
+}
+
+/* ── Toggle switch ── */
+
+.settings-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.settings-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.settings-toggle-track {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+  position: relative;
+  transition: background 180ms ease;
+}
+
+.settings-toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition: transform 180ms ease;
+}
+
+.settings-toggle input:checked + .settings-toggle-track {
+  background: #2563eb;
+}
+
+.settings-toggle input:checked + .settings-toggle-track::after {
+  transform: translateX(16px);
+}
+
+/* ── Secondary button (folder picker) ── */
+
+.settings-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  background: #fff;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.settings-btn-secondary:hover {
+  background: #f8f8f7;
+  border-color: rgba(0, 0, 0, 0.25);
+}
+
+/* ── Primary button (save) ── */
+
+.settings-btn-primary {
+  padding: 7px 20px;
+  border: none;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.settings-btn-primary:hover {
+  background: #1d4ed8;
+}
+
+.settings-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Key recorder ── */
+
+.key-recorder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 4px 12px;
+  border: 1.5px dashed rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  background: #fafafa;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+  user-select: none;
+  outline: none;
+}
+
+.key-recorder:hover {
+  border-color: rgba(0, 0, 0, 0.35);
+}
+
+.key-recorder.recording {
+  border-style: solid;
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.06);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  cursor: default;
+}
+
+.key-recorder.has-value {
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.15);
+  background: #fff;
+}
+
+.key-recorder-label {
+  font-size: 13px;
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  color: #374151;
+  letter-spacing: 0.02em;
+}
+
+.key-recorder.recording .key-recorder-label {
+  color: #2563eb;
+}
+
+.key-recorder-hint {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* ── Footer ── */
+
+.settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 12px;
+  margin-top: auto;
+}
+
+.settings-status {
+  font-size: 12px;
+  min-height: 16px;
+  transition: opacity 200ms ease;
+}
+
+.settings-status.error {
+  color: #b91c1c;
+}
+
+.settings-status.success {
+  color: #059669;
+}
+
+/* ── Dark mode ── */
+
+@media (prefers-color-scheme: dark) {
+  .settings-page {
+    color: #e5e5e5;
+    background: #1e1e1e;
+  }
+
+  .settings-section {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .settings-section-header {
+    color: #e5e5e5;
+  }
+
+  .settings-section-header i {
+    color: #9ca3af;
+  }
+
+  .settings-label {
+    color: #9ca3af;
+  }
+
+  .settings-page input[type="text"],
+  .settings-page input[type="password"],
+  .settings-page input:not([type]) {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: #2a2a2a;
+    color: #e5e5e5;
+  }
+
+  .settings-page input[readonly] {
+    background: #333;
+  }
+
+  .settings-page input[type="range"] {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .settings-select {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: #2a2a2a;
+    color: #e5e5e5;
+  }
+
+  .settings-toggle-track {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .settings-btn-secondary {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: #2a2a2a;
+    color: #9ca3af;
+  }
+
+  .settings-btn-secondary:hover {
+    background: #333;
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .settings-value {
+    color: #9ca3af;
+  }
+
+  .key-recorder {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: #2a2a2a;
+  }
+
+  .key-recorder:hover {
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+
+  .key-recorder.recording {
+    border-color: #60a5fa;
+    background: rgba(96, 165, 250, 0.1);
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
+  }
+
+  .key-recorder.has-value {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: #2a2a2a;
+  }
+
+  .key-recorder-label {
+    color: #d1d5db;
+  }
+
+  .key-recorder.recording .key-recorder-label {
+    color: #60a5fa;
+  }
+
+  .key-recorder-hint {
+    color: #6b7280;
+  }
+
+  .settings-status.error {
+    color: #f87171;
+  }
+
+  .settings-status.success {
+    color: #34d399;
+  }
+}

@@ -29,7 +29,8 @@
         "label": "settings",
         "title": "FloatNote 设置",
         "width": 420,
-        "height": 340,
+        "height": 500,
+        "minHeight": 400,
         "visible": false,
         "url": "settings.html"
       }

@@ -13,6 +13,7 @@ export type HostToSidecar =
       provider: string;
       model: string;
       apiKey?: string;
+      baseUrl?: string;
     }
   | {
       type: "prompt";

@@ -121,13 +121,14 @@ pub fn restore_version(
     Ok(restored)
 }
 
-/// 配置 sidecar 的 provider / model / key（经 stdin 发 Configure）。
+/// 配置 sidecar 的 provider / model / key / base_url（经 stdin 发 Configure）。
 #[tauri::command]
 pub fn agent_configure(
     state: State<AppState>,
     provider: String,
     model: String,
     api_key: Option<String>,
+    base_url: Option<String>,
 ) -> Result<(), String> {
     let mut guard = state.agent.lock().unwrap();
     let agent = guard.as_mut().ok_or("助手未连接")?;
@@ -136,6 +137,7 @@ pub fn agent_configure(
             provider,
             model,
             api_key,
+            base_url,
         })
         .map_err(|error| error.to_string())
 }

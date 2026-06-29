@@ -20,6 +20,8 @@ pub enum HostToSidecar {
         model: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         api_key: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        base_url: Option<String>,
     },
     Prompt {
         request_id: String,
@@ -162,6 +164,27 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
         SidecarToHost::Ready => {
             if let Some(state) = app.try_state::<AppState>() {
                 *state.agent_ready.lock().unwrap() = true;
+                // 从持久化配置自动恢复 AI 助手。
+                let config = state.config.lock().unwrap().clone();
+                if !config.ai_provider.is_empty() && !config.ai_model.is_empty() {
+                    let mut guard = state.agent.lock().unwrap();
+                    if let Some(agent) = guard.as_mut() {
+                        let _ = agent.send(&HostToSidecar::Configure {
+                            provider: config.ai_provider,
+                            model: config.ai_model,
+                            api_key: if config.ai_api_key.is_empty() {
+                                None
+                            } else {
+                                Some(config.ai_api_key)
+                            },
+                            base_url: if config.ai_base_url.is_empty() {
+                                None
+                            } else {
+                                Some(config.ai_base_url)
+                            },
+                        });
+                    }
+                }
             }
             let _ = app.emit("agent://event", &SidecarToHost::Ready);
         }
@@ -296,9 +319,11 @@ mod tests {
             provider: "anthropic".into(),
             model: "claude".into(),
             api_key: None,
+            base_url: None,
         };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(!json.contains("apiKey"), "absent api key should be skipped: {json}");
+        assert!(!json.contains("baseUrl"), "absent base url should be skipped: {json}");
     }
 
     #[test]

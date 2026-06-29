@@ -17,6 +17,7 @@ export interface AgentConfig {
   provider: string;
   model: string;
   apiKey?: string;
+  baseUrl?: string;
 }
 
 /** Minimal surface of a Pi AgentSession the runner depends on (injectable for tests). */
