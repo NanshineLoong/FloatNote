@@ -5,9 +5,9 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { mountAssistant, type AssistantHandle } from "../assistant/assistant";
 import { agentSend, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
-import { buildAppendInsert } from "./append";
+import { buildCaretInsert } from "./append";
 import { placeholder } from "@codemirror/view";
-import { appendToEnd, createEditor, requestEditorLayout, setDoc } from "./editor";
+import { createEditor, insertAtCaret, requestEditorLayout, setDoc } from "./editor";
 import { blockHandleGutter } from "./blocks/handle-gutter";
 import { createLayoutController } from "./layout-controller";
 import { createPieceHeader } from "./piece-switcher";
@@ -505,14 +505,11 @@ async function init() {
 void init();
 
 void listen<string>("quote-captured", (event) => {
-  const insert = buildAppendInsert(editor.state.doc.toString(), event.payload);
-  appendToEnd(editor, insert);
-  const pos = editor.state.doc.length;
-  editor.dispatch({
-    changes: { from: pos, insert: "\n" },
-    selection: { anchor: pos + 1 },
-    scrollIntoView: true,
-  });
+  const from = editor.state.selection.main.from;
+  const before = editor.state.doc.sliceString(0, from);
+  const after = editor.state.doc.sliceString(from);
+  const insert = buildCaretInsert(before, after, event.payload);
+  insertAtCaret(editor, insert);
   editor.focus();
 });
 

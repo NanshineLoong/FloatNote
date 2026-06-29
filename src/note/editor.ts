@@ -71,11 +71,11 @@ export function requestEditorLayout(
   schedule(() => view.requestMeasure());
 }
 
-export function appendToEnd(view: EditorView, text: string) {
-  const end = view.state.doc.length;
+export function insertAtCaret(view: EditorView, text: string) {
+  const from = view.state.selection.main.from;
   view.dispatch({
-    changes: { from: end, insert: text },
-    selection: { anchor: end + text.length },
+    changes: { from, insert: text },
+    selection: { anchor: from + text.length },
     scrollIntoView: true,
   });
 }

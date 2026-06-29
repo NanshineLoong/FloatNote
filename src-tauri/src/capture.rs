@@ -1,4 +1,33 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter};
+
+/// Re-entrancy guard. The global-shortcut callback can fire more than once per
+/// physical press on macOS; two concurrent `run_capture` routines would race on
+/// the single shared system clipboard (one clearing/restoring it while the other
+/// reads → empty selection). Only one capture may run at a time.
+static CAPTURING: AtomicBool = AtomicBool::new(false);
+
+struct CaptureGuard {
+    _priv: (),
+}
+
+impl CaptureGuard {
+    /// Returns `Some` if this caller acquired the lock, `None` if a capture is
+    /// already in flight.
+    fn try_enter() -> Option<Self> {
+        if CAPTURING.swap(true, Ordering::SeqCst) {
+            None
+        } else {
+            Some(Self { _priv: () })
+        }
+    }
+}
+
+impl Drop for CaptureGuard {
+    fn drop(&mut self) {
+        CAPTURING.store(false, Ordering::SeqCst);
+    }
+}
 
 #[cfg(target_os = "macos")]
 fn log_line(msg: &str) {
@@ -19,11 +48,15 @@ fn log_line(msg: &str) {
 }
 
 pub fn run_capture(app: &AppHandle) {
+    let Some(_guard) = CaptureGuard::try_enter() else {
+        log_line("already capturing, skipping");
+        return;
+    };
+
     // macOS: simulating Cmd+C requires Accessibility permission. Without it,
     // the synthetic events are silently dropped and nothing is captured.
     #[cfg(target_os = "macos")]
     {
-        use std::sync::atomic::{AtomicBool, Ordering};
         static PROMPTED: AtomicBool = AtomicBool::new(false);
 
         if !macos_accessibility_client::accessibility::application_is_trusted() {
