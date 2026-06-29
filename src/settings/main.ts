@@ -129,10 +129,10 @@ async function render() {
             value="${escapeHtml(config.ai_api_key)}" />
         </div>
 
-        <div class="settings-row" id="base-url-row" ${config.ai_provider !== "custom" ? "hidden" : ""}>
+        <div class="settings-row" id="base-url-row" ${!supportsBaseUrl(config.ai_provider) ? "hidden" : ""}>
           <label class="settings-label">自定义地址</label>
           <input id="ai-base-url" type="text"
-            placeholder="https://api.example.com/v1"
+            placeholder="${baseUrlPlaceholder(config.ai_provider)}"
             value="${escapeHtml(config.ai_base_url)}" />
         </div>
       </section>
@@ -178,10 +178,12 @@ async function render() {
   const providerSelect = document.querySelector<HTMLSelectElement>("#ai-provider")!;
   const baseUrlRow = document.querySelector<HTMLElement>("#base-url-row")!;
   const modelInput = document.querySelector<HTMLInputElement>("#ai-model")!;
+  const baseUrlInput = document.querySelector<HTMLInputElement>("#ai-base-url")!;
   providerSelect.onchange = () => {
     const v = providerSelect.value;
-    baseUrlRow.hidden = v !== "custom";
+    baseUrlRow.hidden = !supportsBaseUrl(v);
     modelInput.placeholder = modelPlaceholder(v);
+    baseUrlInput.placeholder = baseUrlPlaceholder(v);
   };
 
   // ── 保存 ──
@@ -216,6 +218,13 @@ async function render() {
       ai_base_url: document.querySelector<HTMLInputElement>("#ai-base-url")!.value.trim(),
     };
 
+    const aiConfigError = validateAiConfig(newConfig);
+    if (aiConfigError) {
+      statusEl.textContent = aiConfigError;
+      statusEl.classList.add("error");
+      return;
+    }
+
     // 3. 持久化
     await invoke("set_config", { newConfig });
 
@@ -233,6 +242,8 @@ async function render() {
     }
 
     // 6. 立即配置 sidecar（如已配置 AI）
+    let sidecarOk = true;
+    let sidecarError = "";
     if (newConfig.ai_provider && newConfig.ai_model) {
       try {
         await invoke("agent_configure", {
@@ -241,13 +252,19 @@ async function render() {
           apiKey: newConfig.ai_api_key || null,
           baseUrl: newConfig.ai_base_url || null,
         });
-      } catch {
-        // sidecar 未启动时忽略
+      } catch (error) {
+        sidecarOk = false;
+        sidecarError = error instanceof Error ? error.message : String(error);
       }
     }
 
-    statusEl.textContent = "已保存";
-    statusEl.classList.add("success");
+    if (sidecarOk) {
+      statusEl.textContent = "已保存";
+      statusEl.classList.add("success");
+    } else {
+      statusEl.textContent = `已保存，但助手配置未生效：${sidecarError || "助手未连接，请重启应用后再试"}`;
+      statusEl.classList.add("error");
+    }
 
     // 更新 config 引用以反映当前状态
     Object.assign(config, newConfig);
@@ -262,6 +279,27 @@ function modelPlaceholder(provider: string): string {
     case "custom": return "模型名称";
     default: return "选择服务商后填写";
   }
+}
+
+function supportsBaseUrl(provider: string): boolean {
+  return provider === "openai" || provider === "custom";
+}
+
+function baseUrlPlaceholder(provider: string): string {
+  if (provider === "openai") {
+    return "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1";
+  }
+  return "https://api.example.com/v1";
+}
+
+function validateAiConfig(config: Config): string | null {
+  if (
+    config.ai_provider === "openai" &&
+    /\/apps\/anthropic\/?$/.test(config.ai_base_url.trim())
+  ) {
+    return "OpenAI 兼容地址不能使用 /apps/anthropic；百炼请填写 /compatible-mode/v1 地址。";
+  }
+  return null;
 }
 
 void render();

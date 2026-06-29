@@ -3,7 +3,7 @@ import "../assistant/styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { mountAssistant } from "../assistant/assistant";
+import { mountAssistant, type AssistantHandle } from "../assistant/assistant";
 import { agentSend, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
 import { buildAppendInsert } from "./append";
 import { placeholder } from "@codemirror/view";
@@ -221,9 +221,9 @@ function applyRemoteDoc(content: string) {
   applyingRemote = false;
 }
 
-mountAssistant(assistantRegion, {
+const assistantHandle: AssistantHandle = mountAssistant(assistantRegion, {
   send: (text) => {
-    if (!current) return;
+    if (!current) throw new Error("当前没有打开的笔记，请稍后再试");
     return agentSend({
       dir: current.dir,
       noteId: current.entry.name,
@@ -494,6 +494,12 @@ async function init() {
   layoutController = createLayoutController(app, { assistantOpen: assistant.open });
   layoutController.apply();
   applyView();
+
+  // 检查 sidecar 启动状态：若有错误，在助手面板显示提示。
+  const agentStatus = await invoke<{ ready: boolean; error: string | null }>("get_agent_status");
+  if (agentStatus.error) {
+    assistantHandle.showError(agentStatus.error);
+  }
 }
 
 void init();

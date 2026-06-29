@@ -24,6 +24,8 @@ export interface AssistantDeps {
 
 export interface AssistantHandle {
   destroy: () => void;
+  /** 外部注入一条错误消息（如 sidecar 启动失败），显示在聊天区域。 */
+  showError: (message: string) => void;
 }
 
 export function mountAssistant(root: HTMLElement, deps: AssistantDeps): AssistantHandle {
@@ -80,23 +82,29 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
   }
 
-  function submit() {
+  async function submit() {
     const text = input.value.trim();
     if (!text) return;
     input.value = "";
     autosize();
     dispatch({ type: "user", text });
-    deps.send(text);
+    dispatch({ type: "pending" });
+    try {
+      await deps.send(text);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      dispatch({ type: "error", requestId: null, message });
+    }
   }
 
   input.addEventListener("input", autosize);
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      submit();
+      void submit();
     }
   });
-  sendBtn.addEventListener("click", submit);
+  sendBtn.addEventListener("click", () => { void submit(); });
 
   rerender();
 
@@ -113,6 +121,9 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       unlisten?.();
       root.classList.remove("assistant");
       root.innerHTML = "";
+    },
+    showError(message: string) {
+      dispatch({ type: "error", requestId: null, message });
     },
   };
 }

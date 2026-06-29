@@ -15,6 +15,53 @@ describe("reduceEvents", () => {
     expect(state.messages).toEqual([{ role: "user", text: "你好" }]);
   });
 
+  it("shows an assistant pending bubble immediately after submit", () => {
+    const state = run([
+      { type: "user", text: "你好" },
+      { type: "pending" },
+    ]);
+    expect(state.messages).toEqual([
+      { role: "user", text: "你好" },
+      { role: "assistant", text: "正在思考…", streaming: true, pending: true },
+    ]);
+  });
+
+  it("replaces the pending bubble when the first assistant delta arrives", () => {
+    const state = run([
+      { type: "user", text: "你好" },
+      { type: "pending" },
+      { type: "delta", requestId: "r1", text: "Hel" },
+    ]);
+    expect(state.messages).toEqual([
+      { role: "user", text: "你好" },
+      { role: "assistant", text: "Hel", streaming: true },
+    ]);
+  });
+
+  it("removes the pending bubble before surfacing an error", () => {
+    const state = run([
+      { type: "user", text: "你好" },
+      { type: "pending" },
+      { type: "error", requestId: "r1", message: "agent not configured" },
+    ]);
+    expect(state.messages).toEqual([
+      { role: "user", text: "你好" },
+      { role: "error", text: "agent not configured" },
+    ]);
+  });
+
+  it("surfaces an empty response when done arrives before any text", () => {
+    const state = run([
+      { type: "user", text: "你好" },
+      { type: "pending" },
+      { type: "done", requestId: "r1" },
+    ]);
+    expect(state.messages).toEqual([
+      { role: "user", text: "你好" },
+      { role: "error", text: "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。" },
+    ]);
+  });
+
   it("opens a streaming assistant bubble on the first delta", () => {
     const state = run([{ type: "delta", requestId: "r1", text: "Hel" }]);
     expect(state.messages).toEqual([{ role: "assistant", text: "Hel", streaming: true }]);

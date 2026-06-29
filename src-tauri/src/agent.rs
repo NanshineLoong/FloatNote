@@ -7,7 +7,7 @@
 use crate::{commands::AppState, versions};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -97,8 +97,9 @@ impl AgentHandle {
     }
 }
 
-/// 开发期 sidecar 启动命令：`npx tsx <repo>/sidecar/src/main.ts`。
-/// 打包二进制留到 Sprint 6 处理。
+/// 开发期 sidecar 启动命令。
+/// 优先使用 sidecar 本地安装的 tsx（`node_modules/.bin/tsx`），
+/// 避免依赖全局 `npx`，提升从 Finder/Dock 启动时的可靠性。
 fn sidecar_command() -> Command {
     // CARGO_MANIFEST_DIR = <repo>/src-tauri，其父目录即仓库根。
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -108,13 +109,46 @@ fn sidecar_command() -> Command {
     let sidecar_dir = repo_root.join("sidecar");
     let main_ts = sidecar_dir.join("src").join("main.ts");
 
-    let mut cmd = Command::new("npx");
-    cmd.arg("tsx")
-        .arg(main_ts)
-        .current_dir(sidecar_dir)
+    // 优先使用 sidecar 本地安装的 tsx，避免依赖全局 npx。
+    let local_tsx = sidecar_dir.join("node_modules").join(".bin").join("tsx");
+    let (program, leading_args): (PathBuf, &[&str]) = if local_tsx.exists() {
+        (local_tsx, &[])
+    } else {
+        (PathBuf::from("npx"), &["tsx"])
+    };
+
+    let mut cmd = Command::new(&program);
+    cmd.args(leading_args)
+        .arg(&main_ts)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit());
+        .stderr(Stdio::inherit())
+        .current_dir(&sidecar_dir);
+
+    // macOS: Tauri 从 Finder 启动时 PATH 不含用户 shell 配置中的 node 路径，
+    // 补充常见 Node.js 安装位置以确保 tsx 脚本内的 node 能被找到。
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let existing = std::env::var("PATH").unwrap_or_default();
+        let mut extras: Vec<String> = vec![
+            "/usr/local/bin".to_string(),
+            "/opt/homebrew/bin".to_string(),
+        ];
+        // 扫描 nvm 安装目录，将所有已安装版本的 bin 加入 PATH。
+        let nvm_dir = PathBuf::from(&home).join(".nvm/versions/node");
+        if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
+            for entry in entries.flatten() {
+                let bin = entry.path().join("bin");
+                if bin.is_dir() {
+                    extras.push(bin.to_string_lossy().into_owned());
+                }
+            }
+        }
+        extras.push(existing);
+        cmd.env("PATH", extras.join(":"));
+    }
+
     cmd
 }
 

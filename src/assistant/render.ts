@@ -8,11 +8,11 @@ import type { AgentEvent } from "../note/agent";
  */
 
 /** 用户在输入框发送的本地事件，与 sidecar 的 AgentEvent 一起喂给 reducer。 */
-export type ChatEvent = AgentEvent | { type: "user"; text: string };
+export type ChatEvent = AgentEvent | { type: "user"; text: string } | { type: "pending" };
 
 export type ChatMessage =
   | { role: "user"; text: string }
-  | { role: "assistant"; text: string; streaming: boolean }
+  | { role: "assistant"; text: string; streaming: boolean; pending?: true }
   | { role: "tool"; label: string }
   | { role: "error"; text: string };
 
@@ -21,6 +21,7 @@ export interface ChatState {
 }
 
 const TOOL_LABEL = "AI 正在整理笔记…";
+const EMPTY_RESPONSE_MESSAGE = "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。";
 
 export function emptyChat(): ChatState {
   return { messages: [] };
@@ -35,27 +36,42 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
     case "user":
       return push(state, { role: "user", text: event.text });
 
+    case "pending":
+      return push(removePending(state), {
+        role: "assistant",
+        text: "正在思考…",
+        streaming: true,
+        pending: true,
+      });
+
     case "delta": {
       const last = state.messages[state.messages.length - 1];
       if (last && last.role === "assistant" && last.streaming) {
         const messages = state.messages.slice(0, -1);
-        messages.push({ ...last, text: last.text + event.text });
+        messages.push({
+          role: "assistant",
+          text: last.pending ? event.text : last.text + event.text,
+          streaming: true,
+        });
         return { messages };
       }
       return push(state, { role: "assistant", text: event.text, streaming: true });
     }
 
     case "done":
+      if (hasPending(state)) {
+        return push(removePending(state), { role: "error", text: EMPTY_RESPONSE_MESSAGE });
+      }
       return finalizeStreaming(state);
 
     case "tool":
       if (event.phase === "start") {
-        return push(state, { role: "tool", label: TOOL_LABEL });
+        return push(removePending(state), { role: "tool", label: TOOL_LABEL });
       }
       return removeTool(state);
 
     case "error":
-      return push(finalizeStreaming(state), { role: "error", text: event.message });
+      return push(finalizeStreaming(removePending(state)), { role: "error", text: event.message });
   }
 }
 
@@ -81,6 +97,21 @@ function removeTool(state: ChatState): ChatState {
   const messages = state.messages.slice();
   messages.splice(index, 1);
   return { messages };
+}
+
+function removePending(state: ChatState): ChatState {
+  const index = lastIndex(
+    state.messages,
+    (m) => m.role === "assistant" && Boolean(m.pending),
+  );
+  if (index < 0) return state;
+  const messages = state.messages.slice();
+  messages.splice(index, 1);
+  return { messages };
+}
+
+function hasPending(state: ChatState): boolean {
+  return state.messages.some((m) => m.role === "assistant" && Boolean(m.pending));
 }
 
 function lastIndex<T>(items: T[], pred: (item: T) => boolean): number {
@@ -110,6 +141,9 @@ function renderMessage(message: ChatMessage): HTMLElement {
     el.textContent = message.text;
     if (message.role === "assistant" && message.streaming) {
       el.classList.add("chat-streaming");
+    }
+    if (message.role === "assistant" && message.pending) {
+      el.classList.add("chat-pending");
     }
   }
   return el;

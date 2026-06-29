@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { AgentRunner, translateEvent } from "./agent.js";
+import { AgentRunner, buildAgentModel, translateEvent } from "./agent.js";
 import type { SessionLike } from "./agent.js";
 import type { SidecarToHost } from "./protocol.js";
 
@@ -40,6 +40,45 @@ describe("translateEvent", () => {
       type: "done",
       requestId: "r1",
     });
+  });
+});
+
+describe("buildAgentModel", () => {
+  it("builds an OpenAI-compatible custom model when baseUrl is provided", () => {
+    const model = buildAgentModel({
+      provider: "openai",
+      model: "qwen3.7-max",
+      baseUrl: "https://example.aliyuncs.com/compatible-mode/v1/",
+    });
+
+    expect(model).toMatchObject({
+      id: "qwen3.7-max",
+      name: "qwen3.7-max",
+      api: "openai-completions",
+      provider: "openai",
+      baseUrl: "https://example.aliyuncs.com/compatible-mode/v1",
+      reasoning: false,
+      input: ["text"],
+    });
+  });
+
+  it("rejects Anthropic app endpoints for OpenAI-compatible custom models", () => {
+    expect(() =>
+      buildAgentModel({
+        provider: "openai",
+        model: "qwen3.7-max",
+        baseUrl: "https://dashscope.aliyuncs.com/apps/anthropic",
+      }),
+    ).toThrow(/不是 OpenAI 兼容地址/);
+  });
+
+  it("throws a clear error for unknown built-in models without baseUrl", () => {
+    expect(() =>
+      buildAgentModel({
+        provider: "openai",
+        model: "qwen3.7-max",
+      }),
+    ).toThrow(/模型未在 PI 内置列表中找到/);
   });
 });
 
@@ -82,6 +121,29 @@ describe("AgentRunner", () => {
     expect(sent).toEqual([
       { type: "delta", requestId: "r1", text: "Hel" },
       { type: "delta", requestId: "r1", text: "lo" },
+      { type: "done", requestId: "r1" },
+    ]);
+  });
+
+  it("emits a diagnostic error when a turn ends without visible output", async () => {
+    const sent: SidecarToHost[] = [];
+    const { session } = fakeSession((emit) => {
+      emit(ev({ type: "agent_end", messages: [], willRetry: false }));
+    });
+
+    const runner = new AgentRunner({
+      send: (m) => sent.push(m),
+      createSession: async () => session,
+    });
+    await runner.configure({ provider: "anthropic", model: "claude-opus-4-5", apiKey: "k" });
+    await runner.prompt({ requestId: "r1", noteId: "n", noteText: "note body", userText: "hi" });
+
+    expect(sent).toEqual([
+      {
+        type: "error",
+        requestId: "r1",
+        message: "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。",
+      },
       { type: "done", requestId: "r1" },
     ]);
   });

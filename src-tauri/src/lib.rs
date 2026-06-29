@@ -39,18 +39,23 @@ pub fn run() {
                 config_path: path,
                 agent: Mutex::new(None),
                 agent_ready: Mutex::new(false),
+                agent_spawn_error: Mutex::new(None),
                 active_note: Mutex::new(None),
                 agent_seq: std::sync::atomic::AtomicU64::new(0),
                 watcher: Mutex::new(file_watcher),
                 write_suppress,
             });
 
-            // 拉起 agent-sidecar；失败仅打印，不阻断 app 启动。
+            // 拉起 agent-sidecar；失败存入状态供前端查询，不阻断 app 启动。
             match agent::spawn(app.handle()) {
                 Ok(handle) => {
                     *app.state::<AppState>().agent.lock().unwrap() = Some(handle);
                 }
-                Err(error) => eprintln!("agent sidecar spawn failed: {error}"),
+                Err(error) => {
+                    eprintln!("agent sidecar spawn failed: {error}");
+                    *app.state::<AppState>().agent_spawn_error.lock().unwrap() =
+                        Some(format!("助手启动失败: {error}"));
+                }
             }
 
             #[cfg(target_os = "macos")]
@@ -107,6 +112,7 @@ pub fn run() {
             commands::get_active_note,
             commands::get_assistant_state,
             commands::toggle_assistant,
+            commands::get_agent_status,
             commands::apply_shortcuts,
         ])
         .run(tauri::generate_context!())

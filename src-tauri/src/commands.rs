@@ -13,6 +13,8 @@ pub struct AppState {
     pub agent: Mutex<Option<AgentHandle>>,
     /// sidecar 是否已发 `ready`。
     pub agent_ready: Mutex<bool>,
+    /// sidecar 启动失败时记录错误信息，供前端初始化时查询。
+    pub agent_spawn_error: Mutex<Option<String>>,
     /// agent_send 记录的当前活动笔记，供 apply_write 定位文件。
     pub active_note: Mutex<Option<ActiveNote>>,
     /// 单调递增的 requestId 计数器。
@@ -198,6 +200,21 @@ pub fn toggle_assistant(state: State<AppState>) -> Result<AssistantState, String
     Ok(AssistantState {
         open: config.assistant_open,
     })
+}
+
+/// 助手运行状态：是否已就绪、是否有启动错误。前端初始化时查询。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentStatus {
+    pub ready: bool,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub fn get_agent_status(state: State<AppState>) -> AgentStatus {
+    let ready = *state.agent_ready.lock().unwrap();
+    let error = state.agent_spawn_error.lock().unwrap().clone();
+    AgentStatus { ready, error }
 }
 
 /// 笔记窗发布当前活动笔记，供 apply_write 定位文件。
