@@ -326,7 +326,7 @@ input {
   min-width: 0;
   min-height: 0;
   height: 100%;
-  overflow: hidden;
+  overflow: visible;
   /* 与 body 底色一致，消除正文列与左右边距之间的接缝。 */
   background: #ffffff;
 }

@@ -39,6 +39,9 @@ describe("split view CSS placement", () => {
   });
 
   it("keeps inbox block handles in the compact left margin", () => {
+    expect(css).toMatch(
+      /#editor-root\s*{[^}]*overflow:\s*visible;/s,
+    );
     expect(editorSource).toMatch(/padding:\s*"16px 0"/);
     expect(css).toMatch(
       /#editor-root\s+\.cm-scroller\s*{[^}]*margin-left:\s*-14px;[^}]*width:\s*calc\(100% \+ 14px\);/s,

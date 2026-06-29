@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { KeyRecorder } from "./key-recorder";
 
@@ -24,15 +23,13 @@ function escapeHtml(value: string): string {
   });
 }
 
-function displayDir(path: string | null): string {
-  if (!path) return "";
-  // 只显示最后一级目录名
-  const parts = path.replace(/[/\\]+$/, "").split(/[/\\]/);
-  return parts[parts.length - 1] || path;
-}
-
 async function render() {
   const config = await invoke<Config>("get_config");
+
+  // 迁移：旧版 "custom" provider 映射为 "openai"
+  if (config.ai_provider === "custom") {
+    config.ai_provider = "openai";
+  }
 
   app.innerHTML = `
     <div class="settings-page">
@@ -42,28 +39,6 @@ async function render() {
         <div class="settings-section-header">
           <i class="ph ph-gear"></i>
           <span>通用</span>
-        </div>
-
-        <div class="settings-row">
-          <label class="settings-label">工作目录</label>
-          <div class="settings-control-row">
-            <input id="working-dir" type="text" readonly
-              placeholder="未设置"
-              value="${escapeHtml(displayDir(config.working_dir))}"
-              title="${escapeHtml(config.working_dir ?? "")}" />
-            <button id="pick-dir" class="settings-btn-secondary" type="button" title="选择文件夹">
-              <i class="ph ph-folder-open"></i>
-            </button>
-          </div>
-        </div>
-
-        <div class="settings-row">
-          <label class="settings-label">字体大小</label>
-          <div class="settings-control-row">
-            <input id="font-size" type="range" min="10" max="28" step="1"
-              value="${config.font_size}" />
-            <span id="font-size-value" class="settings-value">${config.font_size}</span>
-          </div>
         </div>
 
         <div class="settings-row settings-row-inline">
@@ -111,7 +86,6 @@ async function render() {
             <option value="anthropic" ${config.ai_provider === "anthropic" ? "selected" : ""}>Anthropic</option>
             <option value="openai" ${config.ai_provider === "openai" ? "selected" : ""}>OpenAI</option>
             <option value="google" ${config.ai_provider === "google" ? "selected" : ""}>Google</option>
-            <option value="custom" ${config.ai_provider === "custom" ? "selected" : ""}>自定义</option>
           </select>
         </div>
 
@@ -129,7 +103,7 @@ async function render() {
             value="${escapeHtml(config.ai_api_key)}" />
         </div>
 
-        <div class="settings-row" id="base-url-row" ${!supportsBaseUrl(config.ai_provider) ? "hidden" : ""}>
+        <div class="settings-row" id="base-url-row">
           <label class="settings-label">自定义地址</label>
           <input id="ai-base-url" type="text"
             placeholder="${baseUrlPlaceholder(config.ai_provider)}"
@@ -154,25 +128,6 @@ async function render() {
     document.querySelector("#recorder-toggle")!,
     config.shortcut_toggle,
   );
-
-  // ── 工作目录选择 ──
-  let currentDir = config.working_dir;
-  document.querySelector<HTMLButtonElement>("#pick-dir")!.onclick = async () => {
-    const selected = await open({ directory: true, multiple: false });
-    if (selected) {
-      currentDir = selected as string;
-      const input = document.querySelector<HTMLInputElement>("#working-dir")!;
-      input.value = displayDir(currentDir);
-      input.title = currentDir;
-    }
-  };
-
-  // ── 字号滑块 ──
-  const fontSlider = document.querySelector<HTMLInputElement>("#font-size")!;
-  const fontValue = document.querySelector<HTMLElement>("#font-size-value")!;
-  fontSlider.oninput = () => {
-    fontValue.textContent = fontSlider.value;
-  };
 
   // ── AI provider 切换 ──
   const providerSelect = document.querySelector<HTMLSelectElement>("#ai-provider")!;
@@ -204,13 +159,11 @@ async function render() {
       return;
     }
 
-    // 2. 构建完整配置
+    // 2. 构建完整配置（保留工作目录和字号的现有值）
     const newConfig: Config = {
       ...config,
-      working_dir: currentDir,
       shortcut_capture: capture,
       shortcut_toggle: toggle,
-      font_size: parseInt(fontSlider.value, 10),
       launch_at_login: document.querySelector<HTMLInputElement>("#autostart")!.checked,
       ai_provider: providerSelect.value,
       ai_model: modelInput.value.trim(),
@@ -228,12 +181,7 @@ async function render() {
     // 3. 持久化
     await invoke("set_config", { newConfig });
 
-    // 4. 同步工作目录
-    if (currentDir && currentDir !== config.working_dir) {
-      await invoke("set_working_dir", { dir: currentDir });
-    }
-
-    // 5. 同步自启动
+    // 4. 同步自启动
     const launchAtLogin = newConfig.launch_at_login;
     if (launchAtLogin) {
       if (!(await isEnabled())) await enable();
@@ -241,7 +189,7 @@ async function render() {
       await disable();
     }
 
-    // 6. 立即配置 sidecar（如已配置 AI）
+    // 5. 立即配置 sidecar（如已配置 AI）
     let sidecarOk = true;
     let sidecarError = "";
     if (newConfig.ai_provider && newConfig.ai_model) {
@@ -276,20 +224,25 @@ function modelPlaceholder(provider: string): string {
     case "anthropic": return "claude-sonnet-4-20250514";
     case "openai": return "gpt-4o";
     case "google": return "gemini-2.0-flash";
-    case "custom": return "模型名称";
     default: return "选择服务商后填写";
   }
 }
 
 function supportsBaseUrl(provider: string): boolean {
-  return provider === "openai" || provider === "custom";
+  return provider === "openai" || provider === "anthropic" || provider === "google";
 }
 
 function baseUrlPlaceholder(provider: string): string {
-  if (provider === "openai") {
-    return "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1";
+  switch (provider) {
+    case "openai":
+      return "https://api.openai.com/v1";
+    case "anthropic":
+      return "https://api.anthropic.com";
+    case "google":
+      return "https://generativelanguage.googleapis.com";
+    default:
+      return "https://api.example.com/v1";
   }
-  return "https://api.example.com/v1";
 }
 
 function validateAiConfig(config: Config): string | null {

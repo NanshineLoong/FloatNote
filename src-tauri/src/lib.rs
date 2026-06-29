@@ -74,6 +74,17 @@ pub fn run() {
                 });
             }
 
+            // Hide instead of close the settings window so it can be re-opened later.
+            if let Some(settings_win) = app.get_webview_window("settings") {
+                let win = settings_win.clone();
+                settings_win.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = win.hide();
+                    }
+                });
+            }
+
             tray::build_tray(app.handle())?;
 
             {
