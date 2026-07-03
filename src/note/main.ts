@@ -9,6 +9,7 @@ import { buildCaretInsert } from "./append";
 import { placeholder } from "@codemirror/view";
 import { createEditor, insertAtCaret, requestEditorLayout, setDoc } from "./editor";
 import { blockHandleGutter } from "./blocks/handle-gutter";
+import { cancelBlockDrag, scrollerPositionTheme } from "./blocks/drag";
 import { createLayoutController } from "./layout-controller";
 import { createPieceHeader } from "./piece-switcher";
 import { createTasksPanel } from "./tasks-panel";
@@ -87,7 +88,12 @@ const editor = createEditor(
     if (current) scheduleSave(current.entry.path, doc);
   },
   [
-    blockHandleGutter(),
+    blockHandleGutter({
+      getPieceView: () => pieceEditor,
+      isSplitActive: () => layoutController?.isSplit() ?? false,
+      textColEl: document.querySelector<HTMLElement>("#text-col")!,
+      pieceColEl: document.querySelector<HTMLElement>("#piece-col")!,
+    }),
     placeholder("Inbox 还是空的 —— 划线捕获或在这里写点什么"),
   ],
 );
@@ -111,7 +117,7 @@ const pieceEditor = createEditor(
     if (applyingRemote) return;
     if (currentPiece) scheduleSave(currentPiece.path, doc);
   },
-  [],
+  [scrollerPositionTheme],
   { grow: true },
 );
 // 滑块挂在不滚动的 #piece-col 上，监听真正滚动的 #piece-scroll。
@@ -244,6 +250,14 @@ void onNoteUpdated(async (payload) => {
 // 如果编辑器有未保存的本地修改（用户正在输入），跳过刷新以避免丢失输入。
 void onFileChanged(async (changedPath) => {
   if (isDirty(changedPath)) return;
+
+  // 拖拽进行中若目标文档被外部改写，落点偏移会失效 —— 直接中止拖拽不提交。
+  if (
+    (current && changedPath === current.entry.path) ||
+    (currentPiece && changedPath === currentPiece.path)
+  ) {
+    cancelBlockDrag();
+  }
 
   // Inbox 被外部修改。
   if (current && changedPath === current.entry.path) {

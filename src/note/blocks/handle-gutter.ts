@@ -1,11 +1,7 @@
 import { type Extension, RangeSetBuilder } from "@codemirror/state";
 import { type BlockInfo, EditorView, gutter, GutterMarker } from "@codemirror/view";
-import {
-  blockRanges,
-  moveBlockChanges,
-  removeBlockChanges,
-  type BlockRange,
-} from "./ranges";
+import { blockRanges, removeBlockChanges, type BlockRange } from "./ranges";
+import { startBlockDrag, type DragContext } from "./drag";
 
 /**
  * A block action is one entry in the handle's click menu. The list is the
@@ -34,8 +30,6 @@ const deleteAction: BlockAction = {
 };
 
 const ACTIONS: BlockAction[] = [deleteAction];
-
-const DRAG_THRESHOLD = 4;
 
 class HandleMarker extends GutterMarker {
   toDOM(): HTMLElement {
@@ -87,77 +81,6 @@ function openMenu(view: EditorView, range: BlockRange, index: number, x: number,
   setTimeout(() => document.addEventListener("pointerdown", closeMenu, { once: true }), 0);
 }
 
-// ── drag reorder ───────────────────────────────────────────────────────────
-/** How many blocks have their vertical midpoint above the pointer = drop slot. */
-function dropIndex(view: EditorView, ranges: BlockRange[], clientY: number): number {
-  let count = 0;
-  for (const r of ranges) {
-    const top = view.coordsAtPos(r.from)?.top;
-    const bottom = view.coordsAtPos(r.to)?.bottom;
-    if (top == null || bottom == null) continue;
-    if ((top + bottom) / 2 < clientY) count++;
-  }
-  return count;
-}
-
-function placeIndicator(view: EditorView, ranges: BlockRange[], to: number, el: HTMLElement) {
-  let y: number | undefined;
-  if (to >= ranges.length) {
-    y = view.coordsAtPos(ranges[ranges.length - 1].to)?.bottom;
-  } else {
-    y = view.coordsAtPos(ranges[to].from)?.top;
-  }
-  if (y == null) return;
-  const box = view.scrollDOM.getBoundingClientRect();
-  el.style.top = `${y - box.top + view.scrollDOM.scrollTop}px`;
-}
-
-function startInteraction(view: EditorView, blockFrom: number, event: PointerEvent) {
-  event.preventDefault();
-  closeMenu();
-
-  const initial = blockRanges(view.state.doc.toString());
-  const fromIndex = initial.findIndex((r) => r.from === blockFrom);
-  if (fromIndex < 0) return;
-
-  const startX = event.clientX;
-  const startY = event.clientY;
-  let dragging = false;
-  let to = fromIndex;
-  let indicator: HTMLElement | null = null;
-
-  const onMove = (e: PointerEvent) => {
-    if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) < DRAG_THRESHOLD) return;
-    if (!dragging) {
-      dragging = true;
-      indicator = document.createElement("div");
-      indicator.className = "cm-block-drop";
-      view.scrollDOM.appendChild(indicator);
-    }
-    const ranges = blockRanges(view.state.doc.toString());
-    to = dropIndex(view, ranges, e.clientY);
-    placeIndicator(view, ranges, to, indicator!);
-  };
-
-  const onUp = (e: PointerEvent) => {
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onUp);
-    indicator?.remove();
-
-    if (dragging) {
-      const text = view.state.doc.toString();
-      const ranges = blockRanges(text);
-      const changes = moveBlockChanges(text, ranges, fromIndex, to);
-      if (changes.length) view.dispatch({ changes });
-    } else {
-      openMenu(view, initial[fromIndex], fromIndex, e.clientX, e.clientY);
-    }
-  };
-
-  window.addEventListener("pointermove", onMove);
-  window.addEventListener("pointerup", onUp);
-}
-
 const gutterTheme = EditorView.theme({
   // The drop indicator is positioned against the scroller, so anchor it there.
   ".cm-scroller": { position: "relative" },
@@ -165,10 +88,14 @@ const gutterTheme = EditorView.theme({
 
 /**
  * Per-block left handle: a Notion-style grip in a CodeMirror gutter. Drag to
- * reorder the block's text (precise transaction), single-click to open the
+ * reorder the block's text (precise transaction); drag across into the piece
+ * column to copy the block into the piece editor; single-click to open the
  * action menu. Only attach this to the Inbox editor — pieces don't get handles.
+ *
+ * `ctx` lets the drag orchestrator (drag.ts) find the piece editor and split
+ * state lazily, since the piece editor is created after the inbox.
  */
-export function blockHandleGutter(): Extension {
+export function blockHandleGutter(ctx: DragContext): Extension {
   return [
     gutter({
       class: "cm-block-gutter",
@@ -179,7 +106,12 @@ export function blockHandleGutter(): Extension {
           if (!(event instanceof PointerEvent)) return false;
           const target = event.target as HTMLElement | null;
           if (!target?.closest(".cm-block-handle")) return false;
-          startInteraction(view, line.from, event);
+          const onTap = (e: PointerEvent) => {
+            const ranges = blockRanges(view.state.doc.toString());
+            const idx = ranges.findIndex((r) => r.from === line.from);
+            if (idx >= 0) openMenu(view, ranges[idx], idx, e.clientX, e.clientY);
+          };
+          startBlockDrag(ctx, view, line.from, event, onTap);
           return true;
         },
       },

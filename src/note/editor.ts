@@ -71,11 +71,14 @@ export function requestEditorLayout(
   schedule(() => view.requestMeasure());
 }
 
-export function insertAtCaret(view: EditorView, text: string) {
-  const from = view.state.selection.main.from;
+export function insertAtPos(view: EditorView, pos: number, text: string) {
   view.dispatch({
-    changes: { from, insert: text },
-    selection: { anchor: from + text.length },
+    changes: { from: pos, insert: text },
+    selection: { anchor: pos + text.length },
     scrollIntoView: true,
   });
+}
+
+export function insertAtCaret(view: EditorView, text: string) {
+  insertAtPos(view, view.state.selection.main.from, text);
 }
