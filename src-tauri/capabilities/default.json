@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "FloatNote default capabilities",
-  "windows": ["main", "settings", "assistant"],
+  "windows": ["main", "settings", "assistant", "selection-popup"],
   "permissions": [
     "core:default",
     "core:window:allow-show",

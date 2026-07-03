@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FloatNote Popup</title>
+  </head>
+  <body>
+    <div id="popup" class="popup-root" hidden>
+      <div id="popup-empty" class="popup-empty" hidden>未识别到选中文本</div>
+      <div id="popup-actions" class="popup-actions">
+        <button id="btn-capture" class="popup-btn popup-btn-primary" type="button">加入采集区</button>
+        <button id="btn-translate" class="popup-btn popup-btn-ghost" type="button" disabled>翻译</button>
+        <button id="btn-ask" class="popup-btn popup-btn-ghost" type="button" disabled>提问</button>
+      </div>
+    </div>
+    <script type="module" src="/src/popup/main.ts"></script>
+  </body>
+</html>

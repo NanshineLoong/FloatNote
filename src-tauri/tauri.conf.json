@@ -33,6 +33,20 @@
         "minHeight": 400,
         "visible": false,
         "url": "settings.html"
+      },
+      {
+        "label": "selection-popup",
+        "url": "popup.html",
+        "width": 208,
+        "height": 56,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "visible": false,
+        "skipTaskbar": true,
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay"
       }
     ],
     "security": { "csp": null }
