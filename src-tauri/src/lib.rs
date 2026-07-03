@@ -128,6 +128,8 @@ pub fn run() {
             commands::toggle_assistant,
             commands::get_agent_status,
             commands::apply_shortcuts,
+            popup::submit_popup_capture,
+            popup::dismiss_popup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running FloatNote");

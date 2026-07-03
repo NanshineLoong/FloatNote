@@ -37,6 +37,55 @@ impl Default for PopupCache {
     }
 }
 
+use tauri::{AppHandle, Emitter, Manager, State};
+
+use crate::commands::AppState;
+
+/// Payload emitted to the `selection-popup` window on capture.
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PopupPayload {
+    pub x: f64,
+    pub y: f64,
+    pub has_text: bool,
+}
+
+/// User clicked 「加入采集区」: format the cached text and forward it to the
+/// note window exactly as the direct-capture path does.
+#[tauri::command]
+pub fn submit_popup_capture(state: State<AppState>, app: AppHandle) -> Result<(), String> {
+    let text = match state.popup_cache.take() {
+        Some(t) if !t.trim().is_empty() => t,
+        _ => return Err("没有可加入的选中文本".to_string()),
+    };
+    let block = crate::quote::format_clip(text.trim());
+    app.emit_to("main", "quote-captured", block)
+        .map_err(|e| format!("emit failed: {e}"))?;
+
+    if let Some(window) = crate::windows::note_window(&app) {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+
+    // Hide the popup window (do not destroy it).
+    if let Some(popup) = app.get_webview_window("selection-popup") {
+        let _ = popup.hide();
+    }
+    Ok(())
+}
+
+/// User cancelled (Esc / focus lost / empty state). Hide popup, drop cache.
+#[tauri::command]
+pub fn dismiss_popup(state: State<AppState>, app: AppHandle) -> Result<(), String> {
+    state.popup_cache.clear();
+    if let Some(popup) = app.get_webview_window("selection-popup") {
+        let _ = popup.hide();
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
