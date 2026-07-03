@@ -2,6 +2,7 @@ mod agent;
 mod capture;
 mod commands;
 mod config;
+mod cursor;
 mod notes;
 mod project;
 mod quote;
