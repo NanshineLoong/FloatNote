@@ -7,6 +7,8 @@ pub struct Config {
     pub working_dir: Option<String>,
     pub shortcut_capture: String,
     pub shortcut_toggle: String,
+    /// 划词悬浮窗快捷键（弹窗式抓取），默认 ⌥⌘P。与 shortcut_capture（直接抓取）独立。
+    pub shortcut_popup: String,
     pub font_size: u32,
     pub launch_at_login: bool,
     /// 助手是否展开显示（折叠则隐藏）。助手始终活在笔记窗内，按窗宽自动 inline/floating。
@@ -31,6 +33,7 @@ impl Default for Config {
             working_dir: None,
             shortcut_capture: "Alt+Cmd+C".to_string(),
             shortcut_toggle: "Alt+Cmd+N".to_string(),
+            shortcut_popup: "Alt+Cmd+P".to_string(),
             font_size: 15,
             launch_at_login: false,
             assistant_open: false,
@@ -80,6 +83,18 @@ mod tests {
         config.working_dir = Some("/tmp/x".to_string());
         let serialized = serde_json::to_string(&config).unwrap();
         assert_eq!(serde_json::from_str::<Config>(&serialized).unwrap(), config);
+    }
+
+    #[test]
+    fn popup_shortcut_has_default() {
+        let config = Config::default();
+        assert_eq!(config.shortcut_popup, "Alt+Cmd+P");
+    }
+
+    #[test]
+    fn partial_json_keeps_popup_default() {
+        let config: Config = serde_json::from_str(r#"{"font_size":20}"#).unwrap();
+        assert_eq!(config.shortcut_popup, "Alt+Cmd+P");
     }
 }
 
