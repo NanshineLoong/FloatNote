@@ -23,6 +23,8 @@ pub struct AppState {
     pub watcher: Mutex<Option<FileWatcher>>,
     /// 自身写入抑制表，与 watcher 共享。
     pub write_suppress: SuppressList,
+    /// 划词弹窗急切抓取的待提交文本。
+    pub popup_cache: crate::popup::PopupCache,
 }
 
 #[tauri::command]

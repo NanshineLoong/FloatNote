@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod cursor;
 mod notes;
+mod popup;
 mod project;
 mod quote;
 mod shortcuts;
@@ -45,6 +46,7 @@ pub fn run() {
                 agent_seq: std::sync::atomic::AtomicU64::new(0),
                 watcher: Mutex::new(file_watcher),
                 write_suppress,
+                popup_cache: crate::popup::PopupCache::new(),
             });
 
             // 拉起 agent-sidecar；失败存入状态供前端查询，不阻断 app 启动。
