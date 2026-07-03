@@ -86,6 +86,38 @@ pub fn dismiss_popup(state: State<AppState>, app: AppHandle) -> Result<(), Strin
     Ok(())
 }
 
+/// Global shortcut entry: eagerly capture the selection while the source app
+/// is still focused, cache it, then tell the popup window to show at the cursor.
+pub fn run_popup_capture(app: &AppHandle) {
+    // Share capture.rs's guard so a popup capture and a direct capture can't
+    // race the single shared system clipboard.
+    let Some(_guard) = crate::capture::CaptureGuard::try_enter() else {
+        return; // a capture is already in flight
+    };
+
+    if !crate::capture::check_accessibility(app) {
+        return;
+    }
+
+    let text = crate::capture::read_selection_text(); // Option<String>
+    let has_text = text.is_some();
+    if let Some(ref t) = text {
+        state_set(app, t.clone());
+    }
+
+    let (x, y) = crate::cursor::get_cursor_pos().unwrap_or((0.0, 0.0));
+
+    let payload = PopupPayload { x, y, has_text };
+    let _ = app.emit_to("selection-popup", "popup-payload", payload);
+}
+
+/// Helper: stash the captured text into the managed AppState.
+fn state_set(app: &AppHandle, text: String) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.popup_cache.set(text);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

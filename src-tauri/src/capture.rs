@@ -7,14 +7,14 @@ use tauri::{AppHandle, Emitter};
 /// reads → empty selection). Only one capture may run at a time.
 static CAPTURING: AtomicBool = AtomicBool::new(false);
 
-struct CaptureGuard {
+pub struct CaptureGuard {
     _priv: (),
 }
 
 impl CaptureGuard {
     /// Returns `Some` if this caller acquired the lock, `None` if a capture is
     /// already in flight.
-    fn try_enter() -> Option<Self> {
+    pub fn try_enter() -> Option<Self> {
         if CAPTURING.swap(true, Ordering::SeqCst) {
             None
         } else {
@@ -53,33 +53,59 @@ pub fn run_capture(app: &AppHandle) {
         return;
     };
 
-    // macOS: simulating Cmd+C requires Accessibility permission. Without it,
-    // the synthetic events are silently dropped and nothing is captured.
+    if !check_accessibility(app) {
+        return;
+    }
+
+    log_line("fired");
+
+    let Some(trimmed) = read_selection_text() else {
+        return;
+    };
+
+    let block = crate::quote::format_clip(&trimmed);
+    let _ = app.emit_to("main", "quote-captured", block);
+
+    if let Some(window) = crate::windows::note_window(app) {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+/// macOS Accessibility trust check. Returns true if capture may proceed.
+/// On macOS, if untrusted, prompts once and emits `accessibility-needed` to
+/// the `main` window; returns false. On non-macOS, returns true (the actual
+/// capture stub will fail later with a clear error).
+pub fn check_accessibility(app: &AppHandle) -> bool {
     #[cfg(target_os = "macos")]
     {
         static PROMPTED: AtomicBool = AtomicBool::new(false);
-
         if !macos_accessibility_client::accessibility::application_is_trusted() {
             log_line("accessibility NOT trusted — cannot simulate Cmd+C");
             if !PROMPTED.swap(true, Ordering::SeqCst) {
                 macos_accessibility_client::accessibility::application_is_trusted_with_prompt();
             }
             let _ = app.emit_to("main", "accessibility-needed", ());
-            return;
+            return false;
         }
     }
+    let _ = app;
+    true
+}
 
-    log_line("fired");
-
+/// Backup clipboard, simulate Cmd+C, read the new clipboard content, restore.
+/// Returns the trimmed selection text, or None if empty or on failure.
+pub fn read_selection_text() -> Option<String> {
     let mut clipboard = match arboard::Clipboard::new() {
-        Ok(clipboard) => clipboard,
+        Ok(c) => c,
         Err(error) => {
             log_line(&format!("clipboard init error: {error}"));
-            return;
+            return None;
         }
     };
     let backup = clipboard.get_text().ok();
-
     let _ = clipboard.set_text(String::new());
 
     if let Err(error) = simulate_copy() {
@@ -87,11 +113,10 @@ pub fn run_capture(app: &AppHandle) {
         if let Some(text) = backup {
             let _ = clipboard.set_text(text);
         }
-        return;
+        return None;
     }
 
     std::thread::sleep(std::time::Duration::from_millis(150));
-
     let selection = clipboard.get_text().unwrap_or_default();
     log_line(&format!("selection len = {}", selection.len()));
 
@@ -104,20 +129,12 @@ pub fn run_capture(app: &AppHandle) {
         }
     }
 
-    let trimmed = selection.trim();
+    let trimmed = selection.trim().to_string();
     if trimmed.is_empty() {
         log_line("empty selection, ignoring");
-        return;
-    }
-
-    let block = crate::quote::format_clip(trimmed);
-    let _ = app.emit_to("main", "quote-captured", block);
-
-    if let Some(window) = crate::windows::note_window(app) {
-        if window.is_visible().unwrap_or(false) {
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
+        None
+    } else {
+        Some(trimmed)
     }
 }
 
