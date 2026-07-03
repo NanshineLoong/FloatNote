@@ -1,7 +1,9 @@
 //! Global mouse cursor position.
 
 /// Convert physical pixels to logical points given a scale factor.
-/// Pure helper, unit-tested.
+/// Pure helper, unit-tested. Retained for callers that prefer Rust-side
+/// conversion; the popup frontend currently converts in TS.
+#[allow(dead_code)]
 pub fn to_logical(x: f64, y: f64, scale: f64) -> (f64, f64) {
     if scale <= 0.0 {
         (x, y)

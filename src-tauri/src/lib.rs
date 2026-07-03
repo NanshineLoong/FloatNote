@@ -92,9 +92,12 @@ pub fn run() {
 
             {
                 let config = app.state::<AppState>().config.lock().unwrap().clone();
-                if let Err(error) =
-                    shortcuts::apply(app.handle(), &config.shortcut_capture, &config.shortcut_toggle)
-                {
+                if let Err(error) = shortcuts::apply(
+                    app.handle(),
+                    &config.shortcut_capture,
+                    &config.shortcut_toggle,
+                    &config.shortcut_popup,
+                ) {
                     eprintln!("shortcut registration failed: {error}");
                 }
             }

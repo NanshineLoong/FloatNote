@@ -242,8 +242,13 @@ pub fn agent_cancel(state: State<AppState>, request_id: String) -> Result<(), St
 }
 
 #[tauri::command]
-pub fn apply_shortcuts(app: tauri::AppHandle, capture: String, toggle: String) -> Result<(), String> {
-    crate::shortcuts::apply(&app, &capture, &toggle)
+pub fn apply_shortcuts(
+    app: tauri::AppHandle,
+    capture: String,
+    toggle: String,
+    popup: String,
+) -> Result<(), String> {
+    crate::shortcuts::apply(&app, &capture, &toggle, &popup)
 }
 
 #[tauri::command]
