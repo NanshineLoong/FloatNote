@@ -6,6 +6,7 @@ interface Config {
   working_dir: string | null;
   shortcut_capture: string;
   shortcut_toggle: string;
+  shortcut_popup: string;
   font_size: number;
   launch_at_login: boolean;
   ai_provider: string;
@@ -70,6 +71,13 @@ async function render() {
             <span class="key-recorder-label">${escapeHtml(config.shortcut_toggle)}</span>
           </div>
         </div>
+
+        <div class="settings-row">
+          <label class="settings-label">划词弹窗</label>
+          <div id="recorder-popup" class="key-recorder" tabindex="0">
+            <span class="key-recorder-label">${escapeHtml(config.shortcut_popup)}</span>
+          </div>
+        </div>
       </section>
 
       <!-- ── AI 助手 ── -->
@@ -128,6 +136,10 @@ async function render() {
     document.querySelector("#recorder-toggle")!,
     config.shortcut_toggle,
   );
+  const popupRecorder = new KeyRecorder(
+    document.querySelector("#recorder-popup")!,
+    config.shortcut_popup,
+  );
 
   // ── AI provider 切换 ──
   const providerSelect = document.querySelector<HTMLSelectElement>("#ai-provider")!;
@@ -149,10 +161,11 @@ async function render() {
 
     const capture = captureRecorder.value;
     const toggle = toggleRecorder.value;
+    const popup = popupRecorder.value;
 
     // 1. 验证快捷键
     try {
-      await invoke("apply_shortcuts", { capture, toggle });
+      await invoke("apply_shortcuts", { capture, toggle, popup });
     } catch (error) {
       statusEl.textContent = `快捷键无效或被占用：${error}`;
       statusEl.classList.add("error");
@@ -164,6 +177,7 @@ async function render() {
       ...config,
       shortcut_capture: capture,
       shortcut_toggle: toggle,
+      shortcut_popup: popup,
       launch_at_login: document.querySelector<HTMLInputElement>("#autostart")!.checked,
       ai_provider: providerSelect.value,
       ai_model: modelInput.value.trim(),
