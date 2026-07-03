@@ -703,48 +703,95 @@ input {
 
 /* ── Project-spaces: 顶栏分段切换 / 图标按钮 / 成品药丸 / 清单面板 ── */
 
-/* 顶栏分段切换 Inbox / 成品 */
-/* 顶栏居中三段控件（采集 ｜ 写作 ｜ 双栏）。绝对居中，不受左右两侧宽度影响。 */
+/* 顶栏居中三段控件（采集 ｜ 写作 ｜ 双栏）——物理滑拨杆。
+   .seg-track 为凹槽，三枚 .seg-btn 为可点标签，.seg-knob 为嵌在凹槽里的
+   胶囊钮（带当前段名字），由 --idx (0..2) 驱动位置，松开点击后由 transition 滑过去。 */
 .view-seg {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  overflow: hidden;
-  background: rgba(0, 0, 0, 0.02);
+}
+
+.seg-track {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.05);
+  /* 凹槽感：顶部内阴影下凹、底部一抹高光，玻璃钮作为亮元素浮出。 */
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08), inset 0 -1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .seg-btn {
+  flex: 1 1 0;
   min-width: 52px;
-  padding: 4px 0 !important;
+  padding: 4px 14px !important;
   justify-content: center !important;
   border: none;
-  border-radius: 0 !important;
+  border-radius: 999px !important;
   background: transparent;
   color: #6b7280;
   font-size: 12px;
   cursor: pointer;
-}
-
-.seg-btn + .seg-btn {
-  border-left: 1px solid rgba(0, 0, 0, 0.08);
+  position: relative;
+  z-index: 1;
+  transition: color .15s ease;
 }
 
 .seg-btn:not(:disabled):hover {
-  background: rgba(0, 0, 0, 0.04);
+  color: #111827;
 }
 
-.seg-btn.active {
-  background: rgba(0, 0, 0, 0.06);
-  color: #111827;
+/* 当前档文字透明：标签由玻璃钮承载（避免钮面与底面文字重叠）。 */
+.seg-btn.active,
+.seg-btn.active:hover {
+  color: transparent;
   font-weight: 500;
 }
 
 .seg-btn:disabled {
   color: #c4c8cf;
   cursor: default;
+}
+
+/* 窄窗：双栏档变暗、不可达（按钮 disabled + 方向键 maxReachableIdx 限制）。 */
+.view-seg[data-reach="narrow"] .seg-btn[data-view="split"] {
+  color: #c4c8cf;
+}
+
+/* 玻璃胶囊钮：嵌在凹槽里、几乎填满一档（左右各留 2px 缝），顶面带当前段名。
+   平面、不突出——半透明 + backdrop-blur 形成液态玻璃质感，顶部一抹高光，
+   几乎无落影。pointer-events:none 保证永不拦截下方按钮的点击。 */
+.seg-knob {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: calc((var(--idx, 0) + 0.5) * (100% / 3));
+  width: calc(100% / 3 - 4px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
+  backdrop-filter: blur(6px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.03),
+    0 1px 1px rgba(0, 0, 0, 0.04);
+  color: #111827;
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 2;
+  transition: left .22s cubic-bezier(.34, 1.3, .64, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seg-knob { transition: none; }
 }
 
 .topbar-right {
@@ -1109,11 +1156,18 @@ input {
 }
 
 @media (prefers-color-scheme: dark) {
-  .view-seg { border-color: rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.03); }
-  .seg-btn + .seg-btn { border-left-color: rgba(255, 255, 255, 0.1); }
-  .seg-btn:not(:disabled):hover { background: rgba(255, 255, 255, 0.06); }
-  .seg-btn.active { background: rgba(255, 255, 255, 0.1); color: #f3f4f6; }
-  .seg-btn:disabled { color: rgba(255, 255, 255, 0.28); }
+  .seg-track { border-color: rgba(255, 255, 255, 0.1); background: rgba(0, 0, 0, 0.28); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6), inset 0 -1px 0 rgba(255, 255, 255, 0.05); }
+  .seg-btn { color: #9ca3af; }
+  .seg-btn:not(:disabled):hover { color: #f3f4f6; }
+  .seg-btn.active,
+  .seg-btn.active:hover { color: transparent; }
+  .seg-btn:disabled,
+  .view-seg[data-reach="narrow"] .seg-btn[data-view="split"] { color: rgba(255, 255, 255, 0.28); }
+  .seg-knob {
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -1px 1px rgba(0, 0, 0, 0.2), 0 1px 1px rgba(0, 0, 0, 0.2);
+    color: #f3f4f6;
+  }
   .icon-btn:hover { background: rgba(255, 255, 255, 0.08) !important; }
   .icon-btn.on { background: rgba(96, 165, 250, 0.2) !important; color: #60a5fa; }
   #app.split-active #piece-col::before { background: rgba(255, 255, 255, 0.1); }
