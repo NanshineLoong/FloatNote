@@ -96,3 +96,40 @@ export function isQuoteCardBlock(blockText: string): boolean {
   const firstLine = blockText.split("\n", 1)[0] ?? "";
   return /^>\s*\[!quote\]/.test(firstLine);
 }
+
+import { blockRanges, type BlockRange } from "./blocks/ranges";
+
+export type MergeTarget =
+  | { kind: "merge"; range: BlockRange }
+  | { kind: "new" };
+
+/** Decide whether a capture at `caret` should merge into an existing `[!quote]`
+ *  card (inside or immediately preceding, separated only by blank lines) or
+ *  start a new card. Pure over (doc, caret) so it is unit-testable without a
+ *  live CodeMirror. */
+export function resolveMergeTarget(doc: string, caret: number): MergeTarget {
+  const ranges = blockRanges(doc);
+
+  // Inside case: caret within a quote-card block.
+  for (const r of ranges) {
+    if (r.from <= caret && caret <= r.to && isQuoteCardBlock(doc.slice(r.from, r.to))) {
+      return { kind: "merge", range: r };
+    }
+  }
+
+  // Adjacent case: the nearest preceding block is a quote card and only
+  // whitespace separates its end from the caret.
+  let prev: BlockRange | null = null;
+  for (const r of ranges) {
+    if (r.to < caret) prev = r;
+    else break;
+  }
+  if (prev && isQuoteCardBlock(doc.slice(prev.from, prev.to))) {
+    const between = doc.slice(prev.to, caret);
+    if (between.trim() === "") {
+      return { kind: "merge", range: prev };
+    }
+  }
+
+  return { kind: "new" };
+}

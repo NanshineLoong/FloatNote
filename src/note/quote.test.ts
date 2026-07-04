@@ -7,8 +7,8 @@ import {
   parseChips,
   mergeQuoteBlock,
   isQuoteCardBlock,
+  resolveMergeTarget,
 } from "./quote";
-
 const web = (title: string, url: string): Source => ({ kind: "web", title, url });
 const app = (title: string): Source => ({ kind: "app", title, url: null });
 
@@ -117,5 +117,53 @@ describe("isQuoteCardBlock", () => {
   });
   it("rejects plain blockquote", () => {
     expect(isQuoteCardBlock("> text")).toBe(false);
+  });
+});
+
+describe("resolveMergeTarget", () => {
+  it("merges when caret is inside a [!quote] card", () => {
+    const doc = "> [!quote] [A](https://a)\n> first\n> second";
+    // caret in the middle of the second body line
+    const caret = doc.indexOf("second");
+    const t = resolveMergeTarget(doc, caret);
+    expect(t.kind).toBe("merge");
+    if (t.kind === "merge") expect(t.range.from).toBe(0);
+  });
+
+  it("merges when caret is on the title line of a [!quote] card", () => {
+    const doc = "> [!quote] [A](https://a)\n> first";
+    const caret = doc.indexOf("[A]");
+    expect(resolveMergeTarget(doc, caret).kind).toBe("merge");
+  });
+
+  it("merges when caret is in blank lines immediately after a card", () => {
+    const doc = "> [!quote] [A](https://a)\n> first\n\n\n";
+    const caret = doc.length;
+    const t = resolveMergeTarget(doc, caret);
+    expect(t.kind).toBe("merge");
+    if (t.kind === "merge") expect(doc.slice(t.range.from, t.range.to)).toContain("first");
+  });
+
+  it("does not merge when a non-quote block sits between the card and caret", () => {
+    const doc = "> [!quote] [A](https://a)\n> first\n\nplain paragraph\n\n";
+    const caret = doc.length;
+    expect(resolveMergeTarget(doc, caret).kind).toBe("new");
+  });
+
+  it("does not merge when the preceding block is a plain blockquote", () => {
+    const doc = "> plain\n> text\n\n";
+    const caret = doc.length;
+    expect(resolveMergeTarget(doc, caret).kind).toBe("new");
+  });
+
+  it("new card when caret is in an empty doc", () => {
+    expect(resolveMergeTarget("", 0).kind).toBe("new");
+  });
+
+  it("caret == 0 on a card is the inside case (merge)", () => {
+    const doc = "> [!quote] [A](https://a)\n> first";
+    const caret = 0;
+    // caret == 0 is inside the card (from == 0), so this is the inside case.
+    expect(resolveMergeTarget(doc, caret).kind).toBe("merge");
   });
 });
