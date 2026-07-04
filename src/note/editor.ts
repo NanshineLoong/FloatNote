@@ -5,6 +5,7 @@ import type { Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { livePreview } from "./preview";
+import { htmlPasteHandler } from "./paste";
 
 const highlight = HighlightStyle.define([
   { tag: tags.heading, fontWeight: "600" },
@@ -50,6 +51,7 @@ export function createEditor(
       markdown(),
       syntaxHighlighting(highlight),
       ...livePreview(),
+      htmlPasteHandler(),
       buildTheme(opts.grow ?? false),
       EditorView.lineWrapping,
       ...extras,
