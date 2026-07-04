@@ -6,6 +6,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { mountAssistant, type AssistantHandle } from "../assistant/assistant";
 import { agentSend, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
 import { buildCaretInsert } from "./append";
+import { buildQuoteBlock, mergeQuoteBlock, resolveMergeTarget, type Source } from "./quote";
 import { placeholder } from "@codemirror/view";
 import { createEditor, insertAtCaret, requestEditorLayout, setDoc } from "./editor";
 import { blockHandleGutter } from "./blocks/handle-gutter";
@@ -518,12 +519,27 @@ async function init() {
 
 void init();
 
-void listen<string>("quote-captured", (event) => {
-  const from = editor.state.selection.main.from;
-  const before = editor.state.doc.sliceString(0, from);
-  const after = editor.state.doc.sliceString(from);
-  const insert = buildCaretInsert(before, after, event.payload);
-  insertAtCaret(editor, insert);
+type QuotePayload = { text: string; source: Source | null };
+
+void listen<QuotePayload>("quote-captured", (event) => {
+  const { text, source } = event.payload;
+  const doc = editor.state.doc.toString();
+  const caret = editor.state.selection.main.from;
+  const target = resolveMergeTarget(doc, caret);
+  if (target.kind === "merge") {
+    const existing = doc.slice(target.range.from, target.range.to);
+    const merged = mergeQuoteBlock(existing, text, source);
+    editor.dispatch({
+      changes: { from: target.range.from, to: target.range.to, insert: merged },
+      selection: { anchor: target.range.from + merged.length },
+      scrollIntoView: true,
+    });
+  } else {
+    const before = doc.slice(0, caret);
+    const after = doc.slice(caret);
+    const insert = buildCaretInsert(before, after, buildQuoteBlock(text, source));
+    insertAtCaret(editor, insert);
+  }
   editor.focus();
 });
 
