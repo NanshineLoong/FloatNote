@@ -6,7 +6,6 @@ mod cursor;
 mod notes;
 mod popup;
 mod project;
-mod quote;
 mod shortcuts;
 mod source;
 mod tray;
