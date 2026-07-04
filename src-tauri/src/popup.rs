@@ -5,9 +5,11 @@ use std::sync::Mutex;
 
 /// Holds the text + source captured by `run_popup_capture` until the user
 /// clicks 「加入采集区」 (submit) or cancels. Single-slot cache: a new capture
-/// overwrites any pending one.
+/// overwrites any pending one. `html` carries the clipboard's `text/html`
+/// flavor so formatting survives the round-trip to the note window.
 pub struct PopupCache {
     text: Mutex<Option<String>>,
+    html: Mutex<Option<String>>,
     source: Mutex<Option<crate::source::Source>>,
 }
 
@@ -15,24 +17,34 @@ impl PopupCache {
     pub fn new() -> Self {
         Self {
             text: Mutex::new(None),
+            html: Mutex::new(None),
             source: Mutex::new(None),
         }
     }
 
-    pub fn set(&self, text: String, source: Option<crate::source::Source>) {
+    pub fn set(
+        &self,
+        text: String,
+        html: Option<String>,
+        source: Option<crate::source::Source>,
+    ) {
         *self.text.lock().unwrap() = Some(text);
+        *self.html.lock().unwrap() = html;
         *self.source.lock().unwrap() = source;
     }
 
-    /// Take the cached (text, source), clearing both slots. Returns None if no text.
-    pub fn take(&self) -> Option<(String, Option<crate::source::Source>)> {
+    /// Take the cached (text, html, source), clearing all slots. Returns None
+    /// if no text.
+    pub fn take(&self) -> Option<(String, Option<String>, Option<crate::source::Source>)> {
         let text = self.text.lock().unwrap().take();
+        let html = self.html.lock().unwrap().take();
         let source = self.source.lock().unwrap().take();
-        text.map(|t| (t, source))
+        text.map(|t| (t, html, source))
     }
 
     pub fn clear(&self) {
         *self.text.lock().unwrap() = None;
+        *self.html.lock().unwrap() = None;
         *self.source.lock().unwrap() = None;
     }
 }
@@ -56,16 +68,17 @@ pub struct PopupPayload {
     pub has_text: bool,
 }
 
-/// User clicked 「加入采集区」: forward the cached {text, source} to the note
-/// window exactly as the direct-capture path does.
+/// User clicked 「加入采集区」: forward the cached {text, html, source} to the
+/// note window exactly as the direct-capture path does.
 #[tauri::command]
 pub fn submit_popup_capture(state: State<AppState>, app: AppHandle) -> Result<(), String> {
-    let (text, source) = match state.popup_cache.take() {
-        Some((t, s)) if !t.trim().is_empty() => (t, s),
+    let (text, html, source) = match state.popup_cache.take() {
+        Some((t, h, s)) if !t.trim().is_empty() => (t, h, s),
         _ => return Err("没有可加入的选中文本".to_string()),
     };
     let payload = crate::source::QuotePayload {
         text: text.trim().to_string(),
+        html,
         source,
     };
     app.emit_to("main", "quote-captured", payload)
@@ -108,12 +121,12 @@ pub fn run_popup_capture(app: &AppHandle) {
         return;
     }
 
-    let text = crate::capture::read_selection_text(); // Option<String>
-    let has_text = text.is_some();
-    if let Some(ref t) = text {
+    let captured = crate::capture::read_selection(); // Option<CapturedContent>
+    let has_text = captured.is_some();
+    if let Some(ref c) = captured {
         // Source app is still frontmost here (popup window is shown only below).
         let source = crate::source::capture_source();
-        state_set(app, t.clone(), source);
+        state_set(app, c.text.clone(), c.html.clone(), source);
     }
 
     let (x, y) = crate::cursor::get_cursor_pos().unwrap_or((0.0, 0.0));
@@ -122,10 +135,15 @@ pub fn run_popup_capture(app: &AppHandle) {
     let _ = app.emit_to("selection-popup", "popup-payload", payload);
 }
 
-/// Helper: stash the captured text + source into the managed AppState.
-fn state_set(app: &AppHandle, text: String, source: Option<crate::source::Source>) {
+/// Helper: stash the captured text + html + source into the managed AppState.
+fn state_set(
+    app: &AppHandle,
+    text: String,
+    html: Option<String>,
+    source: Option<crate::source::Source>,
+) {
     if let Some(state) = app.try_state::<AppState>() {
-        state.popup_cache.set(text, source);
+        state.popup_cache.set(text, html, source);
     }
 }
 
@@ -142,9 +160,10 @@ mod tests {
     #[test]
     fn set_then_take_roundtrips() {
         let cache = PopupCache::new();
-        cache.set("hello".to_string(), None);
-        let (t, s) = cache.take().unwrap();
+        cache.set("hello".to_string(), None, None);
+        let (t, h, s) = cache.take().unwrap();
         assert_eq!(t, "hello");
+        assert!(h.is_none());
         assert!(s.is_none());
         // take clears the slot
         assert!(cache.take().is_none());
@@ -153,15 +172,17 @@ mod tests {
     #[test]
     fn set_overwrites_previous() {
         let cache = PopupCache::new();
-        cache.set("a".to_string(), None);
-        cache.set("b".to_string(), None);
-        assert_eq!(cache.take().unwrap().0, "b");
+        cache.set("a".to_string(), None, None);
+        cache.set("b".to_string(), Some("<b>x</b>".to_string()), None);
+        let (t, h, _s) = cache.take().unwrap();
+        assert_eq!(t, "b");
+        assert_eq!(h.as_deref(), Some("<b>x</b>"));
     }
 
     #[test]
     fn clear_drops_pending() {
         let cache = PopupCache::new();
-        cache.set("x".to_string(), None);
+        cache.set("x".to_string(), None, None);
         cache.clear();
         assert!(cache.take().is_none());
     }

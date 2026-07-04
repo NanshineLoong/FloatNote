@@ -7,6 +7,7 @@ import { mountAssistant, type AssistantHandle } from "../assistant/assistant";
 import { agentSend, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
 import { buildCaretInsert } from "./append";
 import { buildQuoteBlock, mergeQuoteBlock, resolveMergeTarget, type Source } from "./quote";
+import { htmlToMarkdown } from "./paste";
 import { placeholder } from "@codemirror/view";
 import { createEditor, insertAtCaret, requestEditorLayout, setDoc } from "./editor";
 import { blockHandleGutter } from "./blocks/handle-gutter";
@@ -519,16 +520,19 @@ async function init() {
 
 void init();
 
-type QuotePayload = { text: string; source: Source | null };
+type QuotePayload = { text: string; html: string | null; source: Source | null };
 
 void listen<QuotePayload>("quote-captured", (event) => {
-  const { text, source } = event.payload;
+  const { text, html, source } = event.payload;
+  // 采集的选区可能带 `text/html`（浏览器、富文本编辑器）；有就转成 Markdown，
+  // 让列表/表格/加粗在 quote 块里保留格式。转换为空（或纯文本源）时退回 text。
+  const body = (html && htmlToMarkdown(html)) || text;
   const doc = editor.state.doc.toString();
   const caret = editor.state.selection.main.from;
   const target = resolveMergeTarget(doc, caret);
   if (target.kind === "merge") {
     const existing = doc.slice(target.range.from, target.range.to);
-    const merged = mergeQuoteBlock(existing, text, source);
+    const merged = mergeQuoteBlock(existing, body, source);
     editor.dispatch({
       changes: { from: target.range.from, to: target.range.to, insert: merged },
       selection: { anchor: target.range.from + merged.length },
@@ -537,7 +541,7 @@ void listen<QuotePayload>("quote-captured", (event) => {
   } else {
     const before = doc.slice(0, caret);
     const after = doc.slice(caret);
-    const insert = buildCaretInsert(before, after, buildQuoteBlock(text, source));
+    const insert = buildCaretInsert(before, after, buildQuoteBlock(body, source));
     insertAtCaret(editor, insert);
   }
   editor.focus();

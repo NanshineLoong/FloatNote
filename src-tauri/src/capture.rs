@@ -59,12 +59,16 @@ pub fn run_capture(app: &AppHandle) {
 
     log_line("fired");
 
-    let Some(trimmed) = read_selection_text() else {
+    let Some(captured) = read_selection() else {
         return;
     };
 
     let source = crate::source::capture_source();
-    let payload = crate::source::QuotePayload { text: trimmed, source };
+    let payload = crate::source::QuotePayload {
+        text: captured.text,
+        html: captured.html,
+        source,
+    };
     let _ = app.emit_to("main", "quote-captured", payload);
 
     if let Some(window) = crate::windows::note_window(app) {
@@ -96,9 +100,21 @@ pub fn check_accessibility(app: &AppHandle) -> bool {
     true
 }
 
+/// What `read_selection` pulled off the clipboard after simulating Cmd+C.
+/// `html` is the `text/html` flavor when the source app wrote one (browsers,
+/// rich-text editors); `None` for plain-text-only sources (Terminal, etc.).
+pub struct CapturedContent {
+    pub text: String,
+    pub html: Option<String>,
+}
+
 /// Backup clipboard, simulate Cmd+C, read the new clipboard content, restore.
-/// Returns the trimmed selection text, or None if empty or on failure.
-pub fn read_selection_text() -> Option<String> {
+/// Returns the trimmed selection text plus any HTML flavor the source wrote,
+/// or None if the selection was empty or capture failed. Restoring the
+/// clipboard is text-only today (a pre-existing limitation: an HTML flavor
+/// originally on the clipboard is replaced by its plain-text backup). Restoring
+/// HTML too is tracked as a follow-up.
+pub fn read_selection() -> Option<CapturedContent> {
     let mut clipboard = match arboard::Clipboard::new() {
         Ok(c) => c,
         Err(error) => {
@@ -118,8 +134,21 @@ pub fn read_selection_text() -> Option<String> {
     }
 
     std::thread::sleep(std::time::Duration::from_millis(150));
-    let selection = clipboard.get_text().unwrap_or_default();
-    log_line(&format!("selection len = {}", selection.len()));
+    let text = clipboard.get_text().unwrap_or_default();
+    // Read the HTML flavor too so the frontend can preserve list/table/bold
+    // formatting when converting to Markdown. `get().html()` errors when no
+    // HTML flavor is present (plain-text sources) — that's the common, benign
+    // case, so we just drop to None.
+    let html = clipboard
+        .get()
+        .html()
+        .ok()
+        .filter(|h| !h.trim().is_empty());
+    log_line(&format!(
+        "selection len = {} html = {}",
+        text.len(),
+        html.is_some()
+    ));
 
     match backup {
         Some(text) => {
@@ -130,12 +159,12 @@ pub fn read_selection_text() -> Option<String> {
         }
     }
 
-    let trimmed = selection.trim().to_string();
+    let trimmed = text.trim().to_string();
     if trimmed.is_empty() {
         log_line("empty selection, ignoring");
         None
     } else {
-        Some(trimmed)
+        Some(CapturedContent { text: trimmed, html })
     }
 }
 

@@ -26,11 +26,14 @@ pub struct Source {
 }
 
 /// Payload emitted on the `quote-captured` event. `source` is null only if even
-/// the frontmost app name could not be obtained.
+/// the frontmost app name could not be obtained. `html` is the clipboard's
+/// `text/html` flavor when the source app wrote one (lets the frontend preserve
+/// list/table/bold formatting); null for plain-text-only sources.
 #[derive(serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct QuotePayload {
     pub text: String,
+    pub html: Option<String>,
     pub source: Option<Source>,
 }
 
@@ -160,6 +163,7 @@ mod tests {
     fn payload_serializes_camel_case() {
         let p = QuotePayload {
             text: "hi".into(),
+            html: None,
             source: Some(Source {
                 kind: SourceKind::Web,
                 title: "GitHub".into(),
@@ -169,7 +173,7 @@ mod tests {
         let json = serde_json::to_string(&p).unwrap();
         assert_eq!(
             json,
-            "{\"text\":\"hi\",\"source\":{\"kind\":\"web\",\"title\":\"GitHub\",\"url\":\"https://github.com\"}}"
+            "{\"text\":\"hi\",\"html\":null,\"source\":{\"kind\":\"web\",\"title\":\"GitHub\",\"url\":\"https://github.com\"}}"
         );
     }
 
@@ -177,9 +181,24 @@ mod tests {
     fn payload_null_source_serializes_null() {
         let p = QuotePayload {
             text: "hi".into(),
+            html: None,
             source: None,
         };
         let json = serde_json::to_string(&p).unwrap();
-        assert_eq!(json, "{\"text\":\"hi\",\"source\":null}");
+        assert_eq!(json, "{\"text\":\"hi\",\"html\":null,\"source\":null}");
+    }
+
+    #[test]
+    fn payload_with_html_serializes_html() {
+        let p = QuotePayload {
+            text: "hi".into(),
+            html: Some("<ul><li>x</li></ul>".into()),
+            source: None,
+        };
+        let json = serde_json::to_string(&p).unwrap();
+        assert_eq!(
+            json,
+            "{\"text\":\"hi\",\"html\":\"<ul><li>x</li></ul>\",\"source\":null}"
+        );
     }
 }
