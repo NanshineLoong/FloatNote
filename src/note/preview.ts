@@ -9,6 +9,7 @@ import {
   type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
+import { parseChips, type Source } from "./quote";
 
 function getCursorLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
@@ -105,6 +106,40 @@ class TableWidget extends WidgetType {
   ignoreEvent() { return true; }
 }
 
+class QuoteCardWidget extends WidgetType {
+  constructor(readonly chipsStr: string) { super(); }
+  eq(o: QuoteCardWidget): boolean { return o.chipsStr === this.chipsStr; }
+  toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "cm-quote-card-chips";
+    const chips: Source[] = parseChips(this.chipsStr);
+    chips.forEach((c, i) => {
+      if (i > 0) {
+        const sep = document.createElement("span");
+        sep.className = "cm-quote-card-sep";
+        sep.textContent = "·";
+        span.appendChild(sep);
+      }
+      if (c.kind === "web" && c.url) {
+        const a = document.createElement("a");
+        a.className = "cm-quote-card-link";
+        a.href = c.url;
+        a.target = "_blank";
+        a.rel = "noreferrer";
+        a.textContent = c.title;
+        span.appendChild(a);
+      } else {
+        const s = document.createElement("span");
+        s.className = "cm-quote-card-app";
+        s.textContent = c.title;
+        span.appendChild(s);
+      }
+    });
+    return span;
+  }
+  ignoreEvent() { return false; }
+}
+
 function buildDecorations(view: EditorView): DecorationSet {
   const cursorLines = getCursorLines(view);
   const entries: Array<{ from: number; to: number; deco: Decoration }> = [];
@@ -114,6 +149,31 @@ function buildDecorations(view: EditorView): DecorationSet {
   const onCursorLine = (pos: number) => cursorLines.has(doc.lineAt(pos).number);
   const lineStart = (pos: number) => doc.lineAt(pos).from;
   const charAfter = (pos: number) => doc.sliceString(pos, pos + 1);
+
+  // First pass: collect the line numbers that belong to a `[!quote]` card so
+  // the QuoteMark handler can skip the plain-blockquote style on those lines,
+  // and so the card pass below knows each card's first/last line.
+  const cardLines = new Set<number>();
+  const cardFirstLine = new Set<number>();
+  const cardLastLine = new Map<number, number>(); // firstLine -> lastLine
+  for (let pos = view.viewport.from; pos <= view.viewport.to && pos <= doc.length; ) {
+    const line = doc.lineAt(pos);
+    const startMatch = /^(>\s*)\[!quote\]/.exec(line.text);
+    if (startMatch) {
+      cardFirstLine.add(line.number);
+      cardLines.add(line.number);
+      let end = line;
+      while (end.number < doc.lines && end.to + 1 <= doc.length &&
+        doc.lineAt(end.to + 1).text.startsWith(">")) {
+        end = doc.lineAt(end.to + 1);
+        cardLines.add(end.number);
+      }
+      cardLastLine.set(line.number, end.number);
+      pos = end.to + 1;
+    } else {
+      pos = line.to + 1;
+    }
+  }
 
   syntaxTree(view.state).iterate({
     from: view.viewport.from,
@@ -172,11 +232,15 @@ function buildDecorations(view: EditorView): DecorationSet {
           let end = node.to;
           if (charAfter(end) === " ") end++;
           entries.push({ from: node.from, to: end, deco: hide });
-          entries.push({
-            from: lineStart(node.from),
-            to: lineStart(node.from),
-            deco: Decoration.line({ class: "cm-preview-blockquote" }),
-          });
+          // Card lines get the card frame classes (added in the card pass below),
+          // so skip the plain-blockquote line style for them.
+          if (!cardLines.has(doc.lineAt(node.from).number)) {
+            entries.push({
+              from: lineStart(node.from),
+              to: lineStart(node.from),
+              deco: Decoration.line({ class: "cm-preview-blockquote" }),
+            });
+          }
           return false;
         }
 
@@ -263,6 +327,56 @@ function buildDecorations(view: EditorView): DecorationSet {
       entries.push({ from: start, to: start + m[2].length, deco: hide });
     }
     pos = line.to + 1;
+  }
+
+  // `[!quote]` card frame + chip-row title widget. For every line of a card,
+  // apply the card line background + left accent; first/last lines get rounded
+  // corners. On the (non-cursor) title line, replace the chips portion with a
+  // chip-row widget. The `> ` prefix is hidden by QuoteMark and the `[!quote] `
+  // type marker is hidden by the callout-marker loop above, so the widget only
+  // needs to cover the chips text itself — three adjacent, non-overlapping ranges.
+  for (const firstLine of cardFirstLine) {
+    const lastLine = cardLastLine.get(firstLine) ?? firstLine;
+    for (let l = firstLine; l <= lastLine; l++) {
+      const cl = doc.line(l);
+      if (l < view.viewport.from || l > view.viewport.to) continue;
+      entries.push({
+        from: cl.from,
+        to: cl.from,
+        deco: Decoration.line({ class: "cm-quote-card-line" }),
+      });
+      if (l === firstLine) {
+        entries.push({
+          from: cl.from,
+          to: cl.from,
+          deco: Decoration.line({ class: "cm-quote-card-first" }),
+        });
+      }
+      if (l === lastLine) {
+        entries.push({
+          from: cl.from,
+          to: cl.from,
+          deco: Decoration.line({ class: "cm-quote-card-last" }),
+        });
+      }
+    }
+
+    // Title-line chip widget (skip cursor line so the raw marker stays editable).
+    // m[1] = `> [!quote] ` (quote marker + type + optional space) — exactly the
+    // text already hidden by QuoteMark + the callout-marker loop. m[2] = chips.
+    const titleLine = doc.line(firstLine);
+    if (titleLine.from >= view.viewport.from && titleLine.to <= view.viewport.to &&
+        !cursorLines.has(firstLine)) {
+      const m = /^(>\s*\[!quote\]\s?)(.*)$/.exec(titleLine.text);
+      if (m) {
+        const chipStart = titleLine.from + m[1].length;
+        entries.push({
+          from: chipStart,
+          to: titleLine.to,
+          deco: Decoration.replace({ widget: new QuoteCardWidget(m[2]) }),
+        });
+      }
+    }
   }
 
   entries.sort((a, b) => a.from !== b.from ? a.from - b.from : a.to - b.to);

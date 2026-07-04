@@ -1182,3 +1182,60 @@ input {
   .tasks-input { background: #1e1e1e; color: #e5e7eb; border-color: rgba(255, 255, 255, 0.14); }
   .tasks-del:hover { background: rgba(239, 68, 68, 0.22); }
 }
+
+/* ── Quote card (`> [!quote]`) ──────────────────────────────────────────── */
+.cm-quote-card-line {
+  background: #f5f5f4;
+  border-left: 3px solid #c7c7c5;
+  padding-left: 10px;
+}
+.cm-quote-card-first {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+.cm-quote-card-last {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+.cm-quote-card-chips {
+  font-size: 12px;
+  color: #6b7280;
+}
+.cm-quote-card-sep {
+  margin: 0 4px;
+  color: #9ca3af;
+}
+.cm-quote-card-app {
+  color: #6b7280;
+}
+.cm-quote-card-link {
+  color: #2563eb;
+  text-decoration: none;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: bottom;
+  transition: opacity 150ms ease;
+}
+.cm-quote-card-link:hover {
+  opacity: 0.7;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cm-quote-card-line {
+    background: #2a2a29;
+    border-left-color: #4a4a4a;
+  }
+  .cm-quote-card-chips,
+  .cm-quote-card-app {
+    color: #9ca3af;
+  }
+  .cm-quote-card-sep {
+    color: #6b7280;
+  }
+  .cm-quote-card-link {
+    color: #60a5fa;
+  }
+}
