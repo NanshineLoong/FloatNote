@@ -8,10 +8,21 @@
   <body>
     <div id="popup" class="popup-root" hidden>
       <div id="popup-empty" class="popup-empty" hidden>未识别到选中文本</div>
-      <div id="popup-actions" class="popup-actions">
-        <button id="btn-capture" class="popup-btn popup-btn-primary" type="button">加入采集区</button>
-        <button id="btn-translate" class="popup-btn popup-btn-ghost" type="button" disabled>翻译</button>
-        <button id="btn-ask" class="popup-btn popup-btn-ghost" type="button" disabled>提问</button>
+      <div id="popup-actions" class="popup-bar" role="toolbar">
+        <button id="btn-capture" class="popup-btn popup-btn-primary" type="button">
+          <i class="ph ph-quotes popup-btn-icon" aria-hidden="true"></i>
+          <span class="popup-btn-label">采集</span>
+        </button>
+        <span class="popup-divider" aria-hidden="true"></span>
+        <button id="btn-translate" class="popup-btn popup-btn-ghost" type="button" disabled>
+          <i class="ph ph-translate popup-btn-icon" aria-hidden="true"></i>
+          <span class="popup-btn-label">翻译</span>
+        </button>
+        <span class="popup-divider" aria-hidden="true"></span>
+        <button id="btn-ask" class="popup-btn popup-btn-ghost" type="button" disabled>
+          <i class="ph ph-question popup-btn-icon" aria-hidden="true"></i>
+          <span class="popup-btn-label">提问</span>
+        </button>
       </div>
     </div>
     <script type="module" src="/src/popup/main.ts"></script>

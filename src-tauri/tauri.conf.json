@@ -37,8 +37,8 @@
       {
         "label": "selection-popup",
         "url": "popup.html",
-        "width": 208,
-        "height": 56,
+        "width": 256,
+        "height": 46,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,

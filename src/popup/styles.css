@@ -1,13 +1,32 @@
+/* ── Selection popup: solid pill bar ──────────────────────────────────────
+   Solid (non-transparent) surface so the bar never "disappears" over certain
+   backgrounds — backdrop-filter on a transparent window samples unevenly.
+   Icons are Phosphor (the same set the rest of the app uses), so the popup
+   reads as part of FloatNote, not a foreign control. */
+
 :root {
-  --popup-bg: rgba(32, 32, 36, 0.96);
-  --popup-text: #f5f5f5;
-  --popup-primary: #4c8dff;
-  --popup-ghost-border: rgba(255, 255, 255, 0.18);
-  --popup-ghost-text: rgba(255, 255, 255, 0.55);
+  /* light */
+  --popup-bg: #fbfbfa;
+  --popup-border: rgba(0, 0, 0, 0.1);
+  --popup-shadow: 0 6px 20px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+  --popup-text: #1f1f1f;
+  --popup-muted: #6b7280;
+  --popup-divider: rgba(0, 0, 0, 0.09);
+  --popup-accent: #2563eb;
+  --popup-accent-fill: rgba(37, 99, 235, 0.12);
+  --popup-hover: rgba(0, 0, 0, 0.05);
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Author `display` rules (e.g. .popup-empty { display: flex }) would override
+   the UA `[hidden] { display: none }` and leave "hidden" elements visible —
+   which is exactly how the empty-state message was leaking next to the bar.
+   Force [hidden] to win so the attribute always hides. */
+[hidden] {
+  display: none !important;
 }
 
 html,
@@ -15,10 +34,12 @@ body {
   margin: 0;
   padding: 0;
   background: transparent;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   font-size: 13px;
+  line-height: 1;
   overflow: hidden;
   user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 .popup-root {
@@ -26,56 +47,124 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  padding: 6px 8px;
+  padding: 4px;
 }
 
-.popup-actions {
+/* ── Pill ── */
+.popup-bar,
+.popup-empty {
   display: flex;
-  gap: 6px;
-  background: var(--popup-bg);
-  padding: 6px;
+  align-items: center;
+  gap: 0;
+  padding: 5px;
+  border: 1px solid var(--popup-border);
   border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(8px);
+  background: var(--popup-bg);
+  box-shadow: var(--popup-shadow);
+  /* Enter motion: lifted from .assistant-scroll's easing. */
+  transform: translateY(4px) scale(0.98);
+  transform-origin: center bottom;
+  opacity: 0;
+  transition:
+    opacity 0.16s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .popup-empty {
-  background: var(--popup-bg);
-  color: var(--popup-ghost-text);
   padding: 8px 14px;
+  color: var(--popup-muted);
+  font-size: 13px;
   border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
 
+/* Visible state — toggled by the .is-visible class on .popup-root after the
+   window is shown (transitioning out of [hidden] is unreliable in WebKit). */
+.popup-root.is-visible .popup-bar,
+.popup-root.is-visible .popup-empty {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* ── Buttons ── */
 .popup-btn {
-  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
   border: none;
   border-radius: 7px;
-  padding: 5px 12px;
-  font-size: 13px;
+  background: transparent;
+  color: var(--popup-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+/* Phosphor icon (font glyph) — sized via font-size. */
+.popup-btn-icon {
+  font-size: 17px;
+  line-height: 1;
+  display: inline-block;
+}
+
+.popup-btn-label {
+  line-height: 1;
+}
+
+/* Primary: blue accent text + tinted fill on hover/active (matches .icon-btn.on). */
+.popup-btn-primary {
+  color: var(--popup-accent);
+}
+
+.popup-btn-primary:not(:disabled):hover {
+  background: var(--popup-accent-fill);
+}
+
+.popup-btn-primary:not(:disabled):active {
+  background: rgba(37, 99, 235, 0.18);
+}
+
+/* Ghost: neutral, subtle hover fill (matches .topbar button / .icon-btn). */
+.popup-btn-ghost:not(:disabled):hover {
+  background: var(--popup-hover);
 }
 
 .popup-btn:disabled {
+  opacity: 0.4;
   cursor: default;
 }
 
-.popup-btn-primary {
-  background: var(--popup-primary);
-  color: #fff;
+/* ── Dividers between buttons ── */
+.popup-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 0;
+  background: var(--popup-divider);
+  flex: 0 0 auto;
 }
 
-.popup-btn-primary:disabled {
-  opacity: 0.45;
+@media (prefers-reduced-motion: reduce) {
+  .popup-bar,
+  .popup-empty {
+    transition: none;
+    transform: none;
+  }
 }
 
-.popup-btn-ghost {
-  background: transparent;
-  color: var(--popup-ghost-text);
-  border: 1px solid var(--popup-ghost-border);
-}
-
-.popup-btn-ghost:disabled {
-  opacity: 0.5;
+/* ── Dark ── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --popup-bg: #2c2c2c;
+    --popup-border: rgba(255, 255, 255, 0.12);
+    --popup-shadow: 0 8px 24px rgba(0, 0, 0, 0.42), 0 1px 3px rgba(0, 0, 0, 0.3);
+    --popup-text: #ececec;
+    --popup-muted: #9ca3af;
+    --popup-divider: rgba(255, 255, 255, 0.1);
+    --popup-accent: #60a5fa;
+    --popup-accent-fill: rgba(96, 165, 250, 0.18);
+    --popup-hover: rgba(255, 255, 255, 0.08);
+  }
 }

@@ -1,11 +1,12 @@
+import "@phosphor-icons/web/regular";
 import "./styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalPosition, currentMonitor } from "@tauri-apps/api/window";
 import { clampToScreen, type Rect } from "./clamp";
 
-const POPUP_W = 208;
-const POPUP_H = 56;
+const POPUP_W = 256;
+const POPUP_H = 46;
 
 interface PopupPayload {
   x: number;
@@ -29,6 +30,7 @@ function clearHideTimer(): void {
 
 async function dismiss(): Promise<void> {
   clearHideTimer();
+  root.classList.remove("is-visible");
   try {
     await invoke("dismiss_popup");
   } catch {
@@ -81,9 +83,15 @@ async function showAt(x: number, y: number, hasText: boolean): Promise<void> {
   const win = getCurrentWindow();
   await win.setPosition(new LogicalPosition(cx, cy));
   renderState(hasText);
+  // Reset to base state, reveal, then animate in on the next frame so the
+  // enter transition reliably fires (WebKit won't transition out of [hidden]).
+  root.classList.remove("is-visible");
   root.hidden = false;
   await win.show();
   await win.setFocus();
+  requestAnimationFrame(() => {
+    root.classList.add("is-visible");
+  });
 }
 
 async function onSubmit(): Promise<void> {
