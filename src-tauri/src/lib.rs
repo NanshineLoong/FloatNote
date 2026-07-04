@@ -8,6 +8,7 @@ mod popup;
 mod project;
 mod quote;
 mod shortcuts;
+mod source;
 mod tray;
 mod versions;
 mod watcher;
