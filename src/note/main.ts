@@ -233,6 +233,11 @@ function mountPieceHeader() {
       applyingRemote = false;
     },
     onDelete: () => deleteCurrentDocument(),
+    focusBody: () => {
+      // 标题回车后，焦点落到正文编辑器首行行首。
+      pieceEditor.focus();
+      pieceEditor.dispatch({ selection: { anchor: 0, head: 0 } });
+    },
   });
 }
 

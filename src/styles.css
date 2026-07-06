@@ -249,7 +249,10 @@ input {
 
 .topbar {
   position: relative;
-  display: flex;
+  display: grid;
+  /* 三列等宽：左项目名 / 中滑拨 / 右行动。中间 auto 永不被挤，
+     左右 minmax(0,1fr) 长名时在各自列内省略，绝不侵入中间造成重叠。 */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   min-height: 40px;
   padding: 4px 12px;
@@ -264,6 +267,10 @@ input {
   display: flex;
   align-items: center;
   gap: 4px;
+  /* 拉满左列单元，给内部按钮一个确定的宽度上限参照，
+     否则按钮按内容长出去会溢到中间滑拨列下。 */
+  justify-self: stretch;
+  min-width: 0;
 }
 
 .topbar button {
@@ -282,10 +289,14 @@ input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 作为 flex 项需要 min-width:0 才肯收缩并出现省略号，否则默认 auto 撑开。 */
+  min-width: 0;
 }
 
 .topbar .project-name {
-  max-width: 220px;
+  /* 宽窗封顶 220px 保持紧凑；窄窗不超过左列宽度，二者取小。 */
+  max-width: min(220px, 100%);
+  min-width: 0;
   font-weight: 500;
 }
 
@@ -844,9 +855,7 @@ input {
    .seg-track 为凹槽，三枚 .seg-btn 为可点标签，.seg-knob 为嵌在凹槽里的
    胶囊钮（带当前段名字），由 --idx (0..2) 驱动位置，松开点击后由 transition 滑过去。 */
 .view-seg {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  justify-self: center;
   display: inline-flex;
 }
 
@@ -1079,12 +1088,15 @@ input {
   white-space: nowrap;
 }
 
-/* 标题 = 文件名，直接可编辑的大号文本框；宽度由 input.size 跟随内容自适应。 */
+/* 标题 = 文件名，直接可编辑的大号文本区；长标题自然软包折行，
+   紧接正文、共用 #piece-scroll 滚动。value 永远单行（回车=提交），折行仅视觉。 */
 .piece-title-input {
-  flex: 0 1 auto;
+  display: block;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
   padding: 0;
+  margin: 0;
   border: none;
   background: transparent;
   color: #1a1a18;
@@ -1094,6 +1106,13 @@ input {
   line-height: 1.3;
   outline: none;
   cursor: text;
+  resize: none;
+  overflow: hidden;
+  /* 软包：长标题在容器内折行，不出现横向滚动。 */
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* 由 JS 按 scrollHeight 撑高，textarea 不自带内容增高。 */
+  height: auto;
 }
 
 .piece-title-input::placeholder {

@@ -24,6 +24,8 @@ export interface PieceHeaderHost {
   restore: (v: number) => Promise<void>;
   /** 删除当前装载的文件（文档模式下由标题栏垃圾桶触发）。 */
   onDelete: () => void;
+  /** 回车提交标题后，焦点跳到正文编辑器首行。 */
+  focusBody: () => void;
 }
 
 /**
@@ -74,17 +76,29 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
   crumbRow.appendChild(versionBtn);
   crumbRow.appendChild(trashBtn);
 
-  // 标题即可编辑文本框：键入像写 Notion 标题，失焦/回车提交重命名。
-  const title = document.createElement("input");
+  // 标题即可编辑文本区：长标题自然软包折行，回车提交重命名并跳到正文。
+  // value 永远单行（回车不写入换行符），折行只是视觉呈现。
+  const title = document.createElement("textarea");
   title.className = "piece-title-input";
+  title.rows = 1;
   title.spellcheck = false;
   title.setAttribute("aria-label", "成品标题（即文件名）");
+  // textarea 默认能输入换行；标题=文件名不允许换行符，统一拦掉。
+  title.setAttribute("wrap", "soft");
 
   mount.appendChild(crumbRow);
   mount.appendChild(title);
 
   function fit() {
-    title.size = Math.max(title.value.length + 1, 3);
+    // 粘贴 / IME 可能带入换行符；标题=文件名永远是单行，落到 value 前先剔掉。
+    if (title.value.includes("\n")) {
+      const pos = Math.min(title.selectionStart ?? title.value.length, title.value.length);
+      title.value = title.value.replace(/\n/g, "");
+      title.selectionStart = title.selectionEnd = Math.min(pos, title.value.length);
+    }
+    // 软包折行后按内容高度撑高，不出现内部滚动条。
+    title.style.height = "auto";
+    title.style.height = `${title.scrollHeight}px`;
   }
 
   function setLabel(name: string) {
@@ -95,10 +109,15 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
   }
 
   title.addEventListener("input", fit);
+  // 窗口变窄 → 软包行数变多，按内容重撑高，避免高度停留在旧值被裁掉。
+  const ro = new ResizeObserver(() => fit());
+  ro.observe(title);
   title.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
+      // 回车=提交重命名并跳到正文；Shift+Enter 同样不换行（标题永远单行 value）。
       e.preventDefault();
       title.blur();
+      host.focusBody();
     }
     if (e.key === "Escape") {
       e.preventDefault();
