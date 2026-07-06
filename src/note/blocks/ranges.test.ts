@@ -43,6 +43,29 @@ describe("blockRanges", () => {
     const ranges = blockRanges(text);
     expect(ranges.map((r) => text.slice(r.from, r.to))).toEqual(["alpha", "beta"]);
   });
+
+  it("skips the line-1 floatnote defs comment (no handle, not a block)", () => {
+    const text = '<!-- floatnote-tags: concept="概念"|c=#e5484d -->\nalpha\n\nbeta';
+    const ranges = blockRanges(text);
+    expect(ranges.map((r) => text.slice(r.from, r.to))).toEqual(["alpha", "beta"]);
+  });
+
+  it("a trailing floatnote marker stays inside its block (r.to past the marker)", () => {
+    const text = "alpha<!-- floatnote:tag=concept -->\n\nbeta";
+    const ranges = blockRanges(text);
+    expect(ranges).toHaveLength(2);
+    expect(text.slice(ranges[0].from, ranges[0].to)).toBe(
+      "alpha<!-- floatnote:tag=concept -->",
+    );
+    expect(text.slice(ranges[1].from, ranges[1].to)).toBe("beta");
+  });
+
+  it("a tagged callout stays one block with its trailing marker", () => {
+    const text = "> [!quote] chip\n> body<!-- floatnote:tag=concept -->";
+    const ranges = blockRanges(text);
+    expect(ranges).toHaveLength(1);
+    expect(text.slice(ranges[0].from, ranges[0].to)).toBe(text);
+  });
 });
 
 describe("moveBlockChanges", () => {

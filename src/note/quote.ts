@@ -43,10 +43,13 @@ function hasChip(existing: Source[], source: Source): boolean {
 }
 
 /** Parse the chip portion of a title line (text after `> [!quote] `).
- *  Splits on ` · `; `[text](url)` -> web, else app. Lenient on malformed input. */
+ *  Splits on ` · `; `[text](url)` -> web, else app. Lenient on malformed input.
+ *  Strips any floatnote tag marker first so a single-line tagged callout's
+ *  trailing marker doesn't pollute the chip string. */
 export function parseChips(chipsStr: string): Source[] {
+  const cleaned = stripTagMarker(chipsStr);
   const chips: Source[] = [];
-  for (const part of chipsStr.split(" · ")) {
+  for (const part of cleaned.split(" · ")) {
     const trimmed = part.trim();
     if (!trimmed) continue;
     const m = /^\[(.*)\]\((.*)\)$/.exec(trimmed);
@@ -68,13 +71,16 @@ export function buildQuoteBlock(text: string, source: Source | null): string {
 
 /** Merge `text` (and optionally a new `source` chip) into an existing `[!quote]`
  *  card block. Appends body after a `>` blank separator; adds chip if not a dup.
- *  Preserves existing body and chip order. */
+ *  Preserves existing body and chip order, and preserves the block's floatnote
+ *  tag marker: strips any existing marker from the lines, then re-appends one
+ *  on the new last line (whole-block scan means it stays findable). */
 export function mergeQuoteBlock(
   existingBlock: string,
   text: string,
   source: Source | null,
 ): string {
-  const lines = existingBlock.split("\n");
+  const tagId = blockTagId(existingBlock);
+  const lines = existingBlock.split("\n").map(stripTagMarker);
   const titleLine = lines[0] ?? "> [!quote]";
   const headerMatch = /^>\s*\[!quote\]\s?(.*)$/.exec(titleLine);
   let chips = parseChips(headerMatch ? headerMatch[1] : "");
@@ -88,7 +94,8 @@ export function mergeQuoteBlock(
     ? `${bodyLines.join("\n")}\n>\n${quoteBody(text)}`
     : quoteBody(text);
 
-  return `${newTitleLine}\n${newBody}`;
+  const suffix = tagId ? buildMarker(tagId) : "";
+  return `${newTitleLine}\n${newBody}${suffix}`;
 }
 
 /** True iff the block's first line matches `^>\s*\[!quote\]`. */
@@ -98,6 +105,7 @@ export function isQuoteCardBlock(blockText: string): boolean {
 }
 
 import { blockRanges, type BlockRange } from "./blocks/ranges";
+import { blockTagId, buildMarker, stripTagMarker } from "./tags/model";
 
 export type MergeTarget =
   | { kind: "merge"; range: BlockRange }

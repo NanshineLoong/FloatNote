@@ -41,6 +41,15 @@ export function blockRanges(text: string): BlockRange[] {
       continue;
     }
 
+    // The floatnote tag-definitions comment lives on line 1 and is hidden by
+    // the tag decoration plugin; it must not count as a block (no handle, no
+    // tint, can't be reordered/deleted). Only line 1 is special — per-block
+    // markers live inside real blocks and travel with them.
+    if (i === 0 && /^<!-- floatnote-tags:.*-->$/.test(lines[i])) {
+      i++;
+      continue;
+    }
+
     const from = lineStart[i];
 
     if (TODO_RE.test(lines[i])) {

@@ -167,3 +167,31 @@ describe("resolveMergeTarget", () => {
     expect(resolveMergeTarget(doc, caret).kind).toBe("merge");
   });
 });
+
+describe("parseChips × floatnote tag marker", () => {
+  it("strips a trailing tag marker before chip parsing", () => {
+    // single-line tagged callout: chip string would carry the marker
+    const s = app("终端");
+    expect(parseChips(sourceToChip(s) + "<!-- floatnote:tag=concept -->")).toEqual([s]);
+  });
+});
+
+describe("mergeQuoteBlock × floatnote tag marker", () => {
+  it("preserves the block's tag on the new last line after merge", () => {
+    const existing = "> [!quote] [A](https://a)\n> first<!-- floatnote:tag=concept -->";
+    const merged = mergeQuoteBlock(existing, "more", app("终端"));
+    // marker survives and is now on the (new) last line
+    expect(merged).toContain("<!-- floatnote:tag=concept -->");
+    expect(merged.endsWith("<!-- floatnote:tag=concept -->")).toBe(true);
+    // the body was appended
+    expect(merged).toContain("> more");
+    // chip dedup still works (marker did not become a chip)
+    expect(merged).toContain("[A](https://a)");
+    expect(merged).toContain("终端");
+  });
+
+  it("leaves an untagged card untagged after merge", () => {
+    const existing = "> [!quote] [A](https://a)\n> first";
+    expect(mergeQuoteBlock(existing, "more", null)).not.toContain("floatnote:tag");
+  });
+});

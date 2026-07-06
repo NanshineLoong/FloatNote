@@ -21,15 +21,27 @@ const deleteAction: BlockAction = {
   label: "删除",
   icon: "ph-trash",
   run: (view, range) => {
-    const ranges = blockRanges(view.state.doc.toString());
-    const index = ranges.findIndex((r) => r.from === range.from);
-    if (index < 0) return;
-    const changes = removeBlockChanges(ranges, index);
-    if (changes.length) view.dispatch({ changes });
+    deleteBlock(view, range);
   },
 };
 
 const ACTIONS: BlockAction[] = [deleteAction];
+
+export type BlockMenuOpener = (
+  view: EditorView,
+  range: BlockRange,
+  index: number,
+  x: number,
+  y: number,
+) => void;
+
+export function deleteBlock(view: EditorView, range: BlockRange): void {
+  const ranges = blockRanges(view.state.doc.toString());
+  const index = ranges.findIndex((r) => r.from === range.from);
+  if (index < 0) return;
+  const changes = removeBlockChanges(ranges, index);
+  if (changes.length) view.dispatch({ changes });
+}
 
 class HandleMarker extends GutterMarker {
   toDOM(): HTMLElement {
@@ -94,8 +106,14 @@ const gutterTheme = EditorView.theme({
  *
  * `ctx` lets the drag orchestrator (drag.ts) find the piece editor and split
  * state lazily, since the piece editor is created after the inbox.
+ *
+ * `customOpenMenu` lets the inbox replace the generic action menu with its
+ * contextual tag menu while this module stays tag-agnostic.
  */
-export function blockHandleGutter(ctx: DragContext): Extension {
+export function blockHandleGutter(
+  ctx: DragContext,
+  customOpenMenu?: BlockMenuOpener,
+): Extension {
   return [
     gutter({
       class: "cm-block-gutter",
@@ -109,7 +127,12 @@ export function blockHandleGutter(ctx: DragContext): Extension {
           const onTap = (e: PointerEvent) => {
             const ranges = blockRanges(view.state.doc.toString());
             const idx = ranges.findIndex((r) => r.from === line.from);
-            if (idx >= 0) openMenu(view, ranges[idx], idx, e.clientX, e.clientY);
+            if (idx < 0) return;
+            if (customOpenMenu) {
+              customOpenMenu(view, ranges[idx], idx, e.clientX, e.clientY);
+            } else {
+              openMenu(view, ranges[idx], idx, e.clientX, e.clientY);
+            }
           };
           startBlockDrag(ctx, view, line.from, event, onTap);
           return true;

@@ -10,6 +10,7 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { parseChips, type Source } from "./quote";
+import { stripTagMarker } from "./tags/model";
 
 function getCursorLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
@@ -363,17 +364,22 @@ function buildDecorations(view: EditorView): DecorationSet {
 
     // Title-line chip widget (skip cursor line so the raw marker stays editable).
     // m[1] = `> [!quote] ` (quote marker + type + optional space) — exactly the
-    // text already hidden by QuoteMark + the callout-marker loop. m[2] = chips.
+    // text already hidden by QuoteMark + the callout-marker loop. m[2] = chips,
+    // minus any trailing floatnote tag marker (stripped here so it doesn't read
+    // as a chip; the marker itself is hidden by the tag decoration plugin). The
+    // widget range ends at the chips' length so it does not overlap the marker's
+    // own hide decoration.
     const titleLine = doc.line(firstLine);
     if (titleLine.from >= view.viewport.from && titleLine.to <= view.viewport.to &&
         !cursorLines.has(firstLine)) {
       const m = /^(>\s*\[!quote\]\s?)(.*)$/.exec(titleLine.text);
       if (m) {
         const chipStart = titleLine.from + m[1].length;
+        const chipsStr = stripTagMarker(m[2]);
         entries.push({
           from: chipStart,
-          to: titleLine.to,
-          deco: Decoration.replace({ widget: new QuoteCardWidget(m[2]) }),
+          to: chipStart + chipsStr.length,
+          deco: Decoration.replace({ widget: new QuoteCardWidget(chipsStr) }),
         });
       }
     }

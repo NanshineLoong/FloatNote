@@ -67,6 +67,7 @@ input {
   position: relative;
   display: grid;
   grid-template-columns: var(--left) var(--text) var(--right);
+  grid-template-rows: auto minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -81,17 +82,24 @@ input {
 }
 
 #left-col {
+  grid-column: 1;
+  grid-row: 2;
   min-width: 0;
 }
 
 #text-col {
+  grid-column: 2;
+  grid-row: 2;
   position: relative;
   min-width: 0;
   min-height: 0;
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 #piece-col {
+  grid-row: 2;
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -118,13 +126,13 @@ input {
 
 #app.split-active #text-col {
   grid-column: 2;
-  grid-row: 1;
+  grid-row: 2;
 }
 
 #app.split-active #piece-col {
   display: flex;
   grid-column: 4;
-  grid-row: 1;
+  grid-row: 2;
 }
 
 /* 助手覆盖物：默认不显示（closed）。横向锚点恒为 --bot-x（小人坐标），inline/floating 共用，
@@ -325,7 +333,7 @@ input {
   position: relative;
   min-width: 0;
   min-height: 0;
-  height: 100%;
+  flex: 1 1 auto;
   overflow: visible;
   /* 与 body 底色一致，消除正文列与左右边距之间的接缝。 */
   background: #ffffff;
@@ -945,11 +953,15 @@ input {
   display: none;
 }
 
+#app.show-piece:not(.split-active) #tag-bar-root {
+  display: none;
+}
+
 /* 单栏显示成品：成品栏借 text-col 的网格位（col 2 / row 1）铺满。 */
 #app.show-piece:not(.split-active) #piece-col {
   display: flex;
   grid-column: 2;
-  grid-row: 1;
+  grid-row: 2;
 }
 
 /* 「行动」面板：与助手共底层 —— 横向锚点同为 --bot-x / --assist。
@@ -1237,5 +1249,339 @@ input {
   }
   .cm-quote-card-link {
     color: #60a5fa;
+  }
+}
+
+/* ── Tag system (采集区标签) ──────────────────────────────────────────────
+   二级栏在 #note-body 顶行、编辑器上方：[全部] ●●● …。块底色由 decoration
+   写入 --tag-bg/--tag-accent。规则放在 quote-card 之后，故同属一行的
+   .cm-tagged-block 会覆盖 .cm-quote-card-line 的灰底，呈现标签色卡片。 */
+#tag-bar-root {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  min-width: 0;
+}
+
+.tag-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding-top: 6px;
+  padding-right: 14px;
+  padding-bottom: 6px;
+  padding-left: 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+  -webkit-user-select: none;
+  user-select: none;
+  flex: 0 0 auto;
+  z-index: 2;
+}
+.tag-filter-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #6b7280;
+  background: none;
+  border: none;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.tag-filter-all:hover,
+.tag-filter-all.active {
+  background: rgba(0, 0, 0, 0.05);
+  color: #202124;
+}
+.tag-disc-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 2px 4px;
+}
+.tag-disc-row::-webkit-scrollbar {
+  display: none;
+}
+.tag-disc {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--c, #ccc);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.tag-filter-disc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  height: 24px;
+  min-width: 18px;
+  max-width: 154px;
+  padding: 3px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color 140ms ease, padding 140ms ease;
+}
+.tag-filter-disc:is(:hover, .active) {
+  padding-right: 9px;
+  background: color-mix(in srgb, var(--c) 14%, transparent);
+}
+.tag-filter-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--c, #ccc);
+  flex: 0 0 auto;
+}
+.tag-filter-name {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #202124;
+  opacity: 0;
+  transition: max-width 160ms ease, opacity 120ms ease;
+}
+.tag-filter-disc:is(:hover, .active) .tag-filter-name {
+  max-width: 120px;
+  opacity: 1;
+}
+.tag-readonly-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: #6b7280;
+  background: rgba(0, 0, 0, 0.04);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.tag-readonly-hint[hidden] {
+  display: none;
+}
+.tag-readonly-hint i {
+  font-size: 13px;
+}
+.tag-disc-sm {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--c, #ccc);
+  flex: 0 0 auto;
+}
+
+/* 块底色：tagged block 覆盖 quote-card 灰底（来源在后面）。 */
+.cm-tagged-block {
+  background: var(--tag-bg);
+  border-left: none;
+  padding: 2px 10px;
+}
+.cm-tagged-block-first {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+.cm-tagged-block-last {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+.cm-tagged-block-first.cm-tagged-block-last {
+  border-radius: 8px;
+}
+
+#editor-root.tag-filter-readonly .cm-content {
+  pointer-events: none;
+  caret-color: transparent;
+  cursor: default;
+}
+
+#editor-root.tag-filter-readonly .cm-block-gutter {
+  pointer-events: none;
+}
+
+#editor-root.tag-filter-readonly .cm-cursor,
+#editor-root.tag-filter-readonly .cm-dropCursor {
+  display: none;
+}
+
+/* 浮层（右键菜单 / 新建 / 选色 / picker）复用 .switch-menu，下面只补差异。 */
+.tag-floating {
+  z-index: 110;
+}
+.tag-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tag-picker-label {
+  padding: 6px 10px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+}
+.tag-picker .switch-item.active {
+  background: rgba(0, 0, 0, 0.06);
+  color: #202124;
+}
+.tag-menu-divider {
+  height: 1px;
+  margin: 5px 0;
+  background: rgba(0, 0, 0, 0.08);
+}
+.tag-context-delete {
+  color: #c5392f;
+}
+.tag-create-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 6px;
+  padding: 4px 6px 6px;
+}
+.tag-create-form .swatch-row {
+  grid-column: 1 / -1;
+  padding: 0;
+}
+.tag-create-form .tag-add-input {
+  width: 132px;
+  margin: 0;
+}
+.tag-create-form .tag-add-ok {
+  align-self: stretch;
+}
+.swatch-row {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+}
+.swatch {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--c);
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+}
+.swatch.selected {
+  border-color: #202124;
+}
+.swatch.unavailable {
+  cursor: not-allowed;
+}
+.swatch.unavailable::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 50%;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 1px rgba(32, 32, 32, 0.42);
+  transform: translateY(-50%) rotate(-45deg);
+}
+.tag-add-input {
+  display: block;
+  width: 160px;
+  margin: 4px 6px 6px;
+  padding: 4px 6px;
+  font-size: 13px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  background: #fff;
+  color: #202124;
+}
+.tag-add-ok {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: #fff;
+  cursor: pointer;
+}
+.tag-add-ok:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.tag-add-ok:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 删除标签后的撤销提示。 */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  background: #1f2937;
+  color: #fff;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+  z-index: 200;
+  opacity: 1;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+.toast.toast-leave {
+  opacity: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tag-bar {
+    background: #1e1e1e;
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+  .tag-filter-all {
+    color: #9ca3af;
+  }
+  .tag-filter-all:hover,
+  .tag-filter-all.active {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e5e7eb;
+  }
+  .tag-filter-name {
+    color: #f3f4f6;
+  }
+  .tag-readonly-hint {
+    color: #9ca3af;
+    background: rgba(255, 255, 255, 0.07);
+  }
+  .tag-add-input {
+    background: #2a2a2a;
+    color: #e5e7eb;
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+  .tag-add-ok {
+    background: #2a2a2a;
+    color: #e5e7eb;
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+  .swatch.selected {
+    border-color: #e5e7eb;
+  }
+  .tag-context-delete {
+    color: #f87171;
+  }
+  .tag-menu-divider {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  .tag-picker .switch-item.active {
+    background: rgba(255, 255, 255, 0.07);
+    color: #e5e7eb;
   }
 }

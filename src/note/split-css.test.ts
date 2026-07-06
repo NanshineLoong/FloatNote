@@ -3,17 +3,19 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+const mainSource = readFileSync(resolve(process.cwd(), "src/note/main.ts"), "utf8");
 const editorSource = readFileSync(resolve(process.cwd(), "src/note/editor.ts"), "utf8");
+const tagDecorationSource = readFileSync(resolve(process.cwd(), "src/note/tags/decoration.ts"), "utf8");
 const assistantCss = readFileSync(resolve(process.cwd(), "src/assistant/styles.css"), "utf8");
 const assistantBubbleColor = assistantCss.match(/\.chat-assistant\s*{[^}]*background:\s*(#[0-9a-fA-F]{6});/s)?.[1];
 
 describe("split view CSS placement", () => {
-  it("pins both editor columns to the first grid row in split mode", () => {
+  it("pins both editor columns below the tag bar row in split mode", () => {
     expect(css).toMatch(
-      /#app\.split-active\s+#text-col\s*{[^}]*grid-column:\s*2;[^}]*grid-row:\s*1;/s,
+      /#app\.split-active\s+#text-col\s*{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s,
     );
     expect(css).toMatch(
-      /#app\.split-active\s+#piece-col\s*{[^}]*grid-column:\s*4;[^}]*grid-row:\s*1;/s,
+      /#app\.split-active\s+#piece-col\s*{[^}]*grid-column:\s*4;[^}]*grid-row:\s*2;/s,
     );
   });
 
@@ -59,6 +61,52 @@ describe("split view CSS placement", () => {
       /\.cm-block-handle:hover\s*{[^}]*opacity:\s*1;/s,
     );
     expect(css).not.toMatch(/\.cm-editor:hover\s+\.cm-block-handle\s*{/);
+  });
+
+  it("renders tagged blocks as one rounded background without a quote-style rule or outline", () => {
+    const taggedBlock = css.match(/\.cm-tagged-block\s*{([^}]*)}/s)?.[1] ?? "";
+    expect(taggedBlock).toMatch(/border-left:\s*none;/);
+    expect(taggedBlock).not.toMatch(/box-shadow:/);
+    expect(css).toMatch(/\.cm-tagged-block-first\s*{[^}]*border-top-left-radius:\s*8px;/s);
+    expect(css).toMatch(/\.cm-tagged-block-last\s*{[^}]*border-bottom-left-radius:\s*8px;/s);
+    expect(taggedBlock).not.toMatch(/border-left:\s*3px\s+solid/);
+    expect(tagDecorationSource).toMatch(/cm-tagged-block-first/);
+    expect(tagDecorationSource).toMatch(/cm-tagged-block-last/);
+  });
+
+  it("expands top tag discs into label chips on hover or active state without a selection ring", () => {
+    const row = css.match(/\.tag-disc-row\s*{([^}]*)}/s)?.[1] ?? "";
+    const disc = css.match(/\.tag-filter-disc\s*{([^}]*)}/s)?.[1] ?? "";
+    const name = css.match(/\.tag-filter-name\s*{([^}]*)}/s)?.[1] ?? "";
+    expect(row).toMatch(/gap:\s*5px;/);
+    expect(row).toMatch(/overflow-x:\s*auto;/);
+    expect(disc).toMatch(/display:\s*inline-flex;/);
+    expect(disc).toMatch(/width:\s*auto;/);
+    expect(name).toMatch(/max-width:\s*0;/);
+    expect(css).toMatch(/\.tag-filter-disc:is\(:hover,\s*\.active\)\s+\.tag-filter-name\s*{[^}]*max-width:\s*120px;/s);
+    expect(css).not.toMatch(/\.tag-filter-disc(?:\:hover|,\s*\.tag-filter-disc\.active)?\s*{[^}]*box-shadow:\s*0 0 0 2px/s);
+  });
+
+  it("lets the tag control bar span the full note body instead of the centered text column", () => {
+    const tagBar = css.match(/\.tag-bar\s*{([^}]*)}/s)?.[1] ?? "";
+    expect(mainSource).toMatch(/<div id="tag-bar-root"><\/div>[\s\S]*<div id="text-col">/);
+    expect(mainSource).toMatch(/#tag-bar-root/);
+    expect(tagBar).not.toMatch(/margin-left:\s*calc\(-1 \* var\(--left\)\);/);
+    expect(tagBar).not.toMatch(/width:\s*calc\(100% \+ var\(--left\) \+ var\(--right\)\);/);
+    expect(css).toMatch(
+      /#tag-bar-root\s*{[^}]*grid-column:\s*1\s*\/\s*-1;[^}]*grid-row:\s*1;[^}]*display:\s*flex;/s,
+    );
+    expect(css).toMatch(/#text-col\s*{[^}]*grid-row:\s*2;/s);
+  });
+
+  it("makes the filtered tag view visually and interactively read-only", () => {
+    expect(css).toMatch(
+      /#editor-root\.tag-filter-readonly\s+\.cm-content\s*{[^}]*pointer-events:\s*none;[^}]*caret-color:\s*transparent;/s,
+    );
+    expect(css).toMatch(
+      /#editor-root\.tag-filter-readonly\s+\.cm-block-gutter\s*{[^}]*pointer-events:\s*none;/s,
+    );
+    expect(css).toMatch(/\.tag-readonly-hint\s*{[^}]*margin-left:\s*auto;/s);
   });
 
   it("gives the floating assistant a soft background without bubble borders", () => {

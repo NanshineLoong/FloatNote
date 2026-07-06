@@ -8,10 +8,14 @@ import { agentSend, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
 import { buildCaretInsert } from "./append";
 import { buildQuoteBlock, mergeQuoteBlock, resolveMergeTarget, type Source } from "./quote";
 import { htmlToMarkdown } from "./paste";
-import { placeholder } from "@codemirror/view";
+import { EditorView, placeholder } from "@codemirror/view";
 import { createEditor, insertAtCaret, requestEditorLayout, setDoc } from "./editor";
-import { blockHandleGutter } from "./blocks/handle-gutter";
+import { blockHandleGutter, deleteBlock } from "./blocks/handle-gutter";
 import { cancelBlockDrag, scrollerPositionTheme } from "./blocks/drag";
+import { mountTagBar } from "./tags/bar";
+import { tagDecorations } from "./tags/decoration";
+import { tagFilter, setTagFilter } from "./tags/filter";
+import { openBlockTagMenu } from "./tags/picker";
 import { createLayoutController } from "./layout-controller";
 import { createPieceHeader } from "./piece-switcher";
 import { createTasksPanel } from "./tasks-panel";
@@ -50,6 +54,7 @@ app.innerHTML = `
   <div id="titlebar-root"></div>
   <div id="topbar-root"></div>
   <div id="note-body">
+    <div id="tag-bar-root"></div>
     <div id="left-col"></div>
     <div id="text-col">
       <div id="editor-root"></div>
@@ -83,6 +88,9 @@ let applyingRemote = false;
 const editorRoot = document.querySelector<HTMLElement>("#editor-root")!;
 // Inbox 是常驻、可直接编辑的 block 面（live preview）。每个 top-level block 在左侧
 // gutter 上有一个句柄：拖拽重排 / 单击弹菜单。无独立卡片视图、无源码切换。
+// 标签：句柄左键菜单直接分配/新建标签；decoration 隐藏注释+给块上底色；filter 折叠不匹配块。
+// tagBar 挂在正文网格顶行，updateListener 经由闭包变量迟到绑定。
+let tagBar: { el: HTMLElement; refresh: () => void } | null = null;
 const editor = createEditor(
   editorRoot,
   (doc) => {
@@ -90,15 +98,31 @@ const editor = createEditor(
     if (current) scheduleSave(current.entry.path, doc);
   },
   [
-    blockHandleGutter({
-      getPieceView: () => pieceEditor,
-      isSplitActive: () => layoutController?.isSplit() ?? false,
-      textColEl: document.querySelector<HTMLElement>("#text-col")!,
-      pieceColEl: document.querySelector<HTMLElement>("#piece-col")!,
-    }),
+    blockHandleGutter(
+      {
+        getPieceView: () => pieceEditor,
+        isSplitActive: () => layoutController?.isSplit() ?? false,
+        textColEl: document.querySelector<HTMLElement>("#text-col")!,
+        pieceColEl: document.querySelector<HTMLElement>("#piece-col")!,
+      },
+      (view, range, _index, x, y) => {
+        openBlockTagMenu(view, range, x, y, () => deleteBlock(view, range));
+      },
+    ),
+    tagDecorations(),
+    ...tagFilter(),
     placeholder("Inbox 还是空的 —— 划线捕获或在这里写点什么"),
+    EditorView.updateListener.of((u) => {
+      if (tagBar && (u.docChanged ||
+        u.transactions.some((t) => t.effects.some((e) => e.is(setTagFilter))))) {
+        tagBar.refresh();
+      }
+    }),
   ],
 );
+// 二级标签栏挂在采集区网格顶行（不在全局顶栏，也不受正文列宽限制）。
+tagBar = mountTagBar(editor);
+document.querySelector<HTMLElement>("#tag-bar-root")!.appendChild(tagBar.el);
 requestAnimationFrame(() => initScrollbar(editorRoot));
 editor.contentDOM.addEventListener("focus", () => publishInboxActive());
 
