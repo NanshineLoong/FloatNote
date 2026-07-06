@@ -1159,37 +1159,22 @@ input {
   grid-row: 2;
 }
 
-/* 「行动」面板：与助手共底层 —— 横向锚点同为 --bot-x / --assist。
-   inline（宽窗）贴右栏顶部、把下方助手下推；floating/closed（窄窗 / 助手关）浮在右上角。 */
+/* 「行动」面板：所有形态下视觉完全一致 —— 固定 260px、贴右缘 12px、顶部 8px、带投影，
+   不随窗口伸缩变化。inline 与 floating 的唯一区别在「是否下推助手」，由 syncLayout
+   写入 --action-h、再由 #app.assistant-on.mode-inline #assistant-region { top: var(--action-h) }
+   落地 —— 面板自身不再有形态差异。 */
 .tasks-panel {
   position: absolute;
   z-index: 30;
+  top: 8px;
+  right: 12px;
   flex-direction: column;
+  width: 260px;
+  max-height: 60%;
   padding: 12px 14px;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 12px;
   background: #fff;
-}
-
-/* inline：贴右栏顶部，宽度与助手列对齐，高度随内容（不铺满）。 */
-#app.mode-inline .tasks-panel {
-  top: 0;
-  left: var(--bot-x);
-  width: var(--assist);
-  max-height: 60%;
-  transition: left 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-#note-body.resizing .tasks-panel {
-  transition: none;
-}
-
-/* floating / closed：浮在内容区右上角，固定宽度，带投影。 */
-#app.mode-floating .tasks-panel,
-#app.mode-closed .tasks-panel {
-  top: 8px;
-  right: 12px;
-  width: 260px;
-  max-height: 60%;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 }
 
@@ -1198,6 +1183,12 @@ input {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
+}
+
+.tasks-title-group {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .tasks-title {
@@ -1210,6 +1201,37 @@ input {
   font-size: 11px;
   color: #9ca3af;
   font-variant-numeric: tabular-nums;
+}
+
+/* 头部右侧「+」图标按钮：点开才展开输入框；录入态旋转 45° 成 ×。 */
+.tasks-add-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: -2px -4px 0 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, transform 160ms ease;
+}
+.tasks-add-icon:hover {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+}
+.tasks-add-icon i {
+  font-size: 16px;
+}
+.tasks-add-icon.adding {
+  transform: rotate(45deg);
+  color: #ef4444;
+}
+.tasks-add-icon.adding:hover {
+  background: rgba(239, 68, 68, 0.12);
 }
 
 .tasks-list {
@@ -1306,35 +1328,12 @@ input {
   font-size: 13px;
 }
 
-.tasks-foot {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(0, 0, 0, 0.07);
-}
-
-/* 「+ 添加行动」按钮：点开才展开输入框。 */
-.tasks-add-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 2px;
-  border: none;
-  background: transparent;
-  font-size: 13px;
-  color: #6b7280;
-  cursor: pointer;
-}
-.tasks-add-btn:hover {
-  color: #2563eb;
-}
-.tasks-add-btn i {
-  font-size: 15px;
-}
-
+/* 录入态输入框：head 下方一行，与行动行同缩进（ghost 方框对齐勾选框）。 */
 .tasks-add {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-bottom: 6px;
 }
 .tasks-add[hidden] {
   display: none;

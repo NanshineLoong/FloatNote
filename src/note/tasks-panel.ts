@@ -31,23 +31,23 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
   panel.style.display = "none";
   panel.innerHTML = `
     <div class="tasks-head">
-      <span class="tasks-title">行动</span>
-      <span class="tasks-count"></span>
+      <span class="tasks-title-group">
+        <span class="tasks-title">行动</span>
+        <span class="tasks-count"></span>
+      </span>
+      <button class="tasks-add-icon" type="button" aria-label="添加行动"><i class="ph ph-plus"></i></button>
     </div>
+    <form class="tasks-add" hidden>
+      <span class="tasks-box-ghost" aria-hidden="true"></span>
+      <input class="tasks-input" placeholder="下一步是…" />
+    </form>
     <div class="tasks-list"></div>
-    <div class="tasks-foot">
-      <button class="tasks-add-btn" type="button"><i class="ph ph-plus"></i> 添加行动</button>
-      <form class="tasks-add" hidden>
-        <span class="tasks-box-ghost" aria-hidden="true"></span>
-        <input class="tasks-input" placeholder="下一步是…" />
-      </form>
-    </div>
   `;
   parent.appendChild(panel);
 
   const listEl = panel.querySelector<HTMLElement>(".tasks-list")!;
   const countEl = panel.querySelector<HTMLElement>(".tasks-count")!;
-  const addBtn = panel.querySelector<HTMLButtonElement>(".tasks-add-btn")!;
+  const addBtn = panel.querySelector<HTMLButtonElement>(".tasks-add-icon")!;
   const form = panel.querySelector<HTMLFormElement>(".tasks-add")!;
   const input = panel.querySelector<HTMLInputElement>(".tasks-input")!;
 
@@ -98,14 +98,7 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
       listEl.appendChild(row);
     });
 
-    countEl.textContent = total ? `${done} / ${total}` : "";
-
-    if (!total) {
-      const empty = document.createElement("div");
-      empty.className = "tasks-empty";
-      empty.textContent = "还没有行动。";
-      listEl.appendChild(empty);
-    }
+    countEl.textContent = total ? `· ${done} / ${total}` : "";
 
     syncLayout();
   }
@@ -118,8 +111,8 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
   }
 
   function setAdding(value: boolean) {
-    addBtn.hidden = value;
     form.hidden = !value;
+    addBtn.classList.toggle("adding", value);
     if (value) {
       input.value = "";
       input.focus();
@@ -127,7 +120,7 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
     syncLayout();
   }
 
-  addBtn.onclick = () => setAdding(true);
+  addBtn.onclick = () => setAdding(!form.hidden);
 
   form.onsubmit = (e) => {
     e.preventDefault();
@@ -162,7 +155,8 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
    */
   function syncLayout() {
     const inline = open && app.classList.contains("mode-inline");
-    const h = inline ? panel.offsetHeight + PUSH_GAP : 0;
+    // 面板顶部 8px 偏移也计入，否则助手会贴到面板底部、吃掉间隙。
+    const h = inline ? panel.offsetTop + panel.offsetHeight + PUSH_GAP : 0;
     app.style.setProperty("--action-h", `${h}px`);
   }
 
