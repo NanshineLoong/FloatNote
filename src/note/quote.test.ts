@@ -5,12 +5,18 @@ import {
   buildQuoteBlock,
   sourceToChip,
   parseChips,
+  buildBidMarker,
+  stripBidMarker,
+  readBidMarker,
   mergeQuoteBlock,
   isQuoteCardBlock,
   resolveMergeTarget,
 } from "./quote";
-const web = (title: string, url: string): Source => ({ kind: "web", title, url });
-const app = (title: string): Source => ({ kind: "app", title, url: null });
+
+const web = (title: string, url: string, bundleId: string | null = null): Source =>
+  ({ kind: "web", title, url, bundleId });
+const app = (title: string, bundleId: string | null = null): Source =>
+  ({ kind: "app", title, url: null, bundleId });
 
 describe("quoteBody", () => {
   it("prefixes each line with '> ' and turns blank lines into bare '>'", () => {
@@ -22,18 +28,43 @@ describe("quoteBody", () => {
 });
 
 describe("buildQuoteBlock", () => {
-  it("builds a title line with a web chip + body", () => {
-    expect(buildQuoteBlock("hello", web("GitHub", "https://github.com/x")))
+  it("builds a title line with a web chip + bid marker + body", () => {
+    expect(buildQuoteBlock("hello", web("GitHub", "https://github.com/x", "com.google.chrome")))
+      .toBe("> [!quote] [GitHub](https://github.com/x)<!-- floatnote:bid=com.google.chrome -->\n> hello");
+  });
+  it("omits the bid marker when source has no bundleId", () => {
+    expect(buildQuoteBlock("hello", web("GitHub", "https://github.com/x", null)))
       .toBe("> [!quote] [GitHub](https://github.com/x)\n> hello");
   });
   it("empty title line when source is null", () => {
     expect(buildQuoteBlock("hello", null)).toBe("> [!quote]\n> hello");
   });
-  it("app chip is bare text", () => {
-    expect(buildQuoteBlock("hi", app("终端"))).toBe("> [!quote] 终端\n> hi");
+  it("app chip is bare text + bid marker", () => {
+    expect(buildQuoteBlock("hi", app("终端", "com.apple.terminal")))
+      .toBe("> [!quote] 终端<!-- floatnote:bid=com.apple.terminal -->\n> hi");
+  });
+  it("app chip without bundleId", () => {
+    expect(buildQuoteBlock("hi", app("终端", null))).toBe("> [!quote] 终端\n> hi");
   });
   it("multi-line body preserves blank lines", () => {
     expect(buildQuoteBlock("a\n\nb", null)).toBe("> [!quote]\n> a\n>\n> b");
+  });
+});
+
+describe("bid marker helpers", () => {
+  it("buildBidMarker formats the comment", () => {
+    expect(buildBidMarker("com.google.chrome")).toBe("<!-- floatnote:bid=com.google.chrome -->");
+  });
+  it("stripBidMarker removes only the bid comment, leaves the rest", () => {
+    expect(stripBidMarker("[GitHub](https://x)<!-- floatnote:bid=com.google.chrome -->"))
+      .toBe("[GitHub](https://x)");
+  });
+  it("readBidMarker reads the id from a block", () => {
+    expect(readBidMarker("> [!quote] 终端<!-- floatnote:bid=com.apple.terminal -->\n> hi"))
+      .toBe("com.apple.terminal");
+  });
+  it("readBidMarker returns null when absent", () => {
+    expect(readBidMarker("> [!quote] 终端\n> hi")).toBeNull();
   });
 });
 
@@ -62,48 +93,50 @@ describe("sourceToChip / parseChips round-trip", () => {
   });
 });
 
+describe("parseChips × floatnote markers", () => {
+  it("strips a trailing bid marker before chip parsing", () => {
+    // parsed chips never carry a bundleId (it lives in the per-card marker)
+    expect(parseChips("[GitHub](https://github.com/x)<!-- floatnote:bid=com.google.chrome -->"))
+      .toEqual([web("GitHub", "https://github.com/x", null)]);
+  });
+  it("strips a trailing tag marker before chip parsing", () => {
+    const s = app("终端");
+    expect(parseChips(sourceToChip(s) + "<!-- floatnote:tag=concept -->")).toEqual([s]);
+  });
+  it("strips both tag and bid markers", () => {
+    expect(parseChips("终端<!-- floatnote:bid=com.apple.terminal --><!-- floatnote:tag=t -->"))
+      .toEqual([app("终端", null)]);
+  });
+});
+
 describe("mergeQuoteBlock", () => {
-  it("appends body after a '>' blank separator", () => {
-    const existing = "> [!quote] [GitHub](https://github.com/x)\n> first";
-    expect(mergeQuoteBlock(existing, "second", null))
-      .toBe("> [!quote] [GitHub](https://github.com/x)\n> first\n>\n> second");
-  });
-  it("adds a new web chip", () => {
-    const existing = "> [!quote] [GitHub](https://github.com/x)\n> first";
-    expect(mergeQuoteBlock(existing, "second", web("HN", "https://news.ycombinator.com")))
-      .toBe("> [!quote] [GitHub](https://github.com/x) · [HN](https://news.ycombinator.com)\n> first\n>\n> second");
-  });
-  it("dedups web by url (case-insensitive, trailing slash)", () => {
-    const existing = "> [!quote] [GitHub](https://github.com/x/)\n> first";
-    expect(mergeQuoteBlock(existing, "second", web("GitHub", "HTTPS://github.com/x")))
-      .toBe("> [!quote] [GitHub](https://github.com/x/)\n> first\n>\n> second");
-  });
-  it("dedups app by exact title", () => {
-    const existing = "> [!quote] 终端\n> first";
-    expect(mergeQuoteBlock(existing, "second", app("终端")))
-      .toBe("> [!quote] 终端\n> first\n>\n> second");
-  });
-  it("does not dedup web vs app", () => {
-    const existing = "> [!quote] [GitHub](https://github.com/x)\n> first";
-    expect(mergeQuoteBlock(existing, "second", app("GitHub")))
-      .toBe("> [!quote] [GitHub](https://github.com/x) · GitHub\n> first\n>\n> second");
-  });
-  it("preserves existing chip order", () => {
-    const existing = "> [!quote] [A](https://a) · [B](https://b)\n> x";
-    expect(mergeQuoteBlock(existing, "y", web("C", "https://c")))
-      .toBe("> [!quote] [A](https://a) · [B](https://b) · [C](https://c)\n> x\n>\n> y");
+  it("appends body after a '>' blank separator, preserving the title line + bid", () => {
+    const existing = "> [!quote] [GitHub](https://github.com/x)<!-- floatnote:bid=com.google.chrome -->\n> first";
+    expect(mergeQuoteBlock(existing, "second"))
+      .toBe("> [!quote] [GitHub](https://github.com/x)<!-- floatnote:bid=com.google.chrome -->\n> first\n>\n> second");
   });
   it("merges into a card with empty body (title only)", () => {
-    expect(mergeQuoteBlock("> [!quote]", "first", null)).toBe("> [!quote]\n> first");
+    expect(mergeQuoteBlock("> [!quote]", "first")).toBe("> [!quote]\n> first");
   });
-  it("adds chip when merging into a title-only card", () => {
-    expect(mergeQuoteBlock("> [!quote]", "first", web("A", "https://a")))
-      .toBe("> [!quote] [A](https://a)\n> first");
+  it("preserves the bid marker on the title line and the tag marker on the new last line", () => {
+    const existing = "> [!quote] [A](https://a)<!-- floatnote:bid=com.google.chrome -->\n> first<!-- floatnote:tag=t -->";
+    const merged = mergeQuoteBlock(existing, "more");
+    // bid marker stays on the title line (not stripped, not moved)
+    expect(merged.split("\n", 1)[0])
+      .toBe("> [!quote] [A](https://a)<!-- floatnote:bid=com.google.chrome -->");
+    // tag marker re-appended on the new last line
+    expect(merged.endsWith("<!-- floatnote:tag=t -->")).toBe(true);
+    expect(merged).toContain("> more");
   });
-  it("lenient on malformed title: unrecognised text becomes an app chip", () => {
-    const existing = "> [!quote] some weird title\n> first";
-    expect(mergeQuoteBlock(existing, "second", web("A", "https://a")))
-      .toBe("> [!quote] some weird title · [A](https://a)\n> first\n>\n> second");
+  it("leaves an untagged card untagged after merge", () => {
+    const existing = "> [!quote] [A](https://a)\n> first";
+    expect(mergeQuoteBlock(existing, "more")).not.toContain("floatnote:tag");
+  });
+  it("does not add or modify chips (same-source merge keeps the title as-is)", () => {
+    const existing = "> [!quote] [A](https://a)<!-- floatnote:bid=c -->\n> x";
+    // even if a second body is merged, the chip + bid line is unchanged
+    expect(mergeQuoteBlock(existing, "y").split("\n", 1)[0])
+      .toBe("> [!quote] [A](https://a)<!-- floatnote:bid=c -->");
   });
 });
 
@@ -121,77 +154,87 @@ describe("isQuoteCardBlock", () => {
 });
 
 describe("resolveMergeTarget", () => {
-  it("merges when caret is inside a [!quote] card", () => {
-    const doc = "> [!quote] [A](https://a)\n> first\n> second";
-    // caret in the middle of the second body line
+  const webCard = (url: string, bid = "com.google.chrome") =>
+    `> [!quote] [GitHub](${url})<!-- floatnote:bid=${bid} -->\n> first\n> second`;
+  const appCard = (title: string, bid: string | null) =>
+    bid ? `> [!quote] ${title}<!-- floatnote:bid=${bid} -->\n> first` : `> [!quote] ${title}\n> first`;
+
+  it("merges when caret is inside a same-source card", () => {
+    const doc = webCard("https://github.com/x");
     const caret = doc.indexOf("second");
-    const t = resolveMergeTarget(doc, caret);
+    const t = resolveMergeTarget(doc, caret, web("GitHub", "https://github.com/x", "com.google.chrome"));
     expect(t.kind).toBe("merge");
-    if (t.kind === "merge") expect(t.range.from).toBe(0);
   });
 
-  it("merges when caret is on the title line of a [!quote] card", () => {
-    const doc = "> [!quote] [A](https://a)\n> first";
+  it("merges when caret is on the title line of a same-source card", () => {
+    const doc = `> [!quote] [A](https://a)<!-- floatnote:bid=c -->\n> first`;
     const caret = doc.indexOf("[A]");
-    expect(resolveMergeTarget(doc, caret).kind).toBe("merge");
+    expect(resolveMergeTarget(doc, caret, web("A", "https://a", "c")).kind).toBe("merge");
   });
 
-  it("merges when caret is in blank lines immediately after a card", () => {
-    const doc = "> [!quote] [A](https://a)\n> first\n\n\n";
+  it("merges when caret is in blank lines immediately after a same-source card", () => {
+    const doc = `${webCard("https://github.com/x")}\n\n\n`;
     const caret = doc.length;
-    const t = resolveMergeTarget(doc, caret);
+    const t = resolveMergeTarget(doc, caret, web("GitHub", "https://github.com/x", "com.google.chrome"));
     expect(t.kind).toBe("merge");
-    if (t.kind === "merge") expect(doc.slice(t.range.from, t.range.to)).toContain("first");
+  });
+
+  it("does not merge when the url differs (different web source) — new block after the card", () => {
+    const doc = webCard("https://github.com/x");
+    const caret = doc.indexOf("second");
+    const t = resolveMergeTarget(doc, caret, web("GitHub", "https://other.com", "com.google.chrome"));
+    expect(t.kind).toBe("new");
+    if (t.kind === "new") expect(t.at).toBe(doc.length); // after the card, not at caret
+  });
+
+  it("does not merge when the app (bundleId) differs", () => {
+    const doc = appCard("终端", "com.apple.terminal");
+    const caret = doc.indexOf("first");
+    const t = resolveMergeTarget(doc, caret, app("终端", "com.apple.other"));
+    expect(t.kind).toBe("new");
+    if (t.kind === "new") expect(t.at).toBe(doc.length);
+  });
+
+  it("different source inside a card: new block after the card, not splitting it", () => {
+    const doc = webCard("https://github.com/x");
+    const caret = doc.indexOf("first"); // inside the card body
+    const t = resolveMergeTarget(doc, caret, app("Other", "com.apple.finder"));
+    expect(t.kind).toBe("new");
+    if (t.kind === "new") expect(t.at).toBe(doc.length);
+  });
+
+  it("legacy card without bid marker: falls back to title for app identity", () => {
+    const doc = `> [!quote] 终端\n> first`;
+    const caret = doc.indexOf("first");
+    // same app name → merge even though neither side has a bid marker
+    expect(resolveMergeTarget(doc, caret, app("终端", null)).kind).toBe("merge");
+  });
+
+  it("legacy card: different app name does not merge", () => {
+    const doc = `> [!quote] 终端\n> first`;
+    const caret = doc.indexOf("first");
+    expect(resolveMergeTarget(doc, caret, app("访达", null)).kind).toBe("new");
   });
 
   it("does not merge when a non-quote block sits between the card and caret", () => {
-    const doc = "> [!quote] [A](https://a)\n> first\n\nplain paragraph\n\n";
+    const doc = `${webCard("https://github.com/x")}\n\nplain paragraph\n\n`;
     const caret = doc.length;
-    expect(resolveMergeTarget(doc, caret).kind).toBe("new");
+    expect(resolveMergeTarget(doc, caret, web("GitHub", "https://github.com/x", "com.google.chrome")).kind)
+      .toBe("new");
   });
 
   it("does not merge when the preceding block is a plain blockquote", () => {
     const doc = "> plain\n> text\n\n";
     const caret = doc.length;
-    expect(resolveMergeTarget(doc, caret).kind).toBe("new");
+    expect(resolveMergeTarget(doc, caret, app("plain", null)).kind).toBe("new");
   });
 
-  it("new card when caret is in an empty doc", () => {
-    expect(resolveMergeTarget("", 0).kind).toBe("new");
+  it("new at caret when no nearby card", () => {
+    expect(resolveMergeTarget("plain text here", 5, web("A", "https://a", "c")))
+      .toEqual({ kind: "new", at: 5 });
   });
 
-  it("caret == 0 on a card is the inside case (merge)", () => {
-    const doc = "> [!quote] [A](https://a)\n> first";
-    const caret = 0;
-    // caret == 0 is inside the card (from == 0), so this is the inside case.
-    expect(resolveMergeTarget(doc, caret).kind).toBe("merge");
-  });
-});
-
-describe("parseChips × floatnote tag marker", () => {
-  it("strips a trailing tag marker before chip parsing", () => {
-    // single-line tagged callout: chip string would carry the marker
-    const s = app("终端");
-    expect(parseChips(sourceToChip(s) + "<!-- floatnote:tag=concept -->")).toEqual([s]);
-  });
-});
-
-describe("mergeQuoteBlock × floatnote tag marker", () => {
-  it("preserves the block's tag on the new last line after merge", () => {
-    const existing = "> [!quote] [A](https://a)\n> first<!-- floatnote:tag=concept -->";
-    const merged = mergeQuoteBlock(existing, "more", app("终端"));
-    // marker survives and is now on the (new) last line
-    expect(merged).toContain("<!-- floatnote:tag=concept -->");
-    expect(merged.endsWith("<!-- floatnote:tag=concept -->")).toBe(true);
-    // the body was appended
-    expect(merged).toContain("> more");
-    // chip dedup still works (marker did not become a chip)
-    expect(merged).toContain("[A](https://a)");
-    expect(merged).toContain("终端");
-  });
-
-  it("leaves an untagged card untagged after merge", () => {
-    const existing = "> [!quote] [A](https://a)\n> first";
-    expect(mergeQuoteBlock(existing, "more", null)).not.toContain("floatnote:tag");
+  it("new at caret in an empty doc", () => {
+    expect(resolveMergeTarget("", 0, web("A", "https://a", "c"))).toEqual({ kind: "new", at: 0 });
   });
 });

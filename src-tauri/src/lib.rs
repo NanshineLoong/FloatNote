@@ -135,6 +135,8 @@ pub fn run() {
             commands::toggle_assistant,
             commands::get_agent_status,
             commands::apply_shortcuts,
+            commands::open_url,
+            source::app_icon,
             popup::submit_popup_capture,
             popup::dismiss_popup,
         ])

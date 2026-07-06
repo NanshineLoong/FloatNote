@@ -114,6 +114,11 @@ async function setupListeners(): Promise<void> {
     showToast("需开启「辅助功能」权限后重试");
   });
 
+  // 浏览器自动化权限缺失时，后端同样发 automation-needed；弹窗内就地提示。
+  await listen("automation-needed", () => {
+    showToast("未获得浏览器自动化权限，无法捕获网址/标题");
+  });
+
   await getCurrentWindow().onFocusChanged(({ payload: focused }) => {
     // Dismiss when the popup loses focus (user clicked elsewhere).
     if (!focused) {
