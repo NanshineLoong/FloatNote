@@ -29,10 +29,18 @@ export interface PieceHeaderHost {
 }
 
 /**
- * 写作栏的文档头：上方小号 breadcrumb 切换行，下方大标题（= 文件名，可编辑）。
+ * 写作栏的文档头分两处挂载：
+ *  - 顶栏（topbarMount，固定不随正文滚动）：breadcrumb 切换行 + 版本入口 + 删除按钮 +
+ *    .piece-mode-slot（给未来的 大纲/正文 模式切换预留的空位）。
+ *  - 标题（titleMount，随正文滚动）：大标题（= 文件名，可编辑）。
  * 单栏 / 双栏共用同一份 DOM，左缘与正文对齐，故两种模式表现完全一致。
  */
-export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
+export function createPieceHeader(args: {
+  topbarMount: HTMLElement;
+  titleMount: HTMLElement;
+  host: PieceHeaderHost;
+}) {
+  const { topbarMount, titleMount, host } = args;
   let menuEl: HTMLElement | null = null;
   let renaming = false;
 
@@ -76,6 +84,10 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
   crumbRow.appendChild(versionBtn);
   crumbRow.appendChild(trashBtn);
 
+  // 模式切换预留位（如未来的 大纲/正文）。v1 留空，不渲染任何按钮；顶栏布局先就位。
+  const modeSlot = document.createElement("div");
+  modeSlot.className = "piece-mode-slot";
+
   // 标题即可编辑文本区：长标题自然软包折行，回车提交重命名并跳到正文。
   // value 永远单行（回车不写入换行符），折行只是视觉呈现。
   const title = document.createElement("textarea");
@@ -86,8 +98,9 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
   // textarea 默认能输入换行；标题=文件名不允许换行符，统一拦掉。
   title.setAttribute("wrap", "soft");
 
-  mount.appendChild(crumbRow);
-  mount.appendChild(title);
+  topbarMount.appendChild(crumbRow);
+  topbarMount.appendChild(modeSlot);
+  titleMount.appendChild(title);
 
   function fit() {
     // 粘贴 / IME 可能带入换行符；标题=文件名永远是单行，落到 value 前先剔掉。

@@ -63,6 +63,7 @@ app.innerHTML = `
   <div id="topbar-root"></div>
   <div id="note-body">
     <div id="tag-bar-root"></div>
+    <div id="piece-topbar-root"></div>
     <div id="left-col"></div>
     <div id="text-col">
       <div id="editor-root"></div>
@@ -182,8 +183,9 @@ pieceEditor.contentDOM.addEventListener("focus", () => {
 let pieceHeader: ReturnType<typeof createPieceHeader> | null = null;
 
 function mountPieceHeader() {
-  const header = document.querySelector<HTMLElement>("#piece-doc-header")!;
-  pieceHeader = createPieceHeader(header, {
+  const topbar = document.querySelector<HTMLElement>("#piece-topbar-root")!;
+  const titleHost = document.querySelector<HTMLElement>("#piece-doc-header")!;
+  pieceHeader = createPieceHeader({ topbarMount: topbar, titleMount: titleHost, host: {
     dir: () =>
       mode === "document"
         ? currentDocument
@@ -238,6 +240,7 @@ function mountPieceHeader() {
       pieceEditor.focus();
       pieceEditor.dispatch({ selection: { anchor: 0, head: 0 } });
     },
+  },
   });
 }
 
