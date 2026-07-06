@@ -64,6 +64,26 @@ pub fn resolve_projects(paths: &[String]) -> Vec<ProjectEntry> {
         .collect()
 }
 
+/// Given an ordered list of standalone-document paths (MRU), keep only those that
+/// still exist as `.md` files, preserving order. Mirrors `resolve_projects` but
+/// for loose documents that live outside any project space.
+pub fn resolve_documents(paths: &[String]) -> Vec<NoteEntry> {
+    paths
+        .iter()
+        .filter_map(|raw| {
+            let path = Path::new(raw);
+            if !path.is_file() || path.extension().and_then(|e| e.to_str()) != Some("md") {
+                return None;
+            }
+            let name = path.file_stem()?.to_string_lossy().to_string();
+            Some(NoteEntry {
+                name,
+                path: path.to_string_lossy().to_string(),
+            })
+        })
+        .collect()
+}
+
 /// List the 成品 notes inside a project folder: `.md` files whose name does not
 /// start with `_`, newest-modified first. Returns `NoteEntry` so it slots into
 /// the existing note-switching UI.
@@ -136,6 +156,36 @@ pub fn sanitize_folder_name(name: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+/// Rename a project folder in place (same parent directory). The new name is
+/// sanitized; a name equal to the current one is a no-op; a name colliding with
+/// an existing sibling errors with `AlreadyExists`. Returns the new path.
+/// Version history lives inside the project folder and moves with it, so no
+/// separate version handling is needed.
+pub fn rename_project(dir: &Path, new_name: &str) -> std::io::Result<String> {
+    let parent = dir.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "project has no parent dir")
+    })?;
+    let target = parent.join(sanitize_folder_name(new_name));
+    if target.exists() && target != dir {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "target exists",
+        ));
+    }
+    std::fs::rename(dir, &target)?;
+    Ok(target.to_string_lossy().to_string())
+}
+
+/// Move a project folder to the OS trash. No-op if the folder is already gone.
+/// The frontend confirms before calling. Version history lives inside the
+/// folder and is trashed with it.
+pub fn delete_project(dir: &Path) -> std::io::Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    trash::delete(dir).map_err(|error| std::io::Error::other(error.to_string()))
 }
 
 #[cfg(test)]
@@ -243,6 +293,61 @@ mod tests {
         assert!(!is_project_dir(dir.path()));
         std::fs::write(dir.path().join(INBOX_FILE), "").unwrap();
         assert!(is_project_dir(dir.path()));
+    }
+
+    #[test]
+    fn resolve_documents_keeps_existing_md_drops_missing() {
+        let root = tempdir();
+        let a = root.path().join("a.md");
+        std::fs::write(&a, "x").unwrap();
+        let b = root.path().join("b.md");
+        std::fs::write(&b, "x").unwrap();
+        // Non-.md files and directories are dropped.
+        std::fs::write(root.path().join("ignore.txt"), "x").unwrap();
+        std::fs::create_dir_all(root.path().join("subdir")).unwrap();
+
+        let paths = vec![
+            b.to_string_lossy().to_string(),
+            root.path().join("gone.md").to_string_lossy().to_string(),
+            root.path().join("ignore.txt").to_string_lossy().to_string(),
+            a.to_string_lossy().to_string(),
+        ];
+        let names: Vec<String> = resolve_documents(&paths)
+            .into_iter()
+            .map(|entry| entry.name)
+            .collect();
+        assert_eq!(names, vec!["b".to_string(), "a".to_string()]);
+    }
+
+    #[test]
+    fn rename_project_moves_folder_and_errors_on_conflict() {
+        let root = tempdir();
+        let dir = root.path().join("old");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(INBOX_FILE), "").unwrap();
+
+        let new_path = rename_project(&dir, "新名").unwrap();
+        assert!(new_path.ends_with("新名"));
+        assert!(!dir.exists());
+        assert!(is_project_dir(Path::new(&new_path)));
+
+        // Rename to a colliding sibling name errors.
+        let other = root.path().join("other");
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(other.join(INBOX_FILE), "").unwrap();
+        assert!(rename_project(Path::new(&new_path), "other").is_err());
+    }
+
+    #[test]
+    fn delete_project_removes_folder_and_is_noop_when_missing() {
+        let root = tempdir();
+        let dir = root.path().join("doomed");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(INBOX_FILE), "").unwrap();
+        delete_project(&dir).unwrap();
+        assert!(!dir.exists());
+        // Already gone — no error.
+        delete_project(&dir).unwrap();
     }
 
     fn tempdir() -> TempDir {

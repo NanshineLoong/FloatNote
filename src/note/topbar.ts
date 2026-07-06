@@ -41,7 +41,7 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
     <div class="topbar">
       <div class="topbar-left">
         <button class="project-name" id="project-name" title="切换项目空间">
-          <i class="ph ph-folder"></i><span id="project-label">-</span><i class="ph ph-caret-down"></i>
+          <i class="ph ph-folder project-name-icon folder-icon"></i><i class="ph ph-file project-name-icon file-icon"></i><span id="project-label">-</span><i class="ph ph-caret-down"></i>
         </button>
       </div>
       <div class="view-seg" id="view-seg" data-reach="full">

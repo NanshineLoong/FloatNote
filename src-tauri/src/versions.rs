@@ -70,6 +70,16 @@ pub fn rename(notes_dir: &Path, old_id: &str, new_id: &str) -> std::io::Result<(
     Ok(())
 }
 
+/// Remove all version history for a note (its `.floatnote/versions/<note_id>` dir).
+/// No-op when there is no history. Called when a note file is deleted.
+pub fn purge(notes_dir: &Path, note_id: &str) -> std::io::Result<()> {
+    let dir = versions_dir(notes_dir, note_id);
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,6 +134,17 @@ mod tests {
     fn rename_noop_when_no_history() {
         let dir = tempdir();
         assert!(rename(dir.path(), "old", "new").is_ok());
+    }
+
+    #[test]
+    fn purge_removes_history_and_is_noop_when_missing() {
+        let dir = tempdir();
+        snapshot(dir.path(), "note", "x", "manual").unwrap();
+        assert_eq!(list(dir.path(), "note").len(), 1);
+        purge(dir.path(), "note").unwrap();
+        assert!(list(dir.path(), "note").is_empty());
+        // No history to begin with — still ok.
+        purge(dir.path(), "other").unwrap();
     }
 
     fn tempdir() -> TempDir {

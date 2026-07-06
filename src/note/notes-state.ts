@@ -45,6 +45,7 @@ export interface Config {
   font_size: number;
   launch_at_login: boolean;
   recent_projects: string[];
+  recent_documents: string[];
 }
 
 export interface CurrentNote {
@@ -84,8 +85,63 @@ export async function setRecentProjects(recent: string[]): Promise<void> {
   await invoke("set_config", { newConfig: { ...config, recent_projects: recent } });
 }
 
+/** Persist the recent-documents MRU list (without touching other config). */
+export async function setRecentDocuments(recent: string[]): Promise<void> {
+  const config = await getConfig();
+  await invoke("set_config", { newConfig: { ...config, recent_documents: recent } });
+}
+
 export async function createProject(root: string, name: string): Promise<ProjectEntry> {
   return invoke<ProjectEntry>("create_project", { root, name });
+}
+
+/** Resolve an MRU list of standalone-document paths to the ones still on disk,
+ * preserving order. Mirrors `resolveProjects` for loose `.md` files. */
+export async function resolveDocuments(paths: string[]): Promise<NoteEntry[]> {
+  return invoke<NoteEntry[]>("resolve_documents", { paths });
+}
+
+/** Rename a project folder in place; returns the new path. */
+export async function renameProject(dir: string, newName: string): Promise<string> {
+  return invoke<string>("rename_project", { dir, newName });
+}
+
+/** Permanently delete a project folder. */
+export async function deleteProject(dir: string): Promise<void> {
+  await invoke("delete_project", { dir });
+}
+
+/** Delete a note file (piece or standalone document) plus its version history.
+ * `dir` is the containing directory; `name` is the file stem. */
+export async function deleteNote(dir: string, name: string): Promise<void> {
+  await invoke("delete_note", { dir, name });
+}
+
+/** Create an empty standalone document at a user-chosen path via the OS save
+ * dialog, returning the resulting entry. Used by the "new document" action.
+ * The save panel is app-modal and runs above the always-on-top note window on
+ * macOS, so we deliberately do NOT touch alwaysOnTop here — temporarily
+ * lowering it strands the window if the user switches apps mid-dialog. */
+export async function createDocument(): Promise<NoteEntry | null> {
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const target = await save({
+    defaultPath: "未命名.md",
+    filters: [{ name: "Markdown", extensions: ["md"] }],
+  });
+  if (!target) return null;
+  // `save` does not auto-append the extension when the user omits it; force .md
+  // so the file is recognized as a standalone document later.
+  const path = /\.md$/i.test(target) ? target : `${target}.md`;
+  await invoke("write_note", { path, content: "" });
+  const name = path.split(/[\\/]/).pop()!.replace(/\.md$/i, "");
+  return { name, path };
+}
+
+/** Native confirmation dialog (Tauri v2 disables `window.confirm`). Returns true
+ * when the user accepts. Used by all delete flows. */
+export async function confirmDialog(message: string, title = "确认"): Promise<boolean> {
+  const { confirm } = await import("@tauri-apps/plugin-dialog");
+  return confirm(message, { title, kind: "warning" });
 }
 
 export async function listPieces(projectDir: string): Promise<NoteEntry[]> {

@@ -16,6 +16,9 @@ pub struct Config {
     /// 最近打开过的项目空间绝对路径，最近的在前（MRU）。上限由前端维护（8 条）。
     /// 项目可散落在磁盘任意位置，此列表是项目切换菜单的唯一数据来源。
     pub recent_projects: Vec<String>,
+    /// 最近打开过的独立文档（loose `.md`，不在任何项目空间内）绝对路径，最近的在前。
+    /// 与 `recent_projects` 平行，是文档切换菜单的数据来源。
+    pub recent_documents: Vec<String>,
     // ── AI 助手持久化配置 ──
     /// AI 服务商标识："anthropic" | "openai" | "google" | "custom"，空串表示未配置。
     pub ai_provider: String,
@@ -38,6 +41,7 @@ impl Default for Config {
             launch_at_login: false,
             assistant_open: false,
             recent_projects: Vec::new(),
+            recent_documents: Vec::new(),
             ai_provider: String::new(),
             ai_model: String::new(),
             ai_api_key: String::new(),

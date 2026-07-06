@@ -55,6 +55,17 @@ pub fn rename_note(dir: &Path, old_name: &str, new_stem: &str) -> std::io::Resul
     Ok(target.to_string_lossy().to_string())
 }
 
+/// Move a note file (a piece or a standalone document) to the OS trash.
+/// No-op if the file is already gone — keeps the UI forgiving when the file
+/// vanished externally. Version-history cleanup is the caller's responsibility;
+/// this function only touches the `.md` file itself.
+pub fn delete_note(path: &Path) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    trash::delete(path).map_err(|error| std::io::Error::other(error.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,6 +118,16 @@ mod tests {
         assert!(dir.path().join("new.md").exists());
         std::fs::write(dir.path().join("a.md"), "x").unwrap();
         assert!(rename_note(dir.path(), "a", "new").is_err());
+    }
+
+    #[test]
+    fn delete_removes_file_and_is_noop_when_missing() {
+        let dir = tempdir();
+        std::fs::write(dir.path().join("doomed.md"), "x").unwrap();
+        delete_note(&dir.path().join("doomed.md")).unwrap();
+        assert!(!dir.path().join("doomed.md").exists());
+        // Already gone — no error.
+        delete_note(&dir.path().join("doomed.md")).unwrap();
     }
 
     fn tempdir() -> TempDir {

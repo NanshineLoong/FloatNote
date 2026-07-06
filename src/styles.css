@@ -483,6 +483,97 @@ input {
   outline: none;
 }
 
+/* 切换菜单的区块标题（项目 / 文档）。 */
+.switch-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 2px;
+  color: #9ca3af;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* 切换菜单的一行：左标签（点开）、右侧悬停露出的动作。行体是 div 而非 button。 */
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border-radius: 6px;
+}
+
+.switch-row.active {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.switch-row-label {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 6px;
+  border: none;
+  background: transparent;
+  color: #374151;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.switch-row-label .switch-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.switch-row.active .switch-row-label {
+  font-weight: 600;
+  color: #2563eb;
+}
+
+/* 默认隐藏动作按钮，行被悬停或聚焦时才露出。 */
+.switch-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.switch-row:hover .switch-row-actions,
+.switch-row:focus-within .switch-row-actions {
+  opacity: 1;
+}
+
+.switch-row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.switch-row-action:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #374151;
+}
+
+.switch-row-delete:hover {
+  color: #dc2626;
+}
+
 @media (prefers-color-scheme: dark) {
   .cm-block-handle {
     color: #555;
@@ -627,6 +718,44 @@ input {
     border-color: #60a5fa;
     background: #2a2a2a;
     color: #d1d5db;
+  }
+
+  .switch-section {
+    color: #6b7280;
+  }
+
+  .switch-row-label {
+    color: #d1d5db;
+  }
+
+  .switch-row.active {
+    background: rgba(96, 165, 250, 0.14);
+  }
+
+  .switch-row.active .switch-row-label {
+    color: #60a5fa;
+  }
+
+  .switch-row-action {
+    color: #6b7280;
+  }
+
+  .switch-row-action:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #d1d5db;
+  }
+
+  .switch-row-delete:hover {
+    color: #f87171;
+  }
+
+  .piece-trash-btn {
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .piece-trash-btn:hover {
+    background: rgba(248, 113, 113, 0.16);
+    color: #f87171;
   }
 
   .settings input[type="text"],
@@ -874,6 +1003,53 @@ input {
 .piece-version-btn:hover {
   background: rgba(0, 0, 0, 0.05);
   color: #555;
+}
+
+/* 文档模式下的删除按钮（与版本入口同处切换行右端，仅 .doc-mode 显示）。 */
+.piece-trash-btn {
+  margin-left: 2px;
+  display: none;
+  align-items: center;
+  padding: 2px 5px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #b0b0ac;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.piece-trash-btn:hover {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+}
+
+/* ── 文档模式（#app.doc-mode）：隐藏滑拨杆 / 行动 / 采集面，只留独立文档编辑器。
+   文档头藏掉 breadcrumb 与版本入口，露出删除按钮；顶栏图标换成 file。 */
+#app.doc-mode #view-seg,
+#app.doc-mode #tasks-toggle,
+#app.doc-mode .piece-breadcrumb,
+#app.doc-mode .piece-version-btn {
+  display: none !important;
+}
+
+#app.doc-mode .piece-trash-btn {
+  display: inline-flex;
+  margin-left: auto;
+}
+
+#app.doc-mode .project-name-icon.file-icon {
+  display: inline-flex;
+}
+
+#app.doc-mode .project-name-icon.folder-icon {
+  display: none;
+}
+
+/* 项目模式默认只显示 folder 图标（file 图标隐藏）。 */
+.project-name-icon.file-icon {
+  display: none;
 }
 
 .piece-breadcrumb {

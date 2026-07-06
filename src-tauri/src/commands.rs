@@ -271,6 +271,40 @@ pub fn list_pieces(project_dir: String) -> Result<Vec<notes::NoteEntry>, String>
     project::list_pieces(std::path::Path::new(&project_dir)).map_err(|error| error.to_string())
 }
 
+/// Resolve an MRU list of standalone-document paths to the ones still on disk.
+/// Mirrors `resolve_projects` for loose `.md` files outside any project.
+#[tauri::command]
+pub fn resolve_documents(paths: Vec<String>) -> Vec<notes::NoteEntry> {
+    project::resolve_documents(&paths)
+}
+
+/// Rename a project folder in place; returns the new path. The frontend updates
+/// the MRU entry to this new path on success.
+#[tauri::command]
+pub fn rename_project(dir: String, new_name: String) -> Result<String, String> {
+    project::rename_project(std::path::Path::new(&dir), &new_name)
+        .map_err(|error| error.to_string())
+}
+
+/// Move a project folder to the OS trash. The frontend confirms first.
+#[tauri::command]
+pub fn delete_project(dir: String) -> Result<(), String> {
+    project::delete_project(std::path::Path::new(&dir)).map_err(|error| error.to_string())
+}
+
+/// Move a note file (piece or standalone document) to the OS trash and purge
+/// its version history. `dir` is the containing directory; `name` is the file
+/// stem (note id).
+#[tauri::command]
+pub fn delete_note(state: State<AppState>, dir: String, name: String) -> Result<(), String> {
+    let path = std::path::Path::new(&dir).join(format!("{name}.md"));
+    let path_str = path.to_string_lossy().to_string();
+    crate::watcher::mark_self_write(&state.write_suppress, &path_str);
+    notes::delete_note(&path).map_err(|error| error.to_string())?;
+    versions::purge(std::path::Path::new(&dir), &name).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 /// 切换文件系统监听到指定目录；前端在打开/切换项目时调用。
 #[tauri::command]
 pub fn watch_dir(state: State<AppState>, dir: String) -> Result<(), String> {

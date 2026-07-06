@@ -20,6 +20,8 @@
     "core:window:allow-start-dragging",
     "core:event:default",
     "dialog:allow-open",
+    "dialog:allow-save",
+    "dialog:allow-confirm",
     "global-shortcut:allow-unregister-all",
     "autostart:allow-enable",
     "autostart:allow-disable",

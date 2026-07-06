@@ -1,5 +1,12 @@
 import { sanitizePieceStem } from "./piece-name";
-import { createNote, listPieces, renameNote, type NoteEntry } from "./notes-state";
+import {
+  confirmDialog,
+  createNote,
+  deleteNote,
+  listPieces,
+  renameNote,
+  type NoteEntry,
+} from "./notes-state";
 import { formatVersionLabel, type VersionEntry } from "./versions";
 
 export interface PieceHeaderHost {
@@ -15,6 +22,8 @@ export interface PieceHeaderHost {
   snapshot: () => Promise<void>;
   /** 恢复当前成品到版本 v（恢复前当前内容已自动存为新版本）。 */
   restore: (v: number) => Promise<void>;
+  /** 删除当前装载的文件（文档模式下由标题栏垃圾桶触发）。 */
+  onDelete: () => void;
 }
 
 /**
@@ -48,11 +57,22 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
     void openVersionMenu();
   };
 
-  // breadcrumb 与版本入口共处一行：左切换、右版本。
+  // 文档模式下的删除按钮（项目模式下隐藏，由 .doc-mode 控制）。
+  const trashBtn = document.createElement("button");
+  trashBtn.className = "piece-trash-btn";
+  trashBtn.title = "删除文档";
+  trashBtn.innerHTML = `<i class="ph ph-trash"></i>`;
+  trashBtn.onclick = (e) => {
+    e.stopPropagation();
+    host.onDelete();
+  };
+
+  // breadcrumb 与版本入口共处一行：左切换、右版本 / 删除。
   const crumbRow = document.createElement("div");
   crumbRow.className = "piece-crumb-row";
   crumbRow.appendChild(crumb);
   crumbRow.appendChild(versionBtn);
+  crumbRow.appendChild(trashBtn);
 
   // 标题即可编辑文本框：键入像写 Notion 标题，失焦/回车提交重命名。
   const title = document.createElement("input");
@@ -155,8 +175,10 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
       item.textContent = formatVersionLabel(entry);
       item.onclick = () => {
         closeVersionMenu();
-        if (!window.confirm("恢复到该版本？当前内容会被覆盖（已自动存为新版本）。")) return;
-        void host.restore(entry.v);
+        void (async () => {
+          if (!(await confirmDialog("恢复到该版本？当前内容会被覆盖（已自动存为新版本）。"))) return;
+          host.restore(entry.v);
+        })();
       };
       menu.appendChild(item);
     }
@@ -196,15 +218,47 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
 
     const cur = host.current();
     for (const piece of pieces) {
-      const item = document.createElement("button");
-      item.className = "switch-item";
-      item.textContent = piece.name;
-      if (cur && piece.path === cur.path) item.classList.add("active");
-      item.onclick = () => {
+      const row = document.createElement("div");
+      row.className = "switch-row";
+      if (cur && piece.path === cur.path) row.classList.add("active");
+
+      const label = document.createElement("button");
+      label.className = "switch-row-label";
+      label.innerHTML = `<i class="ph ph-file-text"></i><span class="switch-row-name">${piece.name}</span>`;
+      label.onclick = (e) => {
+        e.stopPropagation();
         closeMenu();
         host.open(piece);
       };
-      menuEl.appendChild(item);
+
+      const del = document.createElement("button");
+      del.className = "switch-row-action switch-row-delete";
+      del.title = "删除";
+      del.innerHTML = `<i class="ph ph-trash"></i>`;
+      del.onclick = async (e) => {
+        e.stopPropagation();
+        if (!(await confirmDialog(`删除「${piece.name}」？它会被移到废纸篓。`))) return;
+        try {
+          await deleteNote(host.dir(), piece.name);
+        } catch (err) {
+          console.error("delete piece failed", err);
+          return;
+        }
+        closeMenu();
+        // 删的是当前成品 → 选下一个，没有就新建空成品。
+        if (cur && piece.path === cur.path) {
+          const remaining = await listPieces(host.dir());
+          const next = remaining[0] ?? (await createNote(host.dir()));
+          host.open(next);
+        }
+      };
+
+      const actions = document.createElement("div");
+      actions.className = "switch-row-actions";
+      actions.appendChild(del);
+      row.appendChild(label);
+      row.appendChild(actions);
+      menuEl.appendChild(row);
     }
 
     document.body.appendChild(menuEl);
