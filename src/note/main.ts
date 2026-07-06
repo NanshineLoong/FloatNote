@@ -13,6 +13,7 @@ import { createEditor, insertAtCaret, requestEditorLayout, setDoc } from "./edit
 import { blockHandleGutter, deleteBlock } from "./blocks/handle-gutter";
 import { cancelBlockDrag, scrollerPositionTheme } from "./blocks/drag";
 import { mountTagBar } from "./tags/bar";
+import { showToast } from "../shared/toast";
 import { tagDecorations } from "./tags/decoration";
 import { tagFilter, setTagFilter } from "./tags/filter";
 import { openBlockTagMenu } from "./tags/picker";
@@ -925,11 +926,7 @@ void listen<QuotePayload>("quote-captured", (event) => {
 });
 
 void listen("accessibility-needed", () => {
-  if (document.querySelector("#a11y-banner")) return;
-  const banner = document.createElement("div");
-  banner.id = "a11y-banner";
-  banner.textContent =
-    "需要「辅助功能」权限才能抓取划线：系统设置 → 隐私与安全性 → 辅助功能，勾选 FloatNote 后重试。";
-  banner.addEventListener("click", () => banner.remove());
-  noteBody.prepend(banner);
+  // macOS 已由后端弹过一次系统授权框；这里只在窗内给一条简短提示，
+  // 不再往 #note-body 正文区塞横幅（避免污染编辑器内容）。
+  showToast("需开启「辅助功能」权限后重试");
 });

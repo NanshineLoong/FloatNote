@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalPosition, currentMonitor } from "@tauri-apps/api/window";
 import { clampToScreen, type Rect } from "./clamp";
+import { showToast } from "../shared/toast";
 
 const POPUP_W = 256;
 const POPUP_H = 46;
@@ -105,6 +106,12 @@ async function onSubmit(): Promise<void> {
 async function setupListeners(): Promise<void> {
   await listen<PopupPayload>("popup-payload", (event) => {
     void showAt(event.payload.x, event.payload.y, event.payload.hasText);
+  });
+
+  // 与笔记窗共用同一套 toast：后端目前把 accessibility-needed 发往 main，
+  // 这里先注册好，等后端按触发上下文分发时即可就地提示。
+  await listen("accessibility-needed", () => {
+    showToast("需开启「辅助功能」权限后重试");
   });
 
   await getCurrentWindow().onFocusChanged(({ payload: focused }) => {

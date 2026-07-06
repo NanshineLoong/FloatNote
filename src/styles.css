@@ -1715,26 +1715,8 @@ input {
   opacity: 0.5;
 }
 
-/* 删除标签后的撤销提示。 */
-.toast {
-  position: fixed;
-  left: 50%;
-  bottom: 28px;
-  transform: translateX(-50%);
-  background: #1f2937;
-  color: #fff;
-  font-size: 13px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
-  z-index: 200;
-  opacity: 1;
-  transition: opacity 200ms ease;
-  pointer-events: none;
-}
-.toast.toast-leave {
-  opacity: 0;
-}
+/* 删除标签后的撤销提示：toast 样式由 src/shared/toast.ts 注入，
+   供笔记窗与浮窗共用（浮窗不加载 styles.css）。 */
 
 @media (prefers-color-scheme: dark) {
   .tag-bar {

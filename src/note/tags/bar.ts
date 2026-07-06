@@ -18,7 +18,7 @@ import {
 } from "./model";
 import { PALETTE } from "./palette";
 import { activeTagFilter, setTagFilterEffect } from "./filter";
-import { showToast } from "./toast";
+import { showToast } from "../../shared/toast";
 import { closeFloating, floatMenu } from "./floating";
 
 export interface TagBarHandle {
