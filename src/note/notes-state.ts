@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { save, confirm } from "@tauri-apps/plugin-dialog";
 
 export interface NoteEntry {
   name: string;
@@ -123,7 +124,6 @@ export async function deleteNote(dir: string, name: string): Promise<void> {
  * macOS, so we deliberately do NOT touch alwaysOnTop here — temporarily
  * lowering it strands the window if the user switches apps mid-dialog. */
 export async function createDocument(): Promise<NoteEntry | null> {
-  const { save } = await import("@tauri-apps/plugin-dialog");
   const target = await save({
     defaultPath: "未命名.md",
     filters: [{ name: "Markdown", extensions: ["md"] }],
@@ -140,7 +140,6 @@ export async function createDocument(): Promise<NoteEntry | null> {
 /** Native confirmation dialog (Tauri v2 disables `window.confirm`). Returns true
  * when the user accepts. Used by all delete flows. */
 export async function confirmDialog(message: string, title = "确认"): Promise<boolean> {
-  const { confirm } = await import("@tauri-apps/plugin-dialog");
   return confirm(message, { title, kind: "warning" });
 }
 
