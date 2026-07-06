@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { save, confirm } from "@tauri-apps/plugin-dialog";
+import { save, confirm, open } from "@tauri-apps/plugin-dialog";
 
 export interface NoteEntry {
   name: string;
@@ -135,6 +135,19 @@ export async function createDocument(): Promise<NoteEntry | null> {
   await invoke("write_note", { path, content: "" });
   const name = path.split(/[\\/]/).pop()!.replace(/\.md$/i, "");
   return { name, path };
+}
+
+/** Pick an existing Markdown file via the OS open dialog and return it as a
+ * standalone-document entry. The file is not created or modified — used by the
+ * "open Markdown file" action in the document section's add submenu. */
+export async function openDocumentFromFile(): Promise<NoteEntry | null> {
+  const picked = await open({
+    multiple: false,
+    filters: [{ name: "Markdown", extensions: ["md"] }],
+  });
+  if (typeof picked !== "string") return null;
+  const name = picked.split(/[\\/]/).pop()!.replace(/\.md$/i, "");
+  return { name, path: picked };
 }
 
 /** Native confirmation dialog (Tauri v2 disables `window.confirm`). Returns true

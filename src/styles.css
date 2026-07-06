@@ -506,6 +506,73 @@ input {
   letter-spacing: 0.04em;
 }
 
+/* 标题文字占满剩余空间，把 `+` 推到右侧。 */
+.switch-section > span {
+  flex: 1;
+}
+
+/* 区块标题右侧的 `+`：点击展开二级菜单（新建/打开）。 */
+.switch-section-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.switch-section-add:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #374151;
+}
+
+/* 二级菜单浮层：复用主菜单外观，层级更高。 */
+.switch-submenu {
+  position: fixed;
+  min-width: 160px;
+  max-width: 240px;
+  padding: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 110;
+}
+
+.switch-submenu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #374151;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.switch-submenu-item:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.switch-submenu-item.disabled,
+.switch-submenu-item:disabled {
+  color: #c7c7c7;
+  cursor: not-allowed;
+}
+
+.switch-submenu-item:disabled:hover {
+  background: transparent;
+}
+
 /* 切换菜单的一行：左标签（点开）、右侧悬停露出的动作。行体是 div 而非 button。 */
 .switch-row {
   display: flex;
@@ -733,6 +800,33 @@ input {
 
   .switch-section {
     color: #6b7280;
+  }
+
+  .switch-section-add {
+    color: #6b7280;
+  }
+
+  .switch-section-add:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #d1d5db;
+  }
+
+  .switch-submenu {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: #2a2a2a;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .switch-submenu-item {
+    color: #d1d5db;
+  }
+
+  .switch-submenu-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .switch-submenu-item:disabled {
+    color: #555;
   }
 
   .switch-row-label {

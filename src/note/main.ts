@@ -32,6 +32,7 @@ import {
   isDirty,
   listPieces,
   listProjects,
+  openDocumentFromFile,
   readNote,
   renameNote,
   renameProject,
@@ -97,6 +98,10 @@ let currentDocument: NoteEntry | null = null;
 let menuEl: HTMLElement | null = null;
 /** The project-name button the switcher menu is anchored to (for repositioning). */
 let menuAnchor: HTMLElement | null = null;
+/** 当前打开的二级菜单浮层（项目/文档标题的 `+` 展开），与主菜单同生命周期。 */
+let submenuEl: HTMLElement | null = null;
+/** 二级菜单的触发按钮，用于切换 aria-expanded。 */
+let submenuTrigger: HTMLElement | null = null;
 /** AI 改写热刷新期间置位，避免编辑器变更回灌 autosave。 */
 let applyingRemote = false;
 
@@ -425,8 +430,85 @@ void onFileChanged(async (changedPath) => {
 });
 
 function closeMenu() {
+  closeSubmenu();
   menuEl?.remove();
   menuEl = null;
+}
+
+/** 收起二级菜单，同步把触发按钮的 aria-expanded 复位。 */
+function closeSubmenu() {
+  if (submenuEl) {
+    submenuEl.remove();
+    submenuEl = null;
+  }
+  if (submenuTrigger) {
+    submenuTrigger.setAttribute("aria-expanded", "false");
+    submenuTrigger = null;
+  }
+}
+
+/** 在 `trigger` 右侧（空间不足则下方）弹出一个二级菜单，`items` 为其条目。
+ * 条目点击后由调用方自行决定是否关闭主菜单。点击子菜单内部不冒泡到主菜单
+ * 的「外部点击关闭」监听；Esc 先收起子菜单。 */
+function openSubmenu(trigger: HTMLElement, items: HTMLElement[]) {
+  closeSubmenu();
+  submenuTrigger = trigger;
+  trigger.setAttribute("aria-expanded", "true");
+
+  const sub = document.createElement("div");
+  sub.className = "switch-submenu";
+  for (const item of items) sub.appendChild(item);
+
+  // 先挂载以测尺寸，再按锚点 + 视口定位。
+  sub.style.visibility = "hidden";
+  document.body.appendChild(sub);
+  const r = trigger.getBoundingClientRect();
+  const w = sub.offsetWidth;
+  const h = sub.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const left = r.right + w > vw ? Math.max(8, r.left - w) : r.right;
+  const top = r.bottom + h > vh ? Math.max(8, r.top - h) : r.bottom;
+  sub.style.left = `${left}px`;
+  sub.style.top = `${top}px`;
+  sub.style.visibility = "";
+
+  // 子菜单内点击不触发主菜单的外部关闭。
+  sub.addEventListener("click", (e) => e.stopPropagation());
+  // Esc：先收起子菜单；不阻止后续事件，主菜单自身不收（保持打开）。
+  sub.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeSubmenu();
+      trigger.focus();
+    }
+  });
+
+  submenuEl = sub;
+
+  // 焦点进子菜单首项，便于键盘操作（Esc 收起、Tab 遍历）。
+  const first = items.find((it) => !(it as HTMLButtonElement).disabled) as HTMLButtonElement | undefined;
+  first?.focus();
+}
+
+/** 构造一个二级菜单条目按钮。`disabled` 时置灰且不响应点击。 */
+function makeSubmenuItem(label: string, opts: { onClick?: () => void; disabled?: boolean; ariaLabel?: string } = {}): HTMLElement {
+  const item = document.createElement("button");
+  item.type = "button";
+  item.className = "switch-submenu-item";
+  item.innerHTML = label;
+  if (opts.ariaLabel) item.setAttribute("aria-label", opts.ariaLabel);
+  if (opts.disabled) {
+    item.disabled = true;
+    item.classList.add("disabled");
+  } else if (opts.onClick) {
+    item.onclick = (e) => {
+      e.stopPropagation();
+      opts.onClick!();
+    };
+  }
+  return item;
 }
 
 /** Record a project as most-recently-used and persist the capped MRU list. */
@@ -498,91 +580,106 @@ async function showProjectSwitcher(anchor: HTMLElement) {
   menuEl.style.top = `${rect.bottom + 2}px`;
 
   // ── 项目区 ──
-  if (projects.length > 0) {
-    menuEl.appendChild(sectionHeader("ph-folder", "项目"));
-    for (const project of projects) {
-      menuEl.appendChild(
-        makeSwitcherRow({
-          label: project.name,
-          icon: "ph-folder",
-          active: mode === "project" && currentProject?.path === project.path,
-          onOpen: () => {
-            closeMenu();
-            void openProject(project);
-          },
-          onRename: (host) =>
-            void promptRename(host, project.name, async (name) => {
-              const newPath = await renameProject(project.path, name);
-              recent = recent.map((p) => (p === project.path ? newPath : p));
-              await setRecentProjects(recent);
-              if (mode === "project" && currentProject?.path === project.path) {
-                currentProject = { name, path: newPath };
-                setProjectLabel(name);
-              }
-            }),
-          onDelete: () => void deleteProjectFlow(project),
-        }),
-      );
-    }
+  menuEl.appendChild(
+    sectionHeader("ph-folder", "项目", {
+      ariaLabel: "新建项目",
+      onOpen: (trigger) => openProjectAddSubmenu(trigger),
+    }),
+  );
+  for (const project of projects) {
+    menuEl.appendChild(
+      makeSwitcherRow({
+        label: project.name,
+        active: mode === "project" && currentProject?.path === project.path,
+        onOpen: () => {
+          closeMenu();
+          void openProject(project);
+        },
+        onRename: (host) =>
+          void promptRename(host, project.name, async (name) => {
+            const newPath = await renameProject(project.path, name);
+            recent = recent.map((p) => (p === project.path ? newPath : p));
+            await setRecentProjects(recent);
+            if (mode === "project" && currentProject?.path === project.path) {
+              currentProject = { name, path: newPath };
+              setProjectLabel(name);
+            }
+          }),
+        onDelete: () => void deleteProjectFlow(project),
+      }),
+    );
   }
 
   // ── 文档区 ──
-  if (documents.length > 0) {
-    menuEl.appendChild(sectionHeader("ph-file", "文档"));
-    for (const doc of documents) {
-      menuEl.appendChild(
-        makeSwitcherRow({
-          label: doc.name,
-          icon: "ph-file",
-          active: mode === "document" && currentDocument?.path === doc.path,
-          onOpen: () => {
-            closeMenu();
-            void openDocument(doc);
-          },
-          onRename: (host) =>
-            void promptRename(host, doc.name, async (name) => {
-              const newPath = await renameNote(parentDir(doc.path), doc.name, name);
-              recentDocs = recentDocs.map((p) => (p === doc.path ? newPath : p));
-              await setRecentDocuments(recentDocs);
-              if (mode === "document" && currentDocument?.path === doc.path) {
-                currentDocument = { name, path: newPath };
-                setProjectLabel(name);
-                pieceHeader?.setLabel(name);
-              }
-            }),
-          onDelete: () => void deleteDocumentFlow(doc),
-        }),
-      );
-    }
-  }
-
-  // ── 新建 ──
-  // 在当前项目的同级目录新建。
-  addNewProjectEntry(`<i class="ph ph-plus"></i> 在当前目录新建项目`, () =>
-    currentProject ? parentDir(currentProject.path) : null,
+  menuEl.appendChild(
+    sectionHeader("ph-file", "文档", {
+      ariaLabel: "新建或打开文档",
+      onOpen: (trigger) => openDocumentAddSubmenu(trigger),
+    }),
   );
-  // 弹系统文件夹选择器，在任意位置的某个父目录下新建。
-  addNewProjectEntry(`<i class="ph ph-folder-open"></i> 选择位置新建项目…`, async () => {
-    const picked = await open({ directory: true, multiple: false });
-    return typeof picked === "string" ? picked : null;
-  });
-  addNewDocumentEntry();
+  for (const doc of documents) {
+    menuEl.appendChild(
+      makeSwitcherRow({
+        label: doc.name,
+        active: mode === "document" && currentDocument?.path === doc.path,
+        onOpen: () => {
+          closeMenu();
+          void openDocument(doc);
+        },
+        onRename: (host) =>
+          void promptRename(host, doc.name, async (name) => {
+            const newPath = await renameNote(parentDir(doc.path), doc.name, name);
+            recentDocs = recentDocs.map((p) => (p === doc.path ? newPath : p));
+            await setRecentDocuments(recentDocs);
+            if (mode === "document" && currentDocument?.path === doc.path) {
+              currentDocument = { name, path: newPath };
+              setProjectLabel(name);
+              pieceHeader?.setLabel(name);
+            }
+          }),
+        onDelete: () => void deleteDocumentFlow(doc),
+      }),
+    );
+  }
 
   document.body.appendChild(menuEl);
   setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
 }
 
-/** 区块标题（项目 / 文档），左侧 Phosphor 图标 + 文字。 */
-function sectionHeader(icon: string, label: string): HTMLElement {
+/** 区块标题（项目 / 文档）：左侧 Phosphor 图标 + 文字，右侧一个 `+` 展开
+ * 二级菜单（添加入口）。`add` 缺省时不渲染 `+`。 */
+function sectionHeader(
+  icon: string,
+  label: string,
+  add?: { ariaLabel: string; onOpen: (trigger: HTMLButtonElement) => void },
+): HTMLElement {
   const h = document.createElement("div");
   h.className = "switch-section";
   h.innerHTML = `<i class="ph ${icon}"></i><span>${label}</span>`;
+  if (add) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "switch-section-add";
+    btn.setAttribute("aria-label", add.ariaLabel);
+    btn.setAttribute("aria-haspopup", "menu");
+    btn.setAttribute("aria-expanded", "false");
+    btn.innerHTML = `<i class="ph ph-plus"></i>`;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      // 再次点击同一个 `+` 收起子菜单。
+      if (submenuTrigger === btn) {
+        closeSubmenu();
+        return;
+      }
+      add.onOpen(btn);
+    };
+    h.appendChild(btn);
+  }
   return h;
 }
 
 interface SwitcherRowOpts {
   label: string;
-  icon: string;
   active?: boolean;
   onOpen: () => void;
   onRename: (host: HTMLElement) => void;
@@ -590,7 +687,8 @@ interface SwitcherRowOpts {
 }
 
 /** 切换菜单的一行：左侧标签（点击打开），右侧悬停露出重命名 / 删除。
- * 行体是 div（而非 button），避免 button-in-button 嵌套。 */
+ * 行体是 div（而非 button），避免 button-in-button 嵌套。
+ * 不再为每行渲染图标——区块标题的图标已代表类别，行内只留名称。 */
 function makeSwitcherRow(opts: SwitcherRowOpts): HTMLElement {
   const row = document.createElement("div");
   row.className = "switch-row";
@@ -598,7 +696,7 @@ function makeSwitcherRow(opts: SwitcherRowOpts): HTMLElement {
 
   const label = document.createElement("button");
   label.className = "switch-row-label";
-  label.innerHTML = `<i class="ph ${opts.icon}"></i><span class="switch-row-name">${opts.label}</span>`;
+  label.innerHTML = `<span class="switch-row-name">${opts.label}</span>`;
   label.onclick = (e) => {
     e.stopPropagation();
     opts.onOpen();
@@ -724,52 +822,79 @@ async function deleteDocumentFlow(doc: NoteEntry) {
   }
 }
 
-/** 新建文档：弹系统保存对话框，写空文件后打开。 */
-function addNewDocumentEntry() {
-  if (!menuEl) return;
-  const item = document.createElement("button");
-  item.className = "switch-item switch-new";
-  item.innerHTML = `<i class="ph ph-file-plus"></i> 新建文档`;
-  item.onclick = async (e) => {
-    e.stopPropagation();
-    closeMenu();
-    const doc = await createDocument();
-    if (!doc) return;
-    await rememberDocument(doc.path);
-    await openDocument(doc);
-  };
-  menuEl.appendChild(item);
+/** 在锚点（项目名按钮）下方重建一个空的最小浮层，用于承载命名输入框。
+ * 用于「选择位置新建」等会弹原生对话框、可能令主菜单已被外点击关闭的场景。 */
+function rebuildMenuAtAnchor(): HTMLElement | null {
+  if (!menuAnchor) return null;
+  const m = document.createElement("div");
+  m.className = "switch-menu";
+  const rect = menuAnchor.getBoundingClientRect();
+  m.style.left = `${rect.left}px`;
+  m.style.top = `${rect.bottom + 2}px`;
+  document.body.appendChild(m);
+  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
+  return m;
 }
 
-/** Append a "new project" menu entry that, when clicked, resolves a parent
- * directory via `getParent` and then swaps itself for an inline name input. */
-function addNewProjectEntry(label: string, getParent: () => string | null | Promise<string | null>) {
-  if (!menuEl) return;
-  const item = document.createElement("button");
-  item.className = "switch-item switch-new";
-  item.innerHTML = label;
-  item.onclick = async (e) => {
-    e.stopPropagation();
-    const parent = await getParent();
-    if (!parent) {
-      closeMenu();
-      return;
-    }
-    // "选择位置"可能弹了原生对话框使菜单已被外部点击关闭，重建一个最小输入态。
-    if (!menuEl && menuAnchor) {
-      menuEl = document.createElement("div");
-      menuEl.className = "switch-menu";
-      const rect = menuAnchor.getBoundingClientRect();
-      menuEl.style.left = `${rect.left}px`;
-      menuEl.style.top = `${rect.bottom + 2}px`;
-      document.body.appendChild(menuEl);
-      setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
-      promptNewProjectName(menuEl, parent);
-      return;
-    }
-    promptNewProjectName(item, parent);
-  };
-  menuEl.appendChild(item);
+/** 收起当前菜单，在锚点处开一个只含命名输入框的最小浮层。 */
+function beginNewProjectName(parent: string) {
+  closeMenu();
+  const m = rebuildMenuAtAnchor();
+  if (!m) return;
+  menuEl = m;
+  promptNewProjectName(m, parent);
+}
+
+/** 项目标题 `+` 的二级菜单：在当前目录新建 / 选择位置新建… */
+function openProjectAddSubmenu(trigger: HTMLButtonElement) {
+  const items = [
+    makeSubmenuItem(`<i class="ph ph-plus"></i> 在当前目录新建`, {
+      disabled: !currentProject,
+      onClick: () => {
+        if (!currentProject) return;
+        beginNewProjectName(parentDir(currentProject.path));
+      },
+    }),
+    makeSubmenuItem(`<i class="ph ph-folder-open"></i> 选择位置新建…`, {
+      onClick: async () => {
+        const picked = await open({ directory: true, multiple: false });
+        const parent = typeof picked === "string" ? picked : null;
+        if (!parent) {
+          closeMenu();
+          return;
+        }
+        beginNewProjectName(parent);
+      },
+    }),
+  ];
+  openSubmenu(trigger, items);
+}
+
+/** 文档标题 `+` 的二级菜单：新建文档 / 打开 Markdown 文件… */
+function openDocumentAddSubmenu(trigger: HTMLButtonElement) {
+  const items = [
+    makeSubmenuItem(`<i class="ph ph-file-plus"></i> 新建文档…`, {
+      onClick: async () => {
+        closeSubmenu();
+        closeMenu();
+        const doc = await createDocument();
+        if (!doc) return;
+        await rememberDocument(doc.path);
+        await openDocument(doc);
+      },
+    }),
+    makeSubmenuItem(`<i class="ph ph-folder-open"></i> 打开 Markdown 文件…`, {
+      onClick: async () => {
+        closeSubmenu();
+        closeMenu();
+        const doc = await openDocumentFromFile();
+        if (!doc) return;
+        await rememberDocument(doc.path);
+        await openDocument(doc);
+      },
+    }),
+  ];
+  openSubmenu(trigger, items);
 }
 
 /** Replace `host` (a menu item) — or append to it, if it is the menu — with an
