@@ -160,8 +160,11 @@ export async function listPieces(projectDir: string): Promise<NoteEntry[]> {
   return invoke<NoteEntry[]>("list_pieces", { projectDir });
 }
 
-export async function createNote(dir: string): Promise<NoteEntry> {
-  return invoke<NoteEntry>("create_note", { dir });
+/** Create an empty note (piece or standalone document) in `dir`. Pass `title`
+ * to give the file a meaningful stem from the start (sanitized server-side);
+ * omit it to fall back to the legacy timestamp stem. */
+export async function createNote(dir: string, title?: string): Promise<NoteEntry> {
+  return invoke<NoteEntry>("create_note", { dir, title: title ?? null });
 }
 
 export async function renameNote(dir: string, oldName: string, newStem: string): Promise<string> {

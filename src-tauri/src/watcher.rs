@@ -72,8 +72,12 @@ impl FileWatcher {
 
         let watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
             if let Ok(event) = res {
-                // 只关心内容修改和创建（某些编辑器先删后建）。
-                if !matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+                // 关心内容修改、创建（某些编辑器先删后建）与删除（外部删 piece 时
+                // 让前端切到下一片或 NO_PIECE）。自身删除由 mark_self_write 抑制。
+                if !matches!(
+                    event.kind,
+                    EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+                ) {
                     return;
                 }
                 for path in &event.paths {

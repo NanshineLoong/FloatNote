@@ -108,6 +108,7 @@ pub fn run() {
             commands::get_config,
             commands::set_config,
             commands::set_working_dir,
+            commands::open_settings,
             commands::list_notes,
             commands::read_note,
             commands::write_note,

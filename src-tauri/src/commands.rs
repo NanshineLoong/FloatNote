@@ -46,6 +46,13 @@ pub fn set_working_dir(state: State<AppState>, dir: String) -> Result<(), String
     crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())
 }
 
+/// Show and focus the settings window. The PATH_ERROR empty state uses this as
+/// its recovery entry so users can re-pick a working directory.
+#[tauri::command]
+pub fn open_settings(app: tauri::AppHandle) {
+    crate::windows::show_settings(&app);
+}
+
 #[tauri::command]
 pub fn list_notes(dir: String) -> Result<Vec<notes::NoteEntry>, String> {
     notes::list_markdown(std::path::Path::new(&dir)).map_err(|error| error.to_string())
@@ -64,10 +71,20 @@ pub fn write_note(state: State<AppState>, path: String, content: String) -> Resu
 }
 
 #[tauri::command]
-pub fn create_note(state: State<AppState>, dir: String) -> Result<notes::NoteEntry, String> {
+pub fn create_note(
+    state: State<AppState>,
+    dir: String,
+    title: Option<String>,
+) -> Result<notes::NoteEntry, String> {
     let dir_path = std::path::PathBuf::from(&dir);
     std::fs::create_dir_all(&dir_path).map_err(|error| error.to_string())?;
-    let stem = notes::timestamp_stem(chrono::Local::now().naive_local());
+    // When a title is supplied, sanitize it into the file stem so the new note
+    // carries a meaningful name from the start. Without one, fall back to the
+    // timestamp stem to preserve the legacy behavior other callers rely on.
+    let stem = match title {
+        Some(title) => project::sanitize_folder_name(&title),
+        None => notes::timestamp_stem(chrono::Local::now().naive_local()),
+    };
     let filename = notes::unique_filename(&dir_path, &stem);
     let path = dir_path.join(&filename);
     let path_str = path.to_string_lossy().to_string();

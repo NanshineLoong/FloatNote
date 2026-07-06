@@ -166,7 +166,17 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
 
   async function reload() {
     const path = host.tasksPath();
-    items = path ? parseTasks(await readNote(path)) : [];
+    if (!path) {
+      items = [];
+      draw();
+      return;
+    }
+    try {
+      items = parseTasks(await readNote(path));
+    } catch {
+      // _tasks.md 尚未落盘（新建项目只 scaffold inbox，任务文件懒创建）→ 当作空。
+      items = [];
+    }
     draw();
   }
 

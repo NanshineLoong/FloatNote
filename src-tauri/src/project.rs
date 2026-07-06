@@ -4,8 +4,6 @@ use std::path::{Path, PathBuf};
 use crate::notes::NoteEntry;
 
 pub const INBOX_FILE: &str = "_inbox.md";
-pub const TASKS_FILE: &str = "_tasks.md";
-pub const DEFAULT_PIECE: &str = "piece.md";
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct ProjectEntry {
@@ -124,15 +122,16 @@ fn unique_dir(root: &Path, base: &str) -> PathBuf {
     candidate
 }
 
-/// Create a new project-space folder under `root`, scaffolding `_inbox.md`,
-/// `_tasks.md`, and a default `piece.md` (all empty). Returns the created folder.
+/// Create a new project-space folder under `root`, scaffolding only `_inbox.md`
+/// (empty). `_tasks.md` is created lazily on first task entry, and the first
+/// piece is created on demand from the NO_PIECE empty state — so a brand-new
+/// project lands in the empty-state flow rather than with a placeholder piece.
+/// Returns the created folder.
 pub fn create_project(root: &Path, name: &str) -> std::io::Result<ProjectEntry> {
     let base = sanitize_folder_name(name);
     let dir = unique_dir(root, &base);
     std::fs::create_dir_all(&dir)?;
     std::fs::write(dir.join(INBOX_FILE), "")?;
-    std::fs::write(dir.join(TASKS_FILE), "")?;
-    std::fs::write(dir.join(DEFAULT_PIECE), "")?;
     Ok(ProjectEntry {
         name: dir.file_name().unwrap().to_string_lossy().to_string(),
         path: dir.to_string_lossy().to_string(),
@@ -196,7 +195,7 @@ mod tests {
     fn lists_pieces_excluding_underscore_files_newest_first() {
         let project = tempdir();
         std::fs::write(project.path().join(INBOX_FILE), "").unwrap();
-        std::fs::write(project.path().join(TASKS_FILE), "").unwrap();
+        std::fs::write(project.path().join("_tasks.md"), "").unwrap();
         std::fs::write(project.path().join("piece.md"), "").unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));
         std::fs::write(project.path().join("draft.md"), "").unwrap();
@@ -217,8 +216,10 @@ mod tests {
         assert_eq!(entry.name, "阅读笔记");
         let dir = root.path().join("阅读笔记");
         assert!(is_project_dir(&dir));
-        assert!(dir.join(TASKS_FILE).is_file());
-        assert!(dir.join(DEFAULT_PIECE).is_file());
+        // Only _inbox.md is scaffolded; _tasks.md and the first piece are
+        // created lazily so a new project lands in the NO_PIECE empty state.
+        assert!(!dir.join("_tasks.md").is_file());
+        assert!(!dir.join("piece.md").is_file());
 
         // A second project with the same name gets a numeric suffix.
         let entry2 = create_project(root.path(), "阅读笔记").unwrap();
