@@ -1081,11 +1081,13 @@ input {
   padding: 12px 0 2px;
 }
 
-/* 切换行：左 breadcrumb、右版本入口，占满文档头宽度。 */
+/* 切换行：左 breadcrumb、右版本入口。作为固定顶栏的 flex 子项，与 .piece-mode-slot
+   共享一行，故用 flex:1 而非 width:100%（后者会挤掉 mode-slot）。 */
 .piece-crumb-row {
   display: flex;
   align-items: center;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* 写作文档头右端的版本入口：低调时钟图标，hover 才显色。 */
@@ -1244,6 +1246,18 @@ input {
 
 #app.show-piece:not(.split-active) #tag-bar-root {
   display: none;
+}
+
+/* 单栏写作：写作顶栏满边距铺满 row 1（与采集顶栏在单栏采集下的满宽对称）。 */
+#app.show-piece:not(.split-active) #piece-topbar-root {
+  display: flex;
+  grid-column: 1 / -1;
+}
+
+/* 双栏：写作顶栏收缩到写作列（col 4），与采集顶栏各管各。 */
+#app.split-active #piece-topbar-root {
+  display: flex;
+  grid-column: 4;
 }
 
 /* 单栏显示成品：成品栏借 text-col 的网格位（col 2 / row 1）铺满。 */
@@ -1551,6 +1565,37 @@ input {
   min-width: 0;
 }
 
+/* 双栏：采集顶栏收缩到采集列（col 2），不再横跨写作列。单栏下仍 1/-1 满边距。 */
+#app.split-active #tag-bar-root {
+  grid-column: 2;
+}
+
+/* 写作顶栏：固定在 #note-body 顶行（不随正文滚动），承载 breadcrumb / 版本 / 删除
+   与模式切换预留位。默认隐藏，由 show-piece（单栏写作）/ split-active（双栏）显隐。
+   纵向节奏与 .tag-bar 一致（同高 padding + 底分隔线）。 */
+#piece-topbar-root {
+  grid-row: 1;
+  display: none;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  padding-right: 14px;
+  padding-bottom: 6px;
+  padding-left: 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* 模式切换预留位（如未来的 大纲/正文）。v1 留空；靠 .piece-crumb-row 的 flex:1 被推到右端。 */
+.piece-mode-slot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .tag-bar {
   display: flex;
   align-items: center;
@@ -1813,6 +1858,10 @@ input {
 
 @media (prefers-color-scheme: dark) {
   .tag-bar {
+    background: #1e1e1e;
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+  #piece-topbar-root {
     background: #1e1e1e;
     border-bottom-color: rgba(255, 255, 255, 0.08);
   }

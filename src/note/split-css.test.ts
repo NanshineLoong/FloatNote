@@ -6,6 +6,7 @@ const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 const mainSource = readFileSync(resolve(process.cwd(), "src/note/main.ts"), "utf8");
 const editorSource = readFileSync(resolve(process.cwd(), "src/note/editor.ts"), "utf8");
 const tagDecorationSource = readFileSync(resolve(process.cwd(), "src/note/tags/decoration.ts"), "utf8");
+const pieceSwitcherSource = readFileSync(resolve(process.cwd(), "src/note/piece-switcher.ts"), "utf8");
 const assistantCss = readFileSync(resolve(process.cwd(), "src/assistant/styles.css"), "utf8");
 const assistantBubbleColor = assistantCss.match(/\.chat-assistant\s*{[^}]*background:\s*(#[0-9a-fA-F]{6});/s)?.[1];
 
@@ -131,5 +132,40 @@ describe("split view CSS placement", () => {
     expect(assistantCss).toMatch(
       /\.chat-streaming\s*{[^}]*animation:\s*none;/s,
     );
+  });
+});
+
+describe("per-area topbars (采集 / 写作)", () => {
+  // 双栏下采集顶栏必须收缩到采集列（col 2），不再横跨写作列；单栏仍满边距。
+  it("scopes the collection tag bar to the inbox column in split mode", () => {
+    expect(css).toMatch(/#app\.split-active\s+#tag-bar-root\s*\{[^}]*grid-column:\s*2;/s);
+  });
+
+  it("gives the writing area its own fixed topbar, hidden by default", () => {
+    expect(mainSource).toMatch(/<div id="piece-topbar-root"><\/div>/);
+    expect(css).toMatch(/#piece-topbar-root\s*\{[^}]*grid-row:\s*1;[^}]*display:\s*none;/s);
+  });
+
+  it("spans the writing topbar full width in single-piece mode, scoped to col 4 in split", () => {
+    expect(css).toMatch(
+      /#app\.show-piece:not\(\.split-active\)\s+#piece-topbar-root\s*\{[^}]*display:\s*flex;[^}]*grid-column:\s*1\s*\/\s*-1;/s,
+    );
+    expect(css).toMatch(
+      /#app\.split-active\s+#piece-topbar-root\s*\{[^}]*display:\s*flex;[^}]*grid-column:\s*4;/s,
+    );
+  });
+
+  it("reserves a mode-toggle slot and lets the crumb row share the topbar row", () => {
+    expect(css).toMatch(/\.piece-mode-slot\s*\{[^}]*display:\s*flex;/s);
+    // crumb row must flex to share the row with .piece-mode-slot (was width:100%)
+    expect(css).toMatch(/\.piece-crumb-row\s*\{[^}]*flex:\s*1\s+1\s+auto;/s);
+    expect(css).not.toMatch(/\.piece-crumb-row\s*\{[^}]*width:\s*100%;/s);
+  });
+
+  it("splits createPieceHeader across the topbar mount and the title mount", () => {
+    expect(mainSource).toMatch(/createPieceHeader\(\{[^}]*topbarMount/);
+    expect(pieceSwitcherSource).toMatch(/topbarMount\.appendChild\(crumbRow\)/);
+    expect(pieceSwitcherSource).toMatch(/topbarMount\.appendChild\(modeSlot\)/);
+    expect(pieceSwitcherSource).toMatch(/titleMount\.appendChild\(title\)/);
   });
 });
