@@ -114,8 +114,47 @@ class TableWidget extends WidgetType {
 // rebuilds and the widget re-paints with the cached data-URI on its next toDOM.
 // One process-wide cache keyed by bundle id; icons are stable per installed app.
 const iconCache = new Map<string, string | null>();
+const iconFailureAt = new Map<string, number>();
 const iconPending = new Set<string>();
+const iconRetryTimers = new Map<string, number>();
 let iconView: EditorView | null = null;
+const ICON_RETRY_MS = 30_000;
+
+export function shouldRetryMissingIcon(
+  failedAt: number | undefined,
+  now: number,
+  retryMs = ICON_RETRY_MS,
+): boolean {
+  return failedAt === undefined || now - failedAt >= retryMs;
+}
+
+export function iconCacheStateKey(
+  hasCacheEntry: boolean,
+  cached: string | null | undefined,
+  failedAt: number | undefined,
+): string {
+  if (cached) return "ready";
+  if (hasCacheEntry) return `missing:${failedAt ?? 0}`;
+  return "empty";
+}
+
+function dispatchIconReady(): void {
+  const v = iconView;
+  if (v) queueMicrotask(() => v.dispatch({ effects: IconReadyEffect.of(0) }));
+}
+
+function scheduleIconRetry(bundleId: string): void {
+  if (iconRetryTimers.has(bundleId)) return;
+  const timer = window.setTimeout(() => {
+    iconRetryTimers.delete(bundleId);
+    if (iconCache.get(bundleId) === null) {
+      iconCache.delete(bundleId);
+      iconFailureAt.delete(bundleId);
+      dispatchIconReady();
+    }
+  }, ICON_RETRY_MS);
+  iconRetryTimers.set(bundleId, timer);
+}
 
 /** Emitted to self when an icon fetch resolves so the plugin rebuilds. */
 const IconReadyEffect = StateEffect.define<number>();
@@ -124,22 +163,37 @@ const IconReadyEffect = StateEffect.define<number>();
  *  (a fetch is started on a miss). `view` is remembered for the async callback. */
 function ensureIcon(view: EditorView, bundleId: string): string | null {
   iconView = view;
-  if (iconCache.has(bundleId)) return iconCache.get(bundleId) ?? null;
+  if (iconCache.has(bundleId)) {
+    const cached = iconCache.get(bundleId) ?? null;
+    if (cached) return cached;
+    if (!shouldRetryMissingIcon(iconFailureAt.get(bundleId), Date.now())) {
+      return null;
+    }
+    iconCache.delete(bundleId);
+    iconFailureAt.delete(bundleId);
+  }
   if (iconPending.has(bundleId)) return null;
   iconPending.add(bundleId);
   void invoke<string | null>("app_icon", { bundleId })
     .then((dataUri) => {
       iconCache.set(bundleId, dataUri ?? null);
+      if (dataUri) {
+        iconFailureAt.delete(bundleId);
+      } else {
+        iconFailureAt.set(bundleId, Date.now());
+        scheduleIconRetry(bundleId);
+      }
     })
     .catch(() => {
       iconCache.set(bundleId, null);
+      iconFailureAt.set(bundleId, Date.now());
+      scheduleIconRetry(bundleId);
     })
     .finally(() => {
       iconPending.delete(bundleId);
       // Defer: toDOM runs mid-decoration-build; dispatching synchronously could
       // re-enter the plugin. A microtask lets the current build finish first.
-      const v = iconView;
-      if (v) queueMicrotask(() => v.dispatch({ effects: IconReadyEffect.of(0) }));
+      dispatchIconReady();
     });
   return null;
 }
@@ -152,12 +206,12 @@ class QuoteCardWidget extends WidgetType {
   constructor(
     readonly chipsStr: string,
     readonly bundleId: string | null,
-    readonly iconCached: boolean,
+    readonly iconStateKey: string,
   ) { super(); }
   eq(o: QuoteCardWidget): boolean {
     return o.chipsStr === this.chipsStr &&
       o.bundleId === this.bundleId &&
-      o.iconCached === this.iconCached;
+      o.iconStateKey === this.iconStateKey;
   }
   toDOM(view: EditorView): HTMLElement {
     const span = document.createElement("span");
@@ -455,11 +509,16 @@ function buildDecorations(view: EditorView): DecorationSet {
         const lastLine = doc.line(lastLineNo);
         const blockText = doc.sliceString(titleLine.from, lastLine.to);
         const bundleId = readBidMarker(blockText);
-        const iconCached = !!bundleId && iconCache.has(bundleId);
+        const cachedIcon = bundleId ? iconCache.get(bundleId) : undefined;
+        const iconStateKey = bundleId
+          ? iconCacheStateKey(iconCache.has(bundleId), cachedIcon, iconFailureAt.get(bundleId))
+          : "none";
         entries.push({
           from: chipStart,
           to: chipStart + chipsStr.length,
-          deco: Decoration.replace({ widget: new QuoteCardWidget(chipsStr, bundleId, iconCached) }),
+          deco: Decoration.replace({
+            widget: new QuoteCardWidget(chipsStr, bundleId, iconStateKey),
+          }),
         });
       }
     }

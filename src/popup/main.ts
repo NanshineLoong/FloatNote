@@ -104,6 +104,8 @@ async function onSubmit(): Promise<void> {
 }
 
 async function setupListeners(): Promise<void> {
+  let lastAutomationToastAt = 0;
+
   await listen<PopupPayload>("popup-payload", (event) => {
     void showAt(event.payload.x, event.payload.y, event.payload.hasText);
   });
@@ -116,7 +118,10 @@ async function setupListeners(): Promise<void> {
 
   // 浏览器自动化权限缺失时，后端同样发 automation-needed；弹窗内就地提示。
   await listen("automation-needed", () => {
-    showToast("未获得浏览器自动化权限，无法捕获网址/标题");
+    const now = Date.now();
+    if (now - lastAutomationToastAt < 30_000) return;
+    lastAutomationToastAt = now;
+    showToast("浏览器授权未完成，授权后重试即可");
   });
 
   await getCurrentWindow().onFocusChanged(({ payload: focused }) => {

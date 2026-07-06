@@ -10,22 +10,18 @@ let styleInjected = false;
 let toastEl: HTMLElement | null = null;
 let dismissTimer: number | null = null;
 
-function ensureStyle(): void {
-  if (styleInjected || document.getElementById("floatnote-toast-style")) {
-    styleInjected = true;
-    return;
-  }
-  const style = document.createElement("style");
-  style.id = "floatnote-toast-style";
-  style.textContent = `
+export const TOAST_STYLE = `
 .toast {
   position: fixed;
   left: 50%;
   bottom: 28px;
   transform: translateX(-50%);
+  max-width: min(360px, calc(100vw - 32px));
+  box-sizing: border-box;
   background: #1f2937;
   color: #fff;
   font-size: 13px;
+  line-height: 1.45;
   padding: 8px 14px;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
@@ -33,7 +29,9 @@ function ensureStyle(): void {
   opacity: 1;
   transition: opacity 200ms ease;
   pointer-events: none;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 .toast.toast-leave {
   opacity: 0;
@@ -44,6 +42,15 @@ function ensureStyle(): void {
   }
 }
 `;
+
+function ensureStyle(): void {
+  if (styleInjected || document.getElementById("floatnote-toast-style")) {
+    styleInjected = true;
+    return;
+  }
+  const style = document.createElement("style");
+  style.id = "floatnote-toast-style";
+  style.textContent = TOAST_STYLE;
   document.head.appendChild(style);
   styleInjected = true;
 }

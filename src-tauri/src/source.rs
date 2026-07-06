@@ -101,8 +101,12 @@ pub fn app_icon(bundle_id: String) -> Option<String> {
         let bid = NSString::from_str(&bundle_id);
         // Resolve bundle id → .app URL (nil for an unknown/missing bundle), then
         // ask NSWorkspace for that file's icon (the colorful app icon).
-        let url = workspace.URLForApplicationWithBundleIdentifier(&bid)?;
-        let path = url.path()?;
+        let path = if let Some(url) = workspace.URLForApplicationWithBundleIdentifier(&bid) {
+            url.path()?
+        } else {
+            let app_path = find_app_bundle_path(&bundle_id)?;
+            NSString::from_str(app_path.to_string_lossy().as_ref())
+        };
         let icon = workspace.iconForFile(&path);
         let tiff = icon.TIFFRepresentation()?;
         tiff.bytes().to_vec()
@@ -130,6 +134,64 @@ pub fn app_icon(_bundle_id: String) -> Option<String> {
     None
 }
 
+#[cfg(target_os = "macos")]
+fn find_app_bundle_path(bundle_id: &str) -> Option<std::path::PathBuf> {
+    let mut roots = vec![
+        std::path::PathBuf::from("/Applications"),
+        std::path::PathBuf::from("/System/Applications"),
+        std::path::PathBuf::from("/System/Applications/Utilities"),
+        std::path::PathBuf::from("/System/Volumes/Preboot/Cryptexes/App/System/Applications"),
+    ];
+    if let Some(home) = std::env::var_os("HOME") {
+        roots.push(std::path::PathBuf::from(home).join("Applications"));
+    }
+
+    for root in roots {
+        if let Some(path) = find_app_bundle_path_in(&root, bundle_id, 3) {
+            return Some(path);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn find_app_bundle_path_in(
+    dir: &std::path::Path,
+    bundle_id: &str,
+    depth: usize,
+) -> Option<std::path::PathBuf> {
+    if depth == 0 {
+        return None;
+    }
+    let entries = std::fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("app") {
+            if app_bundle_id(&path).is_some_and(|id| id.eq_ignore_ascii_case(bundle_id)) {
+                return Some(path);
+            }
+            continue;
+        }
+        if path.is_dir() {
+            if let Some(found) = find_app_bundle_path_in(&path, bundle_id, depth - 1) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn app_bundle_id(app_path: &std::path::Path) -> Option<String> {
+    let plist_path = app_path.join("Contents").join("Info.plist");
+    let value = plist::Value::from_file(plist_path).ok()?;
+    value
+        .as_dictionary()?
+        .get("CFBundleIdentifier")?
+        .as_string()
+        .map(str::to_string)
+}
+
 /// (localizedName, bundleIdentifier) of NSWorkspace.shared.frontmostApplication.
 #[cfg(target_os = "macos")]
 fn frontmost_app() -> Option<(Option<String>, Option<String>)> {
@@ -152,16 +214,18 @@ fn frontmost_app() -> Option<(Option<String>, Option<String>)> {
 /// or None if the bundle is not a supported browser. Uses `tell application id`
 /// so localization of the app name cannot break the script.
 fn browser_script(bundle_id: &str) -> Option<String> {
+    let normalized = bundle_id.to_ascii_lowercase();
     let chromium = [
         "com.google.chrome",
         "com.brave.browser",
+        "com.microsoft.edgemac",
         "com.microsoft.edgemacos",
         "com.vivaldi.vivaldi",
     ];
-    let body = if chromium.contains(&bundle_id) {
+    let body = if chromium.contains(&normalized.as_str()) {
         // Chromium-family tabs expose `title` (not `name`).
         "set t to active tab of front window\n  return (URL of t) & linefeed & (title of t)"
-    } else if bundle_id == "com.apple.safari" {
+    } else if normalized == "com.apple.safari" {
         // Safari documents expose `name`.
         "return (URL of front document) & linefeed & (name of front document)"
     } else {
@@ -222,8 +286,25 @@ mod tests {
     }
 
     #[test]
+    fn browser_script_accepts_real_macos_bundle_id_casing() {
+        let chrome = browser_script("com.google.Chrome").unwrap();
+        assert!(chrome.contains("tell application id \"com.google.Chrome\""));
+
+        let safari = browser_script("com.apple.Safari").unwrap();
+        assert!(safari.contains("tell application id \"com.apple.Safari\""));
+    }
+
+    #[test]
     fn browser_script_unknown_is_none() {
         assert!(browser_script("org.mozilla.firefox").is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn app_icon_returns_png_data_uri_for_safari() {
+        let icon = app_icon("com.apple.Safari".to_string()).unwrap();
+        assert!(icon.starts_with("data:image/png;base64,"));
+        assert!(icon.len() > "data:image/png;base64,".len());
     }
 
     #[test]

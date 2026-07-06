@@ -1063,9 +1063,14 @@ void listen("accessibility-needed", () => {
   showToast("需开启「辅助功能」权限后重试");
 });
 
+let lastAutomationToastAt = 0;
+
 void listen("automation-needed", () => {
   // 后端识别到当前前台是已知浏览器，但 osascript 读不到标签页 URL/标题
   // （macOS 自动化权限未授/被拒/超时）。提示用户去授权，授权后即可恢复
   // 网址+标题捕获；本条引用仍会以"仅 app 名"落地。
-  showToast("未获得浏览器自动化权限，无法捕获网址/标题。请到 系统设置 › 隐私与安全 › 自动化 中允许 FloatNote 控制浏览器");
+  const now = Date.now();
+  if (now - lastAutomationToastAt < 30_000) return;
+  lastAutomationToastAt = now;
+  showToast("浏览器授权未完成，已先保存为应用来源；授权后重试即可");
 });
