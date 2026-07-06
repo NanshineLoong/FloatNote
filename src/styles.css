@@ -506,6 +506,14 @@ input {
   letter-spacing: 0.04em;
 }
 
+/* 切换菜单某区块列表为空时的灰色提示行。 */
+.switch-empty-hint {
+  padding: 4px 10px 6px;
+  color: #b0b0b0;
+  font-size: 12px;
+  font-style: italic;
+}
+
 /* 切换菜单的一行：左标签（点开）、右侧悬停露出的动作。行体是 div 而非 button。 */
 .switch-row {
   display: flex;
@@ -1778,5 +1786,122 @@ input {
   .tag-picker .switch-item.active {
     background: rgba(255, 255, 255, 0.07);
     color: #e5e7eb;
+  }
+}
+
+/* ── 空态：NO_PROJECT / PATH_ERROR / NO_PIECE 共享样式 ──────────────────── */
+
+/* 两个空态容器默认隐藏，由 #app 上的 state-* 类切出。 */
+#body-empty-root,
+#piece-empty-root {
+  display: none;
+}
+
+/* 全窗口空态（NO_PROJECT / PATH_ERROR）：盖住 #note-body，占满 #app 剩余高度。 */
+#body-empty-root {
+  flex: 1;
+  min-height: 0;
+}
+.state-no-project #note-body,
+.state-path-error #note-body {
+  display: none;
+}
+.state-no-project #body-empty-root,
+.state-path-error #body-empty-root {
+  display: flex;
+}
+
+/* 项目内空态（NO_PIECE）：藏写作面编辑器，露出 #piece-empty-root。 */
+.state-no-piece #piece-scroll {
+  display: none;
+}
+.state-no-piece #piece-empty-root {
+  display: flex;
+  height: 100%;
+  width: 100%;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  padding: 32px;
+}
+
+.empty-state-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  max-width: 420px;
+}
+
+.empty-state-icon {
+  font-size: 40px;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.empty-state-title {
+  margin: 4px 0 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: #202124;
+}
+
+.empty-state-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6b7280;
+}
+
+.empty-state-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.empty-state-btn {
+  padding: 7px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: transparent;
+  color: #374151;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.empty-state-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.empty-state-btn.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.empty-state-btn.primary:hover {
+  background: #1d4ed8;
+}
+
+@media (prefers-color-scheme: dark) {
+  .empty-state-title {
+    color: #ececec;
+  }
+  .empty-state-hint {
+    color: #9ca3af;
+  }
+  .empty-state-btn {
+    border-color: rgba(255, 255, 255, 0.16);
+    color: #d1d5db;
+  }
+  .empty-state-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
   }
 }

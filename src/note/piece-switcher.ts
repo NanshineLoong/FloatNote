@@ -24,6 +24,10 @@ export interface PieceHeaderHost {
   restore: (v: number) => Promise<void>;
   /** 删除当前装载的文件（文档模式下由标题栏垃圾桶触发）。 */
   onDelete: () => void;
+  /** 删完当前 piece 后项目里已无 piece；切到 NO_PIECE 空态而非自动建空文件。 */
+  onEmptied?: () => void;
+  /** 聚焦并全选标题栏（新建 piece 后原地改名）。 */
+  focusTitle?: () => void;
   /** 回车提交标题后，焦点跳到正文编辑器首行。 */
   focusBody: () => void;
 }
@@ -106,6 +110,14 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
     crumb.querySelector<HTMLElement>(".piece-breadcrumb-label")!.textContent = name;
     title.classList.remove("rename-error");
     fit();
+  }
+
+  /** 聚焦标题并全选，供新建 piece / 文档后原地改名。等一帧让布局就位。 */
+  function focusTitle() {
+    requestAnimationFrame(() => {
+      title.focus();
+      title.select();
+    });
   }
 
   title.addEventListener("input", fit);
@@ -229,9 +241,10 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
     newItem.innerHTML = `<i class="ph ph-plus"></i> 新建`;
     newItem.onclick = async (e) => {
       e.stopPropagation();
-      const entry = await createNote(host.dir());
+      const entry = await createNote(host.dir(), "未命名作品");
       closeMenu();
-      host.open(entry);
+      await host.open(entry);
+      host.focusTitle?.();
     };
     menuEl.appendChild(newItem);
 
@@ -264,11 +277,14 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
           return;
         }
         closeMenu();
-        // 删的是当前成品 → 选下一个，没有就新建空成品。
+        // 删的是当前成品 → 切到下一个；没有则进入 NO_PIECE 空态（不再兜底建空文件）。
         if (cur && piece.path === cur.path) {
           const remaining = await listPieces(host.dir());
-          const next = remaining[0] ?? (await createNote(host.dir()));
-          host.open(next);
+          if (remaining[0]) {
+            host.open(remaining[0]);
+          } else {
+            host.onEmptied?.();
+          }
         }
       };
 
@@ -284,5 +300,5 @@ export function createPieceHeader(mount: HTMLElement, host: PieceHeaderHost) {
     setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
   }
 
-  return { setLabel, closeMenu, closeVersionMenu };
+  return { setLabel, focusTitle, closeMenu, closeVersionMenu };
 }
