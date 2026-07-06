@@ -9,7 +9,7 @@ import { buildCaretInsert } from "./append";
 import { buildQuoteBlock, mergeQuoteBlock, resolveMergeTarget, type Source } from "./quote";
 import { htmlToMarkdown } from "./paste";
 import { EditorView, placeholder } from "@codemirror/view";
-import { createEditor, insertAtCaret, requestEditorLayout, setDoc } from "./editor";
+import { createEditor, insertAtPos, requestEditorLayout, setDoc } from "./editor";
 import { blockHandleGutter, deleteBlock } from "./blocks/handle-gutter";
 import { cancelBlockDrag, scrollerPositionTheme } from "./blocks/drag";
 import { mountTagBar } from "./tags/bar";
@@ -1035,20 +1035,24 @@ void listen<QuotePayload>("quote-captured", (event) => {
   const body = (html && htmlToMarkdown(html)) || text;
   const doc = editor.state.doc.toString();
   const caret = editor.state.selection.main.from;
-  const target = resolveMergeTarget(doc, caret);
+  const target = resolveMergeTarget(doc, caret, source);
   if (target.kind === "merge") {
     const existing = doc.slice(target.range.from, target.range.to);
-    const merged = mergeQuoteBlock(existing, body, source);
+    const merged = mergeQuoteBlock(existing, body);
     editor.dispatch({
       changes: { from: target.range.from, to: target.range.to, insert: merged },
       selection: { anchor: target.range.from + merged.length },
       scrollIntoView: true,
     });
   } else {
-    const before = doc.slice(0, caret);
-    const after = doc.slice(caret);
+    // `target.at` is the caret when no card is nearby, or the end of the nearest
+    // card when the source differs — so different-source quotes stack as sibling
+    // blocks after the card instead of merging or splitting it.
+    const at = target.at;
+    const before = doc.slice(0, at);
+    const after = doc.slice(at);
     const insert = buildCaretInsert(before, after, buildQuoteBlock(body, source));
-    insertAtCaret(editor, insert);
+    insertAtPos(editor, at, insert);
   }
   editor.focus();
 });
@@ -1057,4 +1061,11 @@ void listen("accessibility-needed", () => {
   // macOS 已由后端弹过一次系统授权框；这里只在窗内给一条简短提示，
   // 不再往 #note-body 正文区塞横幅（避免污染编辑器内容）。
   showToast("需开启「辅助功能」权限后重试");
+});
+
+void listen("automation-needed", () => {
+  // 后端识别到当前前台是已知浏览器，但 osascript 读不到标签页 URL/标题
+  // （macOS 自动化权限未授/被拒/超时）。提示用户去授权，授权后即可恢复
+  // 网址+标题捕获；本条引用仍会以"仅 app 名"落地。
+  showToast("未获得浏览器自动化权限，无法捕获网址/标题。请到 系统设置 › 隐私与安全 › 自动化 中允许 FloatNote 控制浏览器");
 });

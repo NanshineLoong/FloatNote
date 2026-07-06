@@ -1,6 +1,6 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { syntaxTree } from "@codemirror/language";
-import { type Extension, RangeSetBuilder } from "@codemirror/state";
+import { StateEffect, type Extension, RangeSetBuilder } from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
@@ -9,7 +9,7 @@ import {
   type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
-import { parseChips, type Source } from "./quote";
+import { parseChips, readBidMarker, stripBidMarker, type Source } from "./quote";
 import { stripTagMarker } from "./tags/model";
 
 function getCursorLines(view: EditorView): Set<number> {
@@ -107,12 +107,71 @@ class TableWidget extends WidgetType {
   ignoreEvent() { return true; }
 }
 
+// ── App-icon cache ─────────────────────────────────────────────────────────
+// `app_icon(bundleId)` is a Tauri command returning a `data:image/png;base64,…`
+// string (or null). QuoteCardWidget.toDOM is synchronous, so on a cache miss we
+// kick off the fetch and dispatch IconReadyEffect when it resolves; the plugin
+// rebuilds and the widget re-paints with the cached data-URI on its next toDOM.
+// One process-wide cache keyed by bundle id; icons are stable per installed app.
+const iconCache = new Map<string, string | null>();
+const iconPending = new Set<string>();
+let iconView: EditorView | null = null;
+
+/** Emitted to self when an icon fetch resolves so the plugin rebuilds. */
+const IconReadyEffect = StateEffect.define<number>();
+
+/** Return the cached icon data-URI for `bundleId`, or null if not yet available
+ *  (a fetch is started on a miss). `view` is remembered for the async callback. */
+function ensureIcon(view: EditorView, bundleId: string): string | null {
+  iconView = view;
+  if (iconCache.has(bundleId)) return iconCache.get(bundleId) ?? null;
+  if (iconPending.has(bundleId)) return null;
+  iconPending.add(bundleId);
+  void invoke<string | null>("app_icon", { bundleId })
+    .then((dataUri) => {
+      iconCache.set(bundleId, dataUri ?? null);
+    })
+    .catch(() => {
+      iconCache.set(bundleId, null);
+    })
+    .finally(() => {
+      iconPending.delete(bundleId);
+      // Defer: toDOM runs mid-decoration-build; dispatching synchronously could
+      // re-enter the plugin. A microtask lets the current build finish first.
+      const v = iconView;
+      if (v) queueMicrotask(() => v.dispatch({ effects: IconReadyEffect.of(0) }));
+    });
+  return null;
+}
+
 class QuoteCardWidget extends WidgetType {
-  constructor(readonly chipsStr: string) { super(); }
-  eq(o: QuoteCardWidget): boolean { return o.chipsStr === this.chipsStr; }
-  toDOM(): HTMLElement {
+  // `iconCached` flips false→true exactly once, when the async icon fetch
+  // resolves and the plugin rebuilds; that makes `eq` return false once, so CM
+  // re-runs toDOM and the cached data-URI is finally rendered. Without it, CM
+  // would keep the icon-less DOM forever (eq true) and the icon never appears.
+  constructor(
+    readonly chipsStr: string,
+    readonly bundleId: string | null,
+    readonly iconCached: boolean,
+  ) { super(); }
+  eq(o: QuoteCardWidget): boolean {
+    return o.chipsStr === this.chipsStr &&
+      o.bundleId === this.bundleId &&
+      o.iconCached === this.iconCached;
+  }
+  toDOM(view: EditorView): HTMLElement {
     const span = document.createElement("span");
     span.className = "cm-quote-card-chips";
+    if (this.bundleId) {
+      const icon = ensureIcon(view, this.bundleId);
+      if (icon) {
+        const img = document.createElement("img");
+        img.className = "cm-quote-card-icon";
+        img.src = icon;
+        img.alt = "";
+        span.appendChild(img);
+      }
+    }
     const chips: Source[] = parseChips(this.chipsStr);
     chips.forEach((c, i) => {
       if (i > 0) {
@@ -124,21 +183,35 @@ class QuoteCardWidget extends WidgetType {
       if (c.kind === "web" && c.url) {
         const a = document.createElement("a");
         a.className = "cm-quote-card-link";
+        // Real href for status-bar/aria; navigation is blocked in the click
+        // handler and routed through the `open_url` Tauri command (the webview
+        // blocks external navigation by default).
         a.href = c.url;
-        a.target = "_blank";
-        a.rel = "noreferrer";
+        a.title = `${c.title}\n${c.url}`;
         a.textContent = c.title;
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void invoke("open_url", { url: c.url });
+        });
         span.appendChild(a);
       } else {
         const s = document.createElement("span");
         s.className = "cm-quote-card-app";
+        s.title = c.title;
         s.textContent = c.title;
         span.appendChild(s);
       }
     });
     return span;
   }
-  ignoreEvent() { return false; }
+  // Eat clicks on the link so the editor doesn't drop the cursor onto the card
+  // line (which would reveal the raw `> [!quote]` source). Clicks on other parts
+  // of the card keep the existing click-to-reveal-raw behaviour.
+  ignoreEvent(event: Event): boolean {
+    const t = event.target as HTMLElement | null;
+    return !!t && !!t.closest && !!t.closest(".cm-quote-card-link");
+  }
 }
 
 function buildDecorations(view: EditorView): DecorationSet {
@@ -365,21 +438,28 @@ function buildDecorations(view: EditorView): DecorationSet {
     // Title-line chip widget (skip cursor line so the raw marker stays editable).
     // m[1] = `> [!quote] ` (quote marker + type + optional space) — exactly the
     // text already hidden by QuoteMark + the callout-marker loop. m[2] = chips,
-    // minus any trailing floatnote tag marker (stripped here so it doesn't read
-    // as a chip; the marker itself is hidden by the tag decoration plugin). The
-    // widget range ends at the chips' length so it does not overlap the marker's
-    // own hide decoration.
+    // minus any trailing floatnote tag OR bid marker (stripped here so neither
+    // reads as a chip nor overlaps the widget's replaced range; both markers are
+    // hidden by the tag decoration plugin). The widget range ends at the chips'
+    // length so it does not overlap the markers' own hide decorations.
     const titleLine = doc.line(firstLine);
     if (titleLine.from >= view.viewport.from && titleLine.to <= view.viewport.to &&
         !cursorLines.has(firstLine)) {
       const m = /^(>\s*\[!quote\]\s?)(.*)$/.exec(titleLine.text);
       if (m) {
         const chipStart = titleLine.from + m[1].length;
-        const chipsStr = stripTagMarker(m[2]);
+        const chipsStr = stripBidMarker(stripTagMarker(m[2]));
+        // The bid marker lives inline on the title line; read it from the whole
+        // card block so the widget can fetch the app icon.
+        const lastLineNo = cardLastLine.get(firstLine) ?? firstLine;
+        const lastLine = doc.line(lastLineNo);
+        const blockText = doc.sliceString(titleLine.from, lastLine.to);
+        const bundleId = readBidMarker(blockText);
+        const iconCached = !!bundleId && iconCache.has(bundleId);
         entries.push({
           from: chipStart,
           to: chipStart + chipsStr.length,
-          deco: Decoration.replace({ widget: new QuoteCardWidget(chipsStr) }),
+          deco: Decoration.replace({ widget: new QuoteCardWidget(chipsStr, bundleId, iconCached) }),
         });
       }
     }
@@ -401,7 +481,9 @@ const previewPlugin = ViewPlugin.fromClass(
       this.decorations = buildDecorations(view);
     }
     update(u: ViewUpdate) {
-      if (u.docChanged || u.viewportChanged || u.selectionSet) {
+      const iconReady = u.transactions.some((tr) =>
+        tr.effects.some((e) => e.is(IconReadyEffect)));
+      if (u.docChanged || u.viewportChanged || u.selectionSet || iconReady) {
         this.decorations = buildDecorations(u.view);
       }
     }

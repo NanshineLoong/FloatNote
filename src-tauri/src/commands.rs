@@ -323,6 +323,33 @@ pub fn unwatch_dir(state: State<AppState>) {
     }
 }
 
+/// Open `url` in the user's default browser / handler. Used by quote-card link
+/// clicks (the Tauri webview blocks external navigation by default). Platform:
+/// `open` on macOS, `cmd /C start` on Windows, `xdg-open` elsewhere.
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("open");
+        c.arg(&url);
+        c
+    };
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", "", &url]);
+        c
+    };
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    let mut cmd = {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(&url);
+        c
+    };
+    cmd.status().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn config_path(app: &tauri::AppHandle) -> PathBuf {
     app.path()
         .app_config_dir()

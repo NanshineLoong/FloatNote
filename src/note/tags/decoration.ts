@@ -32,8 +32,9 @@ function buildDecorations(view: EditorView): DecorationSet {
     entries.push({ from: 0, to: line1.length, deco: HIDE });
   }
 
-  // ① Hide every per-block marker span.
-  const markerRe = /<!-- floatnote:tag=([a-z0-9-]+) -->/g;
+  // ① Hide every per-block marker span (tag markers AND bid markers — both use
+  //    the `<!-- floatnote:… -->` form and live inline on a block line).
+  const markerRe = /<!-- floatnote:[a-z]+=[^>]*? -->/g;
   let m: RegExpExecArray | null;
   while ((m = markerRe.exec(text)) !== null) {
     entries.push({ from: m.index, to: m.index + m[0].length, deco: HIDE });

@@ -125,7 +125,7 @@ pub fn run_popup_capture(app: &AppHandle) {
     let has_text = captured.is_some();
     if let Some(ref c) = captured {
         // Source app is still frontmost here (popup window is shown only below).
-        let source = crate::source::capture_source();
+        let source = crate::source::capture_source(app);
         state_set(app, c.text.clone(), c.html.clone(), source);
     }
 

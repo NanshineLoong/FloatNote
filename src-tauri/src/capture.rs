@@ -63,7 +63,7 @@ pub fn run_capture(app: &AppHandle) {
         return;
     };
 
-    let source = crate::source::capture_source();
+    let source = crate::source::capture_source(app);
     let payload = crate::source::QuotePayload {
         text: captured.text,
         html: captured.html,
