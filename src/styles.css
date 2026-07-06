@@ -862,15 +862,6 @@ input {
     color: #f87171;
   }
 
-  .piece-trash-btn {
-    color: rgba(255, 255, 255, 0.45);
-  }
-
-  .piece-trash-btn:hover {
-    background: rgba(248, 113, 113, 0.16);
-    color: #f87171;
-  }
-
   .settings input[type="text"],
   .settings input:not([type]),
   .settings input[type="number"] {
@@ -1118,38 +1109,16 @@ input {
   color: #555;
 }
 
-/* 文档模式下的删除按钮（与版本入口同处切换行右端，仅 .doc-mode 显示）。 */
-.piece-trash-btn {
-  margin-left: 2px;
-  display: none;
-  align-items: center;
-  padding: 2px 5px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: #b0b0ac;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.piece-trash-btn:hover {
-  background: rgba(220, 38, 38, 0.1);
-  color: #dc2626;
-}
-
-/* ── 文档模式（#app.doc-mode）：隐藏滑拨杆 / 行动 / 采集面，只留独立文档编辑器。
-   文档头藏掉 breadcrumb 与版本入口，露出删除按钮；顶栏图标换成 file。 */
+/* ── 文档模式（#app.doc-mode）：隐藏滑拨杆 / 行动 / 采集面 / 写作区顶栏，
+   只留独立文档编辑器。文档模式下顶栏那行（面包屑 / 版本 / 删除槽）整行隐藏——
+   独立文档无项目内切换、无版本历史，删除走左上角切换菜单的「文档」区逐行垃圾桶，
+   与项目模式删成品走面包屑菜单同构。写作区直接从大标题开始。 */
 #app.doc-mode #view-seg,
 #app.doc-mode #tasks-toggle,
 #app.doc-mode .piece-breadcrumb,
-#app.doc-mode .piece-version-btn {
+#app.doc-mode .piece-version-btn,
+#app.doc-mode #piece-topbar-root {
   display: none !important;
-}
-
-#app.doc-mode .piece-trash-btn {
-  display: inline-flex;
-  margin-left: auto;
 }
 
 #app.doc-mode .project-name-icon.file-icon {

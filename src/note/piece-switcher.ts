@@ -22,8 +22,6 @@ export interface PieceHeaderHost {
   snapshot: () => Promise<void>;
   /** 恢复当前成品到版本 v（恢复前当前内容已自动存为新版本）。 */
   restore: (v: number) => Promise<void>;
-  /** 删除当前装载的文件（文档模式下由标题栏垃圾桶触发）。 */
-  onDelete: () => void;
   /** 删完当前 piece 后项目里已无 piece；切到 NO_PIECE 空态而非自动建空文件。 */
   onEmptied?: () => void;
   /** 聚焦并全选标题栏（新建 piece 后原地改名）。 */
@@ -34,10 +32,12 @@ export interface PieceHeaderHost {
 
 /**
  * 写作栏的文档头分两处挂载：
- *  - 顶栏（topbarMount，固定不随正文滚动）：breadcrumb 切换行 + 版本入口 + 删除按钮 +
+ *  - 顶栏（topbarMount，固定不随正文滚动）：breadcrumb 切换行 + 版本入口 +
  *    .piece-mode-slot（给未来的 大纲/正文 模式切换预留的空位）。
  *  - 标题（titleMount，随正文滚动）：大标题（= 文件名，可编辑）。
  * 单栏 / 双栏共用同一份 DOM，左缘与正文对齐，故两种模式表现完全一致。
+ * 文档模式下整行 #piece-topbar-root 由 CSS 隐藏：独立文档无项目内切换、无版本历史，
+ * 删除走左上角切换菜单的「文档」区逐行垃圾桶（与项目模式删成品同构）。
  */
 export function createPieceHeader(args: {
   topbarMount: HTMLElement;
@@ -71,22 +71,11 @@ export function createPieceHeader(args: {
     void openVersionMenu();
   };
 
-  // 文档模式下的删除按钮（项目模式下隐藏，由 .doc-mode 控制）。
-  const trashBtn = document.createElement("button");
-  trashBtn.className = "piece-trash-btn";
-  trashBtn.title = "删除文档";
-  trashBtn.innerHTML = `<i class="ph ph-trash"></i>`;
-  trashBtn.onclick = (e) => {
-    e.stopPropagation();
-    host.onDelete();
-  };
-
-  // breadcrumb 与版本入口共处一行：左切换、右版本 / 删除。
+  // breadcrumb 与版本入口共处一行：左切换、右版本。
   const crumbRow = document.createElement("div");
   crumbRow.className = "piece-crumb-row";
   crumbRow.appendChild(crumb);
   crumbRow.appendChild(versionBtn);
-  crumbRow.appendChild(trashBtn);
 
   // 模式切换预留位（如未来的 大纲/正文）。v1 留空，不渲染任何按钮；顶栏布局先就位。
   const modeSlot = document.createElement("div");

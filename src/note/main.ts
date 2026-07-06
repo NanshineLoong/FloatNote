@@ -313,7 +313,6 @@ function mountPieceHeader() {
       setDoc(pieceEditor, restored);
       applyingRemote = false;
     },
-    onDelete: () => deleteCurrentDocument(),
     onEmptied: () => {
       // 当前 piece 被删且项目已无 piece：清掉引用，切到 NO_PIECE 空态。
       currentPiece = null;
@@ -357,32 +356,6 @@ async function openDocument(doc: NoteEntry) {
   void invoke("set_active_note", { dir: parentDir(doc.path), noteId: doc.name, path: doc.path });
   // 独立文档不在项目目录内，停掉文件监听以免误刷新（返回项目时再 watch_dir）。
   void invoke("unwatch_dir");
-}
-
-/** 删除当前独立文档并返回到上一个项目（或弹出切换菜单）。 */
-async function deleteCurrentDocument() {
-  if (mode !== "document" || !currentDocument) return;
-  const target = currentDocument;
-  if (!(await confirmDialog(`删除文档「${target.name}」？它会被移到废纸篓。`))) return;
-  try {
-    await deleteNote(parentDir(target.path), target.name);
-  } catch (err) {
-    console.error("delete document failed", err);
-    return;
-  }
-  recentDocs = recentDocs.filter((p) => p !== target.path);
-  await setRecentDocuments(recentDocs);
-  currentDocument = null;
-  // 回到上一个项目；若不可用则重新 bootstrap（落到 NO_PROJECT 空态）。
-  if (currentProject) {
-    try {
-      await openProject(currentProject);
-      return;
-    } catch (err) {
-      console.error("return to project failed", err);
-    }
-  }
-  await bootstrapProjects(await getConfig());
 }
 
 /** 列举项目内的 piece；失败时返回空数组并把错误上抛由调用方决定回退。 */
