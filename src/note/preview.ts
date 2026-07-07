@@ -22,6 +22,29 @@ function getCursorLines(view: EditorView): Set<number> {
   return lines;
 }
 
+/** True iff any selection range touches the inline mark [from,to].
+ *  - A bare cursor at p touches when `from <= p <= to` (inclusive both edges,
+ *    so placing the cursor on/approaching a mark reveals it for editing).
+ *  - A non-empty selection [s.from, s.to) touches when it actually overlaps
+ *    the mark's interior (strict half-open: `s.from < to && s.to > from`) —
+ *    a selection merely adjacent to a mark edge does not reveal it.
+ *  This is the Obsidian live-preview granularity, as opposed to the
+ *  whole-cursor-line reveal used for block widgets. */
+export function rangeTouchesSelection(
+  ranges: readonly { from: number; to: number }[],
+  from: number,
+  to: number,
+): boolean {
+  for (const r of ranges) {
+    if (r.from === r.to) {
+      if (r.from >= from && r.from <= to) return true;
+    } else if (r.from < to && r.to > from) {
+      return true;
+    }
+  }
+  return false;
+}
+
 class BulletWidget extends WidgetType {
   toDOM(): HTMLElement {
     const span = document.createElement("span");
@@ -49,6 +72,29 @@ class ImgWidget extends WidgetType {
     img.src = /^https?:\/\//.test(this.url) ? this.url : convertFileSrc(this.url);
     return img;
   }
+  ignoreEvent() { return true; }
+}
+
+class LinkWidget extends WidgetType {
+  constructor(readonly text: string, readonly url: string) { super(); }
+  eq(o: LinkWidget): boolean { return o.url === this.url && o.text === this.text; }
+  toDOM(): HTMLElement {
+    const a = document.createElement("a");
+    a.className = "cm-preview-link";
+    a.textContent = this.text;
+    a.title = this.url;
+    // Real href for status-bar/aria; navigation is routed through `open_url`
+    // because the webview blocks external navigation by default.
+    a.href = this.url;
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void invoke("open_url", { url: this.url });
+    });
+    return a;
+  }
+  // Eat clicks on the link so the editor doesn't drop the cursor onto the raw
+  // `[text](url)` source.
   ignoreEvent() { return true; }
 }
 
@@ -270,13 +316,32 @@ class QuoteCardWidget extends WidgetType {
 
 function buildDecorations(view: EditorView): DecorationSet {
   const cursorLines = getCursorLines(view);
+  const selRanges = view.state.selection.ranges;
   const entries: Array<{ from: number; to: number; deco: Decoration }> = [];
   const hide = Decoration.replace({});
   const doc = view.state.doc;
 
   const onCursorLine = (pos: number) => cursorLines.has(doc.lineAt(pos).number);
+  /** Inline-mark gate: hide/replace unless the cursor touches [from,to]. */
+  const touches = (from: number, to: number) => rangeTouchesSelection(selRanges, from, to);
   const lineStart = (pos: number) => doc.lineAt(pos).from;
   const charAfter = (pos: number) => doc.sliceString(pos, pos + 1);
+
+  /** Nesting depth of a ListItem = number of ListItem ancestors. Top-level → 0. */
+  const listDepth = (node: { node: { parent: { name: string; parent: unknown } | null } }): number => {
+    let depth = 0;
+    let p = node.node.parent as { name: string; parent: unknown } | null;
+    while (p) {
+      if (p.name === "ListItem") depth++;
+      p = (p.parent as { name: string; parent: unknown } | null) ?? null;
+    }
+    return depth;
+  };
+
+  /** line number → deepest ListItem nesting covering that line. Filled while
+   *  iterating ListItems; applied as a single line decoration per line so we
+   *  don't rely on multi-line-decoration merge semantics for nested items. */
+  const listLineDepth = new Map<number, number>();
 
   // First pass: collect the line numbers that belong to a `[!quote]` card so
   // the QuoteMark handler can skip the plain-blockquote style on those lines,
@@ -334,19 +399,21 @@ function buildDecorations(view: EditorView): DecorationSet {
 
         case "EmphasisMark":
         case "StrikethroughMark": {
-          if (onCursorLine(node.from)) return false;
+          if (touches(node.from, node.to)) return false;
           entries.push({ from: node.from, to: node.to, deco: hide });
           return false;
         }
 
         case "CodeMark": {
-          if (onCursorLine(node.from)) return false;
+          if (touches(node.from, node.to)) return false;
           entries.push({ from: node.from, to: node.to, deco: hide });
           return false;
         }
 
         case "InlineCode": {
-          if (onCursorLine(node.from)) return false;
+          // Always style the code text; the backticks (CodeMark) reveal only
+          // when the cursor touches them. Keeps inline code styled even on the
+          // cursor line (Obsidian behaviour).
           entries.push({
             from: node.from,
             to: node.to,
@@ -356,13 +423,19 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
 
         case "QuoteMark": {
-          if (onCursorLine(node.from)) return false;
+          const lineNo = doc.lineAt(node.from).number;
+          const isCardLine = cardLines.has(lineNo);
+          // Card lines keep the whole-line reveal so `>`, `[!quote]`, and the
+          // chips widget stay consistent when the cursor is on the title line.
+          if (isCardLine ? onCursorLine(node.from) : touches(node.from, node.to)) {
+            return false;
+          }
           let end = node.to;
           if (charAfter(end) === " ") end++;
           entries.push({ from: node.from, to: end, deco: hide });
           // Card lines get the card frame classes (added in the card pass below),
           // so skip the plain-blockquote line style for them.
-          if (!cardLines.has(doc.lineAt(node.from).number)) {
+          if (!isCardLine) {
             entries.push({
               from: lineStart(node.from),
               to: lineStart(node.from),
@@ -373,7 +446,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
 
         case "ListMark": {
-          if (onCursorLine(node.from)) return false;
+          if (touches(node.from, node.to)) return false;
           const ch = doc.sliceString(node.from, node.to);
           if (ch === "-" || ch === "*" || ch === "+") {
             entries.push({
@@ -381,8 +454,31 @@ function buildDecorations(view: EditorView): DecorationSet {
               to: node.to,
               deco: Decoration.replace({ widget: new BulletWidget() }),
             });
+          } else {
+            // Ordered list marker (`1.`, `2.` …): keep the text but soften it so
+            // it reads as a rendered marker rather than raw markdown.
+            entries.push({
+              from: node.from,
+              to: node.to,
+              deco: Decoration.mark({ class: "cm-preview-ol-mark" }),
+            });
           }
           return false;
+        }
+
+        case "ListItem": {
+          // Record nesting depth per line (max wins for lines shared with an
+          // enclosing item); the line decorations are applied after the iterate
+          // pass so nested items don't stack conflicting line styles.
+          const depth = listDepth(node);
+          const fromLine = doc.lineAt(node.from).number;
+          const toLine = doc.lineAt(node.to).number;
+          for (let l = fromLine; l <= toLine; l++) {
+            if (l < view.viewport.from || l > view.viewport.to) continue;
+            const prev = listLineDepth.get(l);
+            if (prev === undefined || depth > prev) listLineDepth.set(l, depth);
+          }
+          return; // visit children: ListMark, TaskMarker, …
         }
 
         case "HorizontalRule": {
@@ -405,6 +501,60 @@ function buildDecorations(view: EditorView): DecorationSet {
               from: node.from,
               to: node.to,
               deco: Decoration.replace({ widget: new ImgWidget(url, alt) }),
+            });
+          }
+          return false;
+        }
+
+        case "Link": {
+          if (touches(node.from, node.to)) return false;
+          const raw = doc.sliceString(node.from, node.to);
+          const text = raw.match(/\[([^\]]*)\]/)?.[1] ?? "";
+          const url = raw.match(/\(([^)]+)\)/)?.[1].trim() ?? "";
+          if (url) {
+            entries.push({
+              from: node.from,
+              to: node.to,
+              deco: Decoration.replace({ widget: new LinkWidget(text, url) }),
+            });
+          }
+          return false;
+        }
+
+        case "FencedCode": {
+          // Block-level: reveal the whole block (fences + source) when the
+          // cursor is on any of its lines, like Table. Otherwise style each
+          // line as a code container and hide the ``` fences.
+          const fromLine = doc.lineAt(node.from).number;
+          const toLine = doc.lineAt(node.to).number;
+          for (let l = fromLine; l <= toLine; l++) {
+            if (cursorLines.has(l)) return false;
+          }
+          for (let l = fromLine; l <= toLine; l++) {
+            const cl = doc.line(l);
+            entries.push({
+              from: cl.from,
+              to: cl.from,
+              deco: Decoration.line({ class: "cm-preview-codeblock" }),
+            });
+          }
+          // Hide the opening and closing fence lines' ``` (and info string).
+          const firstLine = doc.line(fromLine);
+          const lastLine = doc.line(toLine);
+          const openFence = /^([ \t]*```)[^]*$/.exec(firstLine.text);
+          if (openFence) {
+            entries.push({
+              from: firstLine.from,
+              to: firstLine.from + openFence[1].length,
+              deco: hide,
+            });
+          }
+          const closeFence = /^([ \t]*```)[ \t]*$/.exec(lastLine.text);
+          if (closeFence && toLine > fromLine) {
+            entries.push({
+              from: lastLine.from,
+              to: lastLine.from + closeFence[1].length,
+              deco: hide,
             });
           }
           return false;
@@ -441,6 +591,23 @@ function buildDecorations(view: EditorView): DecorationSet {
       }
     },
   });
+
+  // List line styling + nesting indent. `--list-depth` drives per-level
+  // padding-left in the theme; `cm-preview-list` gives list lines their marker
+  // spacing. Source leading whitespace still renders, so the depth padding only
+  // amplifies nesting — giving lists a visibly rendered rather than raw feel.
+  for (const [lineNo, depth] of listLineDepth) {
+    const cl = doc.line(lineNo);
+    if (lineNo < view.viewport.from || lineNo > view.viewport.to) continue;
+    entries.push({
+      from: cl.from,
+      to: cl.from,
+      deco: Decoration.line({
+        class: "cm-preview-list",
+        attributes: { style: `--list-depth:${depth}` },
+      }),
+    });
+  }
 
   // Callout marker — `> [!quote] …`. The lezer markdown grammar treats `[!type]`
   // as plain text inside the blockquote, so hide it line-by-line: the `> ` is
@@ -596,6 +763,25 @@ const previewTheme = EditorView.theme({
     textAlign: "left",
   },
   ".cm-preview-table th": { fontWeight: "600", background: "rgba(0,0,0,0.04)" },
+  ".cm-preview-codeblock": {
+    background: "rgba(0,0,0,0.05)",
+    fontFamily: "ui-monospace, 'SF Mono', monospace",
+    fontSize: "0.9em",
+    whiteSpace: "pre-wrap",
+    paddingLeft: "10px",
+    paddingRight: "10px",
+  },
+  ".cm-preview-link": {
+    color: "#2563eb",
+    textDecoration: "underline",
+    cursor: "pointer",
+  },
+  ".cm-preview-link:hover": { color: "#1d4ed8" },
+  ".cm-preview-ol-mark": { color: "#374151", fontWeight: "600" },
+  ".cm-preview-list": {
+    paddingLeft: "calc(var(--list-depth, 0) * 1em + 0.6em)",
+    listStyleType: "none",
+  },
 });
 
 export function livePreview(): Extension[] {
