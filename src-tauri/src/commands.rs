@@ -40,20 +40,6 @@ pub fn set_config(state: State<AppState>, new_config: Config) -> Result<(), Stri
 }
 
 #[tauri::command]
-pub fn set_working_dir(state: State<AppState>, dir: String) -> Result<(), String> {
-    let mut config = state.config.lock().unwrap();
-    config.working_dir = Some(dir);
-    crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())
-}
-
-/// Show and focus the settings window. The PATH_ERROR empty state uses this as
-/// its recovery entry so users can re-pick a working directory.
-#[tauri::command]
-pub fn open_settings(app: tauri::AppHandle) {
-    crate::windows::show_settings(&app);
-}
-
-#[tauri::command]
 pub fn list_notes(dir: String) -> Result<Vec<notes::NoteEntry>, String> {
     notes::list_markdown(std::path::Path::new(&dir)).map_err(|error| error.to_string())
 }
@@ -279,8 +265,23 @@ pub fn resolve_projects(paths: Vec<String>) -> Vec<project::ProjectEntry> {
 }
 
 #[tauri::command]
-pub fn create_project(root: String, name: String) -> Result<project::ProjectEntry, String> {
-    project::create_project(std::path::Path::new(&root), &name).map_err(|error| error.to_string())
+pub fn create_project(
+    state: State<AppState>,
+    root: String,
+    name: String,
+) -> Result<project::ProjectEntry, String> {
+    let entry =
+        project::create_project(std::path::Path::new(&root), &name).map_err(|error| error.to_string())?;
+    // 隐式自动记录：项目新建时，将其所在目录记为工作目录。这是工作目录的唯一来源
+    // ——没有设置入口，用户也不感知。失败不阻塞项目创建本身。
+    {
+        let mut config = state.config.lock().unwrap();
+        config.working_dir = Some(root.clone());
+        if let Err(error) = crate::config::save(&state.config_path, &config) {
+            eprintln!("warn: failed to persist working_dir: {error}");
+        }
+    }
+    Ok(entry)
 }
 
 #[tauri::command]

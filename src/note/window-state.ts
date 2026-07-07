@@ -5,10 +5,12 @@ import type { NoteEntry, ProjectEntry } from "./notes-state";
  * old "always auto-create a file" fallbacks: empty conditions now surface as
  * explicit empty-state UI instead of silently scaffolding files.
  *
- *  - NO_PROJECT: the working directory holds no project spaces (first launch,
- *    everything deleted). Render the welcome empty state.
- *  - PATH_ERROR: `list_projects` / `resolve_projects` failed (missing dir, no
- *    read permission). Render the error empty state with a retry/open-settings.
+ *  - NO_PROJECT: no project to open — either first launch (no working directory
+ *    recorded yet) or the working directory is missing/unreadable. Render the
+ *    welcome empty state.
+ *  - PATH_ERROR: `resolve_projects` failed unexpectedly. Render a generic error
+ *    empty state with a retry. Working-directory unreadability does NOT land here
+ *    — it degrades silently to NO_PROJECT.
  *  - NO_PIECE: a project is open but it has no piece files yet. Render the
  *    in-project empty state.
  *  - LOADED: a project and a piece are both ready; render the editor.

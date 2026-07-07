@@ -58,10 +58,6 @@ export async function getConfig(): Promise<Config> {
   return invoke<Config>("get_config");
 }
 
-export async function setWorkingDir(dir: string): Promise<void> {
-  await invoke("set_working_dir", { dir });
-}
-
 export async function listNotes(dir: string): Promise<NoteEntry[]> {
   return invoke<NoteEntry[]>("list_notes", { dir });
 }
@@ -192,13 +188,5 @@ export function scheduleSave(path: string, content: string) {
 /** 某路径是否有未保存的本地修改（用于外部文件变更时决定是否覆盖编辑器）。 */
 export function isDirty(path: string): boolean {
   return dirtyPaths.has(path);
-}
-
-export async function resolveStartDir(config: Config): Promise<string> {
-  if (config.working_dir) return config.working_dir;
-  const { homeDir } = await import("@tauri-apps/api/path");
-  const dir = `${await homeDir()}/FloatNote`;
-  await setWorkingDir(dir);
-  return dir;
 }
 

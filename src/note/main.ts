@@ -38,7 +38,6 @@ import {
   renameProject,
   resolveDocuments,
   resolveProjects,
-  resolveStartDir,
   scheduleSave,
   setRecentDocuments,
   setRecentProjects,
@@ -97,8 +96,9 @@ const DEFAULT_PROJECT_NAME = "未命名项目";
 const DEFAULT_PIECE_TITLE = "未命名作品";
 const DEFAULT_DOCUMENT_TITLE = "未命名文档";
 
-/** 当前工作目录（bootstrap 时确定）。新建项目/文档默认落在这里。NO_PROJECT /
- * PATH_ERROR 空态的"新建"动作也用它作为父目录。 */
+/** 当前工作目录（隐式）：bootstrap 时从 config.working_dir 读取；项目新建时由后端
+ * 自动回写，前端在此镜像。无工作目录时为空串——NO_PROJECT 空态的"新建项目"会弹
+ * 目录选择让用户定位，"新建文档"则走保存对话框。用户不感知此概念。 */
 let currentStartDir = "";
 
 /** 空态渲染的清理句柄；切换状态前先清掉上一个，避免残留 DOM 与监听。 */
@@ -135,12 +135,9 @@ function renderWindowState(state: WindowState) {
       setProjectLabel("");
       cleanupBodyEmpty = renderEmptyState(bodyEmptyRoot, {
         icon: "⚠️",
-        title: "无法读取工作目录",
-        hint: state.error
-          ? `${state.error}。可在设置里重新选择目录。`
-          : "工作目录不可读。可在设置里重新选择目录。",
-        primary: { label: "打开设置", action: () => void openSettings() },
-        secondary: { label: "重试", action: () => void retryBootstrap() },
+        title: "读取失败",
+        hint: state.error ?? "无法读取项目列表，请稍后重试。",
+        primary: { label: "重试", action: () => void retryBootstrap() },
       });
       break;
     case "NO_PIECE":
@@ -663,36 +660,35 @@ async function openProject(project: ProjectEntry) {
   void invoke("watch_dir", { dir: project.path });
 }
 
-/** 启动时打开项目：优先 MRU 列表里仍存在的第一个；否则回退到工作目录扫描。
- * 两者都空时进入 NO_PROJECT 欢迎空态（不再强制 scaffold 默认项目）；任何列举
- * 错误进入 PATH_ERROR 空态。 */
+/** 启动时打开项目：优先 MRU 列表里仍存在的第一个；MRU 为空时扫描工作目录下的
+ * 项目空间。工作目录缺失或不可读则静默降级为 NO_PROJECT（不报错给用户）。MRU 解析
+ * 本身抛错才进 PATH_ERROR。两者都空时进入 NO_PROJECT 欢迎空态（不强制 scaffold）。 */
 async function bootstrapProjects(config: Awaited<ReturnType<typeof getConfig>>) {
   recent = config.recent_projects ?? [];
   recentDocs = config.recent_documents ?? [];
-  // resolveStartDir 有副作用（首次会把 working_dir 落到 ~/FloatNote），但它幂等：
-  // 已配置时只是返回。失败也不致命——PATH_ERROR 仍可引导用户去设置。
-  let startDir = "";
-  try {
-    startDir = await resolveStartDir(config);
-  } catch (err) {
-    currentStartDir = "";
-    renderWindowState({ kind: "PATH_ERROR", startDir: "", error: String(err) });
-    return;
-  }
+  const startDir = config.working_dir ?? "";
   currentStartDir = startDir;
+
   let recentResolved: ProjectEntry[] = [];
   let projects: ProjectEntry[] = [];
-  let error: string | undefined;
   try {
     recentResolved = await resolveProjects(recent);
-    if (recentResolved.length === 0) {
-      projects = await listProjects(startDir);
-    }
   } catch (err) {
-    error = String(err);
+    renderWindowState({ kind: "PATH_ERROR", startDir, error: String(err) });
+    return;
   }
   recent = recentResolved.map((p) => p.path);
-  const outcome = resolveBootstrap({ recent: recentResolved, projects, startDir, error });
+
+  // MRU 为空时尝试扫描工作目录；工作目录找不到/不可读 → 视为没有工作目录，静默降级。
+  if (recentResolved.length === 0 && startDir) {
+    try {
+      projects = await listProjects(startDir);
+    } catch {
+      // 工作目录不可读：降级到 NO_PROJECT，不向用户暴露"工作目录"概念。
+    }
+  }
+
+  const outcome = resolveBootstrap({ recent: recentResolved, projects, startDir });
   if (outcome.kind === "OPEN") {
     await openProject(outcome.project);
     return;
@@ -701,19 +697,28 @@ async function bootstrapProjects(config: Awaited<ReturnType<typeof getConfig>>) 
   renderWindowState(outcome);
 }
 
-/** NO_PROJECT 空态"新建项目"：默认名直接 scaffold，落 NO_PIECE（不预建 piece）。
- * 用户不弹输入框——之后可在切换菜单里重命名。不自动聚焦标题。 */
+/** NO_PROJECT 空态"新建项目"：有工作目录则在目录下直接建默认名项目；无工作目录时
+ * 弹目录选择让用户定位。后端 create_project 会把所选目录记为工作目录，前端镜像到
+ * currentStartDir。不预建 piece、不弹输入框——之后可在切换菜单里重命名。 */
 async function createDefaultProject() {
-  if (!currentStartDir) return;
-  const project = await createProject(currentStartDir, DEFAULT_PROJECT_NAME);
+  let parent = currentStartDir;
+  if (!parent) {
+    const picked = await open({ directory: true, multiple: false });
+    if (typeof picked !== "string") return;
+    parent = picked;
+  }
+  const project = await createProject(parent, DEFAULT_PROJECT_NAME);
+  currentStartDir = parent;
   await openProject(project);
 }
 
-/** NO_PROJECT 空态"新建文档"：在工作目录下建默认名独立文档，载入并聚焦标题栏
- * 全选，用户键入即替换标题。复用 createNote（对独立文档与 piece 通用）。 */
+/** NO_PROJECT 空态"新建文档"：有工作目录则在目录下直接建；无工作目录时走保存对话框
+ * 让用户选位置（文档不更新工作目录）。载入并聚焦标题栏全选，键入即替换标题。 */
 async function createStandaloneDocument() {
-  if (!currentStartDir) return;
-  const entry = await createNote(currentStartDir, DEFAULT_DOCUMENT_TITLE);
+  const entry = currentStartDir
+    ? await createNote(currentStartDir, DEFAULT_DOCUMENT_TITLE)
+    : await createDocument();
+  if (!entry) return;
   await rememberDocument(entry.path);
   await openDocument(entry);
   focusPieceTitle();
@@ -733,11 +738,6 @@ async function createFirstPiece() {
 /** 聚焦并全选 piece 标题栏（用于新建后原地改名）。延迟一帧等布局就位。 */
 function focusPieceTitle() {
   requestAnimationFrame(() => pieceHeader?.focusTitle());
-}
-
-/** 打开设置窗口（PATH_ERROR 恢复入口）。设置保存后会触发工作目录变更回主窗口。 */
-function openSettings() {
-  void invoke("open_settings");
 }
 
 /** PATH_ERROR"重试"：重新跑一次 bootstrap。 */
@@ -1119,6 +1119,9 @@ function promptNewProjectName(host: HTMLElement, parent: string) {
     }
     submitting = true;
     const project = await createProject(parent, name);
+    // 后端 create_project 已把 working_dir 落盘为 parent；同步内存镜像，使后续
+    // 新建项目/文档默认落在同一目录（"在当前目录新建" 与 "选择位置新建" 共用此路径）。
+    currentStartDir = parent;
     closeMenu();
     await openProject(project);
   }
