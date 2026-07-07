@@ -120,7 +120,7 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
     syncLayout();
   }
 
-  addBtn.onclick = () => setAdding(!form.hidden);
+  addBtn.onclick = () => setAdding(form.hidden);
 
   form.onsubmit = (e) => {
     e.preventDefault();
