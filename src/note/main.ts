@@ -142,6 +142,9 @@ function renderWindowState(state: WindowState) {
       break;
     case "NO_PIECE":
       app.classList.add("state-no-piece");
+      // 空态下无当前作品：清掉残留引用与面包屑/标题，避免上一个项目的作品名泄漏到新空态。
+      currentPiece = null;
+      pieceHeader?.setLabel("");
       surface = "piece";
       cleanupPieceEmpty = renderEmptyState(pieceEmptyRoot, {
         icon: "📝",

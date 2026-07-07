@@ -1927,6 +1927,11 @@ input {
 .state-no-piece #piece-scroll {
   display: none;
 }
+/* 空态下写作顶栏无意义（无成品可切/无版本），整行隐藏，仿 doc-mode。
+   !important 用来压过 #app.show-piece 规则把顶栏 display:flex 的优先级。 */
+.state-no-piece #piece-topbar-root {
+  display: none !important;
+}
 .state-no-piece #piece-empty-root {
   display: flex;
   height: 100%;
