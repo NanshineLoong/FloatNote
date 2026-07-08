@@ -23,10 +23,18 @@ pub enum HostToSidecar {
         #[serde(skip_serializing_if = "Option::is_none")]
         base_url: Option<String>,
     },
+    OpenSession {
+        conversation_id: String,
+        session_file: String,
+    },
+    NewSession {
+        conversation_id: String,
+        cwd: String,
+        session_dir: String,
+    },
     Prompt {
         request_id: String,
-        note_id: String,
-        note_text: String,
+        conversation_id: String,
         user_text: String,
     },
     ApplyWriteResult {
@@ -47,12 +55,19 @@ pub enum HostToSidecar {
 #[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum SidecarToHost {
     Ready,
+    SessionOpened {
+        conversation_id: String,
+        session_file: String,
+        messages: Vec<ChatDisplayMessage>,
+    },
     Delta {
         request_id: String,
+        conversation_id: String,
         text: String,
     },
     Tool {
         request_id: String,
+        conversation_id: String,
         name: String,
         phase: String,
     },
@@ -63,11 +78,27 @@ pub enum SidecarToHost {
     },
     Done {
         request_id: String,
+        conversation_id: String,
+    },
+    Title {
+        conversation_id: String,
+        title: String,
     },
     Error {
         request_id: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        conversation_id: Option<String>,
         message: String,
     },
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(tag = "role", rename_all = "snake_case", rename_all_fields = "camelCase")]
+pub enum ChatDisplayMessage {
+    User { text: String, timestamp: u64 },
+    Assistant { text: String, timestamp: u64 },
+    Tool { label: String, timestamp: u64 },
+    Error { text: String, timestamp: u64 },
 }
 
 /// 当前活动笔记：由笔记窗 `set_active_note` 发布、`agent_send` 也会更新，
@@ -227,6 +258,26 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             note_id,
             content,
         } => handle_apply_write(app, call_id, note_id, content),
+        SidecarToHost::Title {
+            conversation_id,
+            title,
+        } => {
+            if let Ok(store) = crate::chat_history::ChatHistoryStore::default_for_user() {
+                let _ = store.update_title(
+                    &conversation_id,
+                    &title,
+                    crate::chat_history::ChatTitleState::Final,
+                );
+            }
+            let _ = crate::tray::refresh_menu(app);
+            let _ = app.emit(
+                "agent://event",
+                &SidecarToHost::Title {
+                    conversation_id,
+                    title,
+                },
+            );
+        }
         other => {
             // Delta / Tool / Done / Error 直接转发给前端。
             let _ = app.emit("agent://event", &other);
@@ -298,6 +349,7 @@ fn on_sidecar_exit(app: &AppHandle) {
         "agent://event",
         &SidecarToHost::Error {
             request_id: None,
+            conversation_id: None,
             message: "助手已断开，请点击重连".to_string(),
         },
     );
@@ -335,16 +387,37 @@ mod tests {
     fn prompt_serializes_to_camel_case_json() {
         let msg = HostToSidecar::Prompt {
             request_id: "r1".into(),
-            note_id: "note".into(),
-            note_text: "全文".into(),
+            conversation_id: "c1".into(),
             user_text: "你好".into(),
         };
         let value: serde_json::Value = serde_json::from_str(&serde_json::to_string(&msg).unwrap()).unwrap();
         assert_eq!(value["type"], "prompt");
         assert_eq!(value["requestId"], "r1");
-        assert_eq!(value["noteId"], "note");
-        assert_eq!(value["noteText"], "全文");
+        assert_eq!(value["conversationId"], "c1");
         assert_eq!(value["userText"], "你好");
+    }
+
+    #[test]
+    fn session_commands_serialize_to_camel_case_json() {
+        let open = HostToSidecar::OpenSession {
+            conversation_id: "c1".into(),
+            session_file: "/tmp/c1.jsonl".into(),
+        };
+        let value: serde_json::Value = serde_json::from_str(&serde_json::to_string(&open).unwrap()).unwrap();
+        assert_eq!(value["type"], "open_session");
+        assert_eq!(value["conversationId"], "c1");
+        assert_eq!(value["sessionFile"], "/tmp/c1.jsonl");
+
+        let new_session = HostToSidecar::NewSession {
+            conversation_id: "c2".into(),
+            cwd: "/tmp/project".into(),
+            session_dir: "/tmp/sessions".into(),
+        };
+        let value: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&new_session).unwrap()).unwrap();
+        assert_eq!(value["type"], "new_session");
+        assert_eq!(value["conversationId"], "c2");
+        assert_eq!(value["sessionDir"], "/tmp/sessions");
     }
 
     #[test]
@@ -376,12 +449,13 @@ mod tests {
 
     #[test]
     fn parses_delta_line() {
-        let line = r#"{"type":"delta","requestId":"r1","text":"hi"}"#;
+        let line = r#"{"type":"delta","requestId":"r1","conversationId":"c1","text":"hi"}"#;
         let msg: SidecarToHost = serde_json::from_str(line).unwrap();
         assert_eq!(
             msg,
             SidecarToHost::Delta {
                 request_id: "r1".into(),
+                conversation_id: "c1".into(),
                 text: "hi".into(),
             }
         );
@@ -403,12 +477,13 @@ mod tests {
 
     #[test]
     fn parses_error_with_null_request_id() {
-        let line = r#"{"type":"error","requestId":null,"message":"boom"}"#;
+        let line = r#"{"type":"error","requestId":null,"conversationId":"c1","message":"boom"}"#;
         let msg: SidecarToHost = serde_json::from_str(line).unwrap();
         assert_eq!(
             msg,
             SidecarToHost::Error {
                 request_id: None,
+                conversation_id: Some("c1".into()),
                 message: "boom".into(),
             }
         );

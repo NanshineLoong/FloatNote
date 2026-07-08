@@ -1,4 +1,4 @@
-import type { AgentEvent } from "../note/agent";
+import type { ChatDisplayMessage } from "../note/agent";
 
 /**
  * 助手聊天的纯状态机：把流式 agent 事件 + 本地用户发送合并成一个消息列表。
@@ -8,7 +8,21 @@ import type { AgentEvent } from "../note/agent";
  */
 
 /** 用户在输入框发送的本地事件，与 sidecar 的 AgentEvent 一起喂给 reducer。 */
-export type ChatEvent = AgentEvent | { type: "user"; text: string } | { type: "pending" };
+export type ChatEvent =
+  | { type: "ready" }
+  | {
+      type: "session_opened";
+      conversationId: string;
+      sessionFile: string;
+      messages: ChatDisplayMessage[];
+    }
+  | { type: "delta"; requestId: string; conversationId?: string; text: string }
+  | { type: "tool"; requestId: string; conversationId?: string; name: string; phase: "start" | "end" }
+  | { type: "done"; requestId: string; conversationId?: string }
+  | { type: "title"; conversationId: string; title: string }
+  | { type: "error"; requestId: string | null; conversationId?: string; message: string }
+  | { type: "user"; conversationId?: string; text: string }
+  | { type: "pending"; conversationId?: string };
 
 export type ChatMessage =
   | { role: "user"; text: string }
@@ -17,6 +31,7 @@ export type ChatMessage =
   | { role: "error"; text: string };
 
 export interface ChatState {
+  activeConversationId?: string;
   messages: ChatMessage[];
 }
 
@@ -33,10 +48,28 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
     case "ready":
       return state;
 
+    case "session_opened":
+      if (
+        state.activeConversationId === event.conversationId &&
+        state.messages.length > 0 &&
+        event.messages.length === 0
+      ) {
+        return state;
+      }
+      return {
+        activeConversationId: event.conversationId,
+        messages: event.messages.map(displayMessageToChatMessage),
+      };
+
+    case "title":
+      return state;
+
     case "user":
+      if (!acceptsConversation(state, event)) return state;
       return push(state, { role: "user", text: event.text });
 
     case "pending":
+      if (!acceptsConversation(state, event)) return state;
       return push(removePending(state), {
         role: "assistant",
         text: "正在思考…",
@@ -45,6 +78,7 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
       });
 
     case "delta": {
+      if (!acceptsConversation(state, event)) return state;
       const last = state.messages[state.messages.length - 1];
       if (last && last.role === "assistant" && last.streaming) {
         const messages = state.messages.slice(0, -1);
@@ -53,30 +87,33 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
           text: last.pending ? event.text : last.text + event.text,
           streaming: true,
         });
-        return { messages };
+        return { ...state, messages };
       }
       return push(state, { role: "assistant", text: event.text, streaming: true });
     }
 
     case "done":
+      if (!acceptsConversation(state, event)) return state;
       if (hasPending(state)) {
         return push(removePending(state), { role: "error", text: EMPTY_RESPONSE_MESSAGE });
       }
       return finalizeStreaming(state);
 
     case "tool":
+      if (!acceptsConversation(state, event)) return state;
       if (event.phase === "start") {
         return push(removePending(state), { role: "tool", label: TOOL_LABEL });
       }
       return removeTool(state);
 
     case "error":
+      if (!acceptsConversation(state, event)) return state;
       return push(finalizeStreaming(removePending(state)), { role: "error", text: event.message });
   }
 }
 
 function push(state: ChatState, message: ChatMessage): ChatState {
-  return { messages: [...state.messages, message] };
+  return { ...state, messages: [...state.messages, message] };
 }
 
 /** 收尾当前正在流的 assistant 气泡（若有）。 */
@@ -85,7 +122,7 @@ function finalizeStreaming(state: ChatState): ChatState {
   if (last && last.role === "assistant" && last.streaming) {
     const messages = state.messages.slice(0, -1);
     messages.push({ ...last, streaming: false });
-    return { messages };
+    return { ...state, messages };
   }
   return state;
 }
@@ -96,7 +133,7 @@ function removeTool(state: ChatState): ChatState {
   if (index < 0) return state;
   const messages = state.messages.slice();
   messages.splice(index, 1);
-  return { messages };
+  return { ...state, messages };
 }
 
 function removePending(state: ChatState): ChatState {
@@ -107,11 +144,32 @@ function removePending(state: ChatState): ChatState {
   if (index < 0) return state;
   const messages = state.messages.slice();
   messages.splice(index, 1);
-  return { messages };
+  return { ...state, messages };
 }
 
 function hasPending(state: ChatState): boolean {
   return state.messages.some((m) => m.role === "assistant" && Boolean(m.pending));
+}
+
+function acceptsConversation(
+  state: ChatState,
+  event: { conversationId?: string },
+): boolean {
+  if (!state.activeConversationId || !event.conversationId) return true;
+  return state.activeConversationId === event.conversationId;
+}
+
+function displayMessageToChatMessage(message: ChatDisplayMessage): ChatMessage {
+  switch (message.role) {
+    case "user":
+      return { role: "user", text: message.text };
+    case "assistant":
+      return { role: "assistant", text: message.text, streaming: false };
+    case "tool":
+      return { role: "tool", label: message.label };
+    case "error":
+      return { role: "error", text: message.text };
+  }
 }
 
 function lastIndex<T>(items: T[], pred: (item: T) => boolean): number {

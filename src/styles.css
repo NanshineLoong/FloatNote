@@ -41,6 +41,7 @@ input {
   /* 小人收起态横坐标，以及输入框展开时的钳左横坐标（inline/floating 共用）。 */
   --bot-x: 772px;
   --bot-x-open: 772px;
+  --assistant-topbar-h: 37px;
   /* inline 态行动面板的占高（含间隙），由 tasks-panel 写入，驱动下方助手下推。 */
   --action-h: 0px;
 }
@@ -157,8 +158,8 @@ input {
    bottom:16px 与 floating 的底部内缩一致 → 小人垂直锚点连续，模式切换不上下跳。 */
 #app.assistant-on.mode-inline #assistant-region {
   display: flex;
-  /* 行动面板开着时从顶部把助手下推 var(--action-h)；关着时归 0。 */
-  top: var(--action-h, 0px);
+  /* 默认避让内容区顶行控制栏；行动面板打开时按更大的下推高度避让。 */
+  top: max(var(--assistant-topbar-h, 37px), var(--action-h, 0px));
   bottom: 16px;
   /* 覆盖 .assistant 基类的 height:100%，否则 top+height 会让 bottom:16px 失效。 */
   height: auto;
@@ -186,7 +187,9 @@ input {
 
 /* floating 里只有实心元素（小人 / 浮层卡片 / 输入框）接收鼠标，其余区域可点穿到正文。 */
 #app.mode-floating #assistant-region .assistant-bot,
+#app.mode-floating #assistant-region .assistant-new,
 #app.mode-floating #assistant-region .assistant-scroll,
+#app.mode-floating #assistant-region .assistant-history-popover,
 #app.mode-floating #assistant-region .assistant-input-wrap {
   pointer-events: auto;
 }
@@ -1119,6 +1122,10 @@ input {
 #app.doc-mode .piece-version-btn,
 #app.doc-mode #piece-topbar-root {
   display: none !important;
+}
+
+#app.doc-mode {
+  --assistant-topbar-h: 0px;
 }
 
 #app.doc-mode .project-name-icon.file-icon {

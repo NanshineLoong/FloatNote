@@ -36,25 +36,29 @@ async function main(): Promise<void> {
       case "configure":
         await runner.configure({ provider: msg.provider, model: msg.model, apiKey: msg.apiKey, baseUrl: msg.baseUrl });
         break;
+      case "new_session":
+        await runner.newSession(msg);
+        break;
+      case "open_session":
+        await runner.openSession(msg);
+        break;
       case "prompt":
         try {
           await runner.prompt(msg);
         } catch (err) {
-          send({ type: "error", requestId: msg.requestId, message: errorMessage(err) });
-          send({ type: "done", requestId: msg.requestId });
+          send({ type: "error", requestId: msg.requestId, conversationId: msg.conversationId, message: errorMessage(err) });
+          send({ type: "done", requestId: msg.requestId, conversationId: msg.conversationId });
         }
         break;
       case "apply_write_result":
         runner.onApplyWriteResult(msg);
         break;
       case "cancel":
-        await runner.cancel();
+        await runner.cancel(msg.requestId);
         break;
     }
   };
 
-  // Serialize host messages so a prompt finishes before the next is handled.
-  let queue: Promise<void> = Promise.resolve();
   const decode = createLineDecoder();
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk: string) => {
@@ -66,12 +70,11 @@ async function main(): Promise<void> {
       return;
     }
     for (const msg of messages) {
-      queue = queue.then(() =>
-        handle(msg).catch((err) => {
-          const requestId = "requestId" in msg ? (msg.requestId ?? null) : null;
-          send({ type: "error", requestId, message: errorMessage(err) });
-        }),
-      );
+      void handle(msg).catch((err) => {
+        const requestId = "requestId" in msg ? (msg.requestId ?? null) : null;
+        const conversationId = "conversationId" in msg ? msg.conversationId : undefined;
+        send({ type: "error", requestId, conversationId, message: errorMessage(err) });
+      });
     }
   });
 

@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub fn note_window(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window("main")
@@ -31,3 +31,30 @@ pub fn show_settings(app: &AppHandle) {
     }
 }
 
+pub fn show_history(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("history") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+    match WebviewWindowBuilder::new(app, "history", WebviewUrl::App("history.html".into()))
+        .title("FloatNote 对话历史")
+        .inner_size(760.0, 560.0)
+        .min_inner_size(520.0, 360.0)
+        .visible(false)
+        .build()
+    {
+        Ok(window) => {
+            let win = window.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = win.hide();
+                }
+            });
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        Err(error) => eprintln!("failed to open history window: {error}"),
+    }
+}

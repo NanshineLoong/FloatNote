@@ -37,7 +37,8 @@ The feature should stay aligned with FloatNote's lightweight desktop workflow. I
 - **Prompt payload:** sending a message does not pass `activeNote` or `noteText`. The prompt payload is `conversationId` plus `userText`; the sidecar resolves the matching Pi session.
 - **Autosave:** sending does not coordinate with editor autosave.
 - **Streaming switch:** switching conversations while a request is streaming does not cancel the request. The sidecar may keep multiple Pi sessions alive; events are routed by request/conversation id, not blindly appended to the currently visible conversation.
-- **Assistant toolbar:** inline and floating layouts both show the same two-button toolbar: `历史` first, `新对话` second. No close button is added.
+- **Assistant history entry:** when the assistant input is empty, the send button becomes a current-scope history button. It opens a small scrollable history popover above the input.
+- **New conversation entry:** `新对话` appears in the assistant bubble's upper-right corner when the bubble is open, in both inline and floating modes. No close button is added.
 - **History window:** all-conversation history is a dedicated window, not part of settings.
 - **Tray menu:** the tray right-click menu shows recent conversations and `查看全部对话...`; it does not include an `打开 FloatNote` item.
 
@@ -52,24 +53,28 @@ The feature should stay aligned with FloatNote's lightweight desktop workflow. I
 
 ## Interaction Design
 
-### Assistant Toolbar
+### Assistant Input Actions
 
-The assistant panel always exposes a compact toolbar above the input or message area:
+The assistant input has two button states:
 
-1. `历史` opens a current-scope conversation menu.
-2. `新对话` creates a new conversation in the current project/document scope and switches the assistant view to it.
+1. Empty input: the button shows a history/clock-style icon and opens the current-scope history popover.
+2. Non-empty input: the button shows the send icon and sends the message.
 
-The toolbar appears in both inline and floating modes with the same order and semantics. The existing topbar assistant toggle remains responsible for showing/hiding the assistant.
+This keeps project history reachable even when no conversation bubble is currently expanded. The button should expose a tooltip such as `查看项目对话历史` in the empty state and `发送` in the non-empty state.
 
-### Scope History Menu
+When the assistant bubble is open, it shows a compact `新对话` action in the upper-right corner. The action creates a new conversation in the current project/document scope and switches the assistant view to it. Inline and floating modes use the same placement and semantics.
 
-The `历史` button lists conversations for the current scope only. Each row shows:
+### Scope History Popover
+
+The empty-input history button opens a small popover above the assistant input. It lists conversations for the current scope only and can scroll when there are more rows than fit comfortably. Each row shows:
 
 - title;
 - last updated time;
 - associated project/document label when useful for disambiguation.
 
-Selecting a row opens that Pi session in the sidecar, receives a display-message snapshot, and renders that conversation in the assistant.
+Selecting a row opens/expands the assistant bubble, opens that Pi session in the sidecar, receives a display-message snapshot, renders that conversation in the assistant, and closes the popover.
+
+If the current scope has no conversations, the popover shows an empty state instead of opening a separate history window.
 
 ### Tray Recent Conversations
 
@@ -222,7 +227,9 @@ Add a small chat-history frontend boundary, for example `src/note/chat-history.t
 Assistant component changes:
 
 - accept current conversation metadata as state;
-- render toolbar with `历史` and `新对话`;
+- switch the input action button between current-scope history and send based on whether the input is empty;
+- render a scrollable current-scope history popover above the input;
+- render `新对话` in the assistant bubble's upper-right corner when the bubble is open;
 - render messages from the active Pi session view;
 - attach stream deltas by `conversationId`;
 - ignore or badge stream events for non-visible conversations instead of appending them to the visible chat;
@@ -277,9 +284,11 @@ Add a Vite/Tauri page for full history, such as `history.html` with `src/history
 
 ### Frontend
 
-- assistant toolbar renders `历史` then `新对话` in inline and floating modes.
+- empty assistant input renders the history action instead of send.
+- non-empty assistant input renders the send action.
+- current-scope history popover opens above the input, scrolls, and opens the selected conversation.
+- `新对话` renders in the assistant bubble's upper-right corner in inline and floating modes.
 - new conversation clears the visible chat and selects the new conversation.
-- current-scope history opens and switches conversation.
 - non-visible stream deltas do not mutate the visible conversation.
 - full history window paginates and opens a conversation.
 

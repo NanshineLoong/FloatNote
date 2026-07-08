@@ -3,6 +3,7 @@
    助手始终活在笔记窗内：inline 占右边距一栏，floating 浮成右下角小人（见 src/styles.css）。 */
 
 .assistant {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -15,11 +16,41 @@
   font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
 }
 
+.assistant-new {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 2;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.86);
+  color: rgba(32, 33, 36, 0.78);
+  font-size: 16px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.assistant.expanded.has-messages .assistant-new {
+  display: inline-flex;
+}
+
+.assistant-new:hover {
+  color: #111827;
+  background: #fff;
+}
+
 .assistant-scroll {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 14px 6px;
+  padding: 44px 14px 6px;
 }
 
 .assistant-scroll::-webkit-scrollbar {
@@ -133,6 +164,7 @@
 
 /* —— 底部 dock：机器人 + 按需展开输入框 —— */
 .assistant-dock {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 10px;
@@ -167,6 +199,7 @@
 
 /* 输入框默认收起（max-width:0）；点击机器人后从其右侧水平展开。 */
 .assistant-input-wrap {
+  position: relative;
   flex: 1 1 auto;
   display: flex;
   align-items: flex-end;
@@ -179,6 +212,67 @@
     max-width 0.34s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 0.26s ease,
     transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.assistant-history-popover {
+  position: absolute;
+  left: 56px;
+  right: 14px;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+#app.mode-floating .assistant-history-popover {
+  right: auto;
+  width: 240px;
+}
+
+.assistant-history-popover[hidden] {
+  display: none;
+}
+
+.assistant-history-item {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  padding: 8px 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant-history-item:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.assistant-history-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.assistant-history-meta,
+.assistant-history-empty {
+  color: rgba(32, 33, 36, 0.54);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.assistant-history-empty {
+  padding: 8px 9px;
 }
 
 .assistant-input-wrap.open {
@@ -260,6 +354,28 @@
     border-color: rgba(255, 255, 255, 0.16);
     background: #2a2a2c;
     color: #e5e5e5;
+  }
+
+  .assistant-new,
+  .assistant-history-popover {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(42, 42, 44, 0.96);
+    color: rgba(229, 229, 229, 0.82);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  }
+
+  .assistant-new:hover {
+    color: #fff;
+    background: #343438;
+  }
+
+  .assistant-history-item:hover {
+    background: rgba(59, 130, 246, 0.18);
+  }
+
+  .assistant-history-meta,
+  .assistant-history-empty {
+    color: rgba(229, 229, 229, 0.54);
   }
 
   .assistant-input:focus {

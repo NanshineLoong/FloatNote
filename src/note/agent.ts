@@ -11,10 +11,23 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 /** sidecar → host 事件（经 Rust 原样转发到 `agent://event`）。 */
 export type AgentEvent =
   | { type: "ready" }
-  | { type: "delta"; requestId: string; text: string }
-  | { type: "tool"; requestId: string; name: string; phase: "start" | "end" }
-  | { type: "done"; requestId: string }
-  | { type: "error"; requestId: string | null; message: string };
+  | {
+      type: "session_opened";
+      conversationId: string;
+      sessionFile: string;
+      messages: ChatDisplayMessage[];
+    }
+  | { type: "delta"; requestId: string; conversationId: string; text: string }
+  | { type: "tool"; requestId: string; conversationId: string; name: string; phase: "start" | "end" }
+  | { type: "done"; requestId: string; conversationId: string }
+  | { type: "title"; conversationId: string; title: string }
+  | { type: "error"; requestId: string | null; conversationId?: string; message: string };
+
+export type ChatDisplayMessage =
+  | { role: "user"; text: string; timestamp: number }
+  | { role: "assistant"; text: string; timestamp: number }
+  | { role: "tool"; label: string; timestamp: number }
+  | { role: "error"; text: string; timestamp: number };
 
 /** AI 改写笔记后 Rust 广播的载荷。 */
 export interface NoteUpdated {
@@ -34,13 +47,25 @@ export function agentConfigure(
 
 /** 发一条用户消息给 tutor，返回 requestId。 */
 export function agentSend(args: {
-  dir: string;
-  noteId: string;
-  path: string;
-  noteText: string;
+  conversationId: string;
   userText: string;
 }): Promise<string> {
   return invoke<string>("agent_send", args);
+}
+
+export function agentNewSession(args: {
+  conversationId: string;
+  cwd: string;
+  sessionDir: string;
+}): Promise<void> {
+  return invoke<void>("agent_new_session", args);
+}
+
+export function agentOpenSession(args: {
+  conversationId: string;
+  sessionFile: string;
+}): Promise<void> {
+  return invoke<void>("agent_open_session", args);
 }
 
 /** 取消进行中的对话。 */

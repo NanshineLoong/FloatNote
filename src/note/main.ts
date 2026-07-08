@@ -2,9 +2,10 @@ import "@phosphor-icons/web/regular";
 import "../assistant/styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { mountAssistant, type AssistantHandle } from "../assistant/assistant";
-import { agentSend, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
+import { agentNewSession, agentOpenSession, agentSend, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
 import { buildCaretInsert } from "./append";
 import { buildQuoteBlock, mergeQuoteBlock, resolveMergeTarget, type Source } from "./quote";
 import { htmlToMarkdown } from "./paste";
@@ -63,6 +64,16 @@ import {
 } from "./topbar";
 import { canSplit } from "./split";
 import { listVersions, restoreVersion, snapshotNote } from "./versions";
+import {
+  chatCreate,
+  chatGetForScope,
+  chatListForScope,
+  chatOpen,
+  chatUpdateTitle,
+  sessionDirFromFile,
+  type ChatConversation,
+  type ChatScope,
+} from "./chat-history";
 
 const app = document.querySelector<HTMLElement>("#app")!;
 app.innerHTML = `
@@ -120,6 +131,7 @@ function renderWindowState(state: WindowState) {
   clearEmptyState();
   switch (state.kind) {
     case "NO_PROJECT":
+      assistantHandle?.setScope(null);
       app.classList.add("state-no-project");
       setProjectLabel("");
       cleanupBodyEmpty = renderEmptyState(bodyEmptyRoot, {
@@ -131,6 +143,7 @@ function renderWindowState(state: WindowState) {
       });
       break;
     case "PATH_ERROR":
+      assistantHandle?.setScope(null);
       app.classList.add("state-path-error");
       setProjectLabel("");
       cleanupBodyEmpty = renderEmptyState(bodyEmptyRoot, {
@@ -354,6 +367,7 @@ async function openDocument(doc: NoteEntry) {
   pieceHeader?.setLabel(doc.name);
   applyView();
   void invoke("set_active_note", { dir: parentDir(doc.path), noteId: doc.name, path: doc.path });
+  assistantHandle.setScope(currentChatScope());
   // 独立文档不在项目目录内，停掉文件监听以免误刷新（返回项目时再 watch_dir）。
   void invoke("unwatch_dir");
 }
@@ -415,29 +429,84 @@ function applyRemoteDoc(content: string) {
 }
 
 const assistantHandle: AssistantHandle = mountAssistant(assistantRegion, {
-  send: (text) => {
-    // 文档模式：助手作用于当前独立文档；项目模式：作用于采集面（_inbox）。
-    if (mode === "document") {
-      if (!currentDocument) throw new Error("当前没有打开的文档，请稍后再试");
-      return agentSend({
-        dir: parentDir(currentDocument.path),
-        noteId: currentDocument.name,
-        path: currentDocument.path,
-        noteText: pieceEditor.state.doc.toString(),
-        userText: text,
-      });
-    }
-    if (!current) throw new Error("当前没有打开的笔记，请稍后再试");
-    return agentSend({
-      dir: current.dir,
-      noteId: current.entry.name,
-      path: current.entry.path,
-      noteText: editor.state.doc.toString(),
-      userText: text,
-    });
+  send: (text, conversationId) => {
+    return agentSend({ conversationId, userText: text });
   },
+  createConversation: async (scope) => {
+    const conversation = await chatCreate(scope);
+    await agentNewSession({
+      conversationId: conversation.id,
+      cwd: scope.cwd,
+      sessionDir: sessionDirFromFile(conversation.sessionFile),
+    });
+    return conversation;
+  },
+  openConversation: async (conversation) => {
+    const opened = await chatOpen(conversation.id);
+    if (!opened) return null;
+    await agentOpenSession({
+      conversationId: opened.id,
+      sessionFile: opened.sessionFile,
+    });
+    return opened;
+  },
+  listConversations: (scope) => chatListForScope(scope),
+  getLastConversation: (scope) => chatGetForScope(scope),
+  updateTitle: (conversationId, title, titleState) => chatUpdateTitle(conversationId, title, titleState),
   subscribe: (cb) => onAgentEvent(cb),
 });
+
+void listen<ChatConversation>("chat://open", (event) => {
+  void openConversationFromHistory(event.payload);
+});
+
+void listen<string>("chat://open-id", async (event) => {
+  const conversation = await chatOpen(event.payload);
+  if (conversation) {
+    await openConversationFromHistory(conversation);
+  }
+});
+
+async function openConversationFromHistory(conversation: ChatConversation) {
+  const win = getCurrentWindow();
+  await win.show();
+  await win.setFocus();
+  if (conversation.scopeType === "project") {
+    const [project] = await resolveProjects([conversation.scopePath]);
+    if (!project) {
+      assistantHandle.showError("这个项目已不可用，可在对话历史中删除该记录。");
+      return;
+    }
+    await openProject(project);
+  } else {
+    const [document] = await resolveDocuments([conversation.scopePath]);
+    if (!document) {
+      assistantHandle.showError("这个文档已不可用，可在对话历史中删除该记录。");
+      return;
+    }
+    await openDocument(document);
+  }
+  await assistantHandle.openConversation(conversation);
+}
+
+function currentChatScope(): ChatScope | null {
+  if (mode === "document") {
+    if (!currentDocument) return null;
+    return {
+      scopeType: "document",
+      scopePath: currentDocument.path,
+      scopeLabel: currentDocument.name,
+      cwd: parentDir(currentDocument.path),
+    };
+  }
+  if (!currentProject) return null;
+  return {
+    scopeType: "project",
+    scopePath: currentProject.path,
+    scopeLabel: currentProject.name,
+    cwd: currentProject.path,
+  };
+}
 
 void onNoteUpdated(async (payload) => {
   // 采集面（项目模式）被 AI 改写。
@@ -659,6 +728,7 @@ async function openProject(project: ProjectEntry) {
   applyView();
   // 发布活动笔记（= 当前项目的 _inbox.md），供独立助手窗 / apply_write 定位。
   void invoke("set_active_note", { dir: project.path, noteId: entry.name, path: entry.path });
+  assistantHandle.setScope(currentChatScope());
   // 切换文件监听到新项目目录。
   void invoke("watch_dir", { dir: project.path });
 }

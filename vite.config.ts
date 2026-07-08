@@ -10,9 +10,9 @@ export default defineConfig({
         main: resolve(__dirname, "index.html"),
         settings: resolve(__dirname, "settings.html"),
         popup: resolve(__dirname, "popup.html"),
+        history: resolve(__dirname, "history.html"),
       },
     },
   },
   test: { environment: "node", include: ["src/**/*.test.ts"] },
 });
-

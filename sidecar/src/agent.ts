@@ -6,12 +6,13 @@ import {
   ModelRegistry,
   SessionManager,
   type AgentSessionEvent,
+  type SessionManager as PiSessionManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { getModel, type Api, type Model } from "@earendil-works/pi-ai";
 import { createNoteTools, type WriteResult } from "./note-tools.js";
 import { TUTOR_SYSTEM_PROMPT } from "./tutor-prompt.js";
-import type { HostToSidecar, SidecarToHost } from "./protocol.js";
+import type { ChatDisplayMessage, HostToSidecar, SidecarToHost } from "./protocol.js";
 
 export interface AgentConfig {
   provider: string;
@@ -22,14 +23,18 @@ export interface AgentConfig {
 
 /** Minimal surface of a Pi AgentSession the runner depends on (injectable for tests). */
 export interface SessionLike {
+  sessionFile?: string;
+  sessionManager?: Pick<PiSessionManager, "getBranch" | "getSessionFile">;
   subscribe(listener: (event: AgentSessionEvent) => void): () => void;
   prompt(text: string): Promise<void>;
   abort(): Promise<void>;
+  dispose?: () => void;
 }
 
 export type SessionFactory = (
   cfg: AgentConfig,
   tools: ToolDefinition[],
+  sessionManager: PiSessionManager,
 ) => Promise<SessionLike>;
 
 export interface AgentRunnerOptions {
@@ -41,9 +46,19 @@ export interface AgentRunnerOptions {
 
 export interface PromptRequest {
   requestId: string;
-  noteId: string;
-  noteText: string;
+  conversationId: string;
   userText: string;
+}
+
+export interface NewSessionRequest {
+  conversationId: string;
+  cwd: string;
+  sessionDir: string;
+}
+
+export interface OpenSessionRequest {
+  conversationId: string;
+  sessionFile: string;
 }
 
 const EMPTY_RESPONSE_MESSAGE = "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。";
@@ -114,22 +129,23 @@ function validateOpenAICompatibleBaseUrl(baseUrl: string): void {
  */
 export function translateEvent(
   requestId: string,
+  conversationId: string,
   event: AgentSessionEvent,
 ): SidecarToHost | null {
   switch (event.type) {
     case "message_update": {
       const inner = event.assistantMessageEvent;
       if (inner.type === "text_delta") {
-        return { type: "delta", requestId, text: inner.delta };
+        return { type: "delta", requestId, conversationId, text: inner.delta };
       }
       return null;
     }
     case "tool_execution_start":
-      return { type: "tool", requestId, name: event.toolName, phase: "start" };
+      return { type: "tool", requestId, conversationId, name: event.toolName, phase: "start" };
     case "tool_execution_end":
-      return { type: "tool", requestId, name: event.toolName, phase: "end" };
+      return { type: "tool", requestId, conversationId, name: event.toolName, phase: "end" };
     case "agent_end":
-      return { type: "done", requestId };
+      return { type: "done", requestId, conversationId };
     default:
       return null;
   }
@@ -142,9 +158,8 @@ export function translateEvent(
 export class AgentRunner {
   private readonly send: (msg: SidecarToHost) => void;
   private readonly factory: SessionFactory;
-  private session?: SessionLike;
-  private noteId = "";
-  private noteText = "";
+  private cfg?: AgentConfig;
+  private readonly sessions = new Map<string, SessionLike>();
   private writeSeq = 0;
   private readonly pendingWrites = new Map<string, (r: WriteResult) => void>();
 
@@ -154,33 +169,43 @@ export class AgentRunner {
   }
 
   async configure(cfg: AgentConfig): Promise<void> {
-    const tools = createNoteTools({
-      getNoteText: () => this.noteText,
-      requestWrite: (content) => this.requestWrite(content),
-    });
-    this.session = await this.factory(cfg, tools);
+    this.cfg = cfg;
+  }
+
+  async newSession(req: NewSessionRequest): Promise<void> {
+    const sessionManager = SessionManager.create(req.cwd, req.sessionDir, { id: req.conversationId });
+    await this.installSession(req.conversationId, sessionManager);
+  }
+
+  async openSession(req: OpenSessionRequest): Promise<void> {
+    const sessionManager = SessionManager.open(req.sessionFile);
+    await this.installSession(req.conversationId, sessionManager);
   }
 
   async prompt(req: PromptRequest): Promise<void> {
-    if (!this.session) {
-      throw new Error("agent not configured");
+    const session = this.sessions.get(req.conversationId);
+    if (!session) {
+      throw new Error("conversation session not opened");
     }
-    this.noteId = req.noteId;
-    this.noteText = req.noteText;
     let sawVisibleOutput = false;
-    const unsubscribe = this.session.subscribe((event) => {
-      const msg = translateEvent(req.requestId, event);
+    const unsubscribe = session.subscribe((event) => {
+      const msg = translateEvent(req.requestId, req.conversationId, event);
       if (!msg) return;
       if (msg.type === "delta" || msg.type === "tool") {
         sawVisibleOutput = true;
       }
       if (msg.type === "done" && !sawVisibleOutput) {
-        this.send({ type: "error", requestId: req.requestId, message: EMPTY_RESPONSE_MESSAGE });
+        this.send({
+          type: "error",
+          requestId: req.requestId,
+          conversationId: req.conversationId,
+          message: EMPTY_RESPONSE_MESSAGE,
+        });
       }
       this.send(msg);
     });
     try {
-      await this.session.prompt(req.userText);
+      await session.prompt(req.userText);
     } finally {
       unsubscribe();
     }
@@ -195,29 +220,53 @@ export class AgentRunner {
     }
   }
 
-  async cancel(): Promise<void> {
-    await this.session?.abort();
+  async cancel(_requestId?: string): Promise<void> {
+    await Promise.all([...this.sessions.values()].map((session) => session.abort()));
   }
 
-  private requestWrite(content: string): Promise<WriteResult> {
+  private async installSession(conversationId: string, sessionManager: PiSessionManager): Promise<void> {
+    if (!this.cfg) {
+      throw new Error("agent not configured");
+    }
+    this.sessions.get(conversationId)?.dispose?.();
+    const tools = createNoteTools({
+      getNoteText: () => "",
+      requestWrite: (content) => this.requestWrite(conversationId, content),
+    });
+    const session = await this.factory(this.cfg, tools, sessionManager);
+    this.sessions.set(conversationId, session);
+    const sessionFile = session.sessionFile ?? session.sessionManager?.getSessionFile() ?? sessionManager.getSessionFile();
+    if (!sessionFile) {
+      throw new Error("persistent session file unavailable");
+    }
+    this.send({
+      type: "session_opened",
+      conversationId,
+      sessionFile,
+      messages: displayMessagesFromSession(session),
+    });
+  }
+
+  private requestWrite(conversationId: string, content: string): Promise<WriteResult> {
     const callId = `w${++this.writeSeq}`;
     return new Promise<WriteResult>((resolve) => {
       this.pendingWrites.set(callId, resolve);
-      this.send({ type: "apply_write", callId, noteId: this.noteId, content });
+      this.send({ type: "apply_write", callId, noteId: conversationId, content });
     });
   }
 }
 
 /** Build a real Pi tutor session from config. */
-const defaultCreateSession: SessionFactory = async (cfg, tools) => {
+const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager) => {
   const authStorage = AuthStorage.inMemory();
   if (cfg.apiKey) {
     authStorage.setRuntimeApiKey(cfg.provider, cfg.apiKey);
   }
   const modelRegistry = ModelRegistry.create(authStorage);
+  const cwd = sessionManager.getCwd();
 
   const resourceLoader = new DefaultResourceLoader({
-    cwd: process.cwd(),
+    cwd,
     agentDir: getAgentDir(),
     noExtensions: true,
     noSkills: true,
@@ -238,7 +287,48 @@ const defaultCreateSession: SessionFactory = async (cfg, tools) => {
     resourceLoader,
     authStorage,
     modelRegistry,
-    sessionManager: SessionManager.inMemory(),
+    sessionManager,
   });
   return session;
 };
+
+export function displayMessagesFromSession(session: SessionLike): ChatDisplayMessage[] {
+  const branch = session.sessionManager?.getBranch() ?? [];
+  return branch.flatMap((entry): ChatDisplayMessage[] => {
+    if (entry.type !== "message") return [];
+    const timestamp = Date.parse(entry.timestamp);
+    const safeTimestamp = Number.isFinite(timestamp) ? timestamp : Date.now();
+    const message = entry.message as { role?: string; content?: unknown };
+    const text = messageText(message);
+    if (!text) return [];
+    if (message.role === "user") {
+      return [{ role: "user", text, timestamp: safeTimestamp }];
+    }
+    if (message.role === "assistant") {
+      return [{ role: "assistant", text, timestamp: safeTimestamp }];
+    }
+    if (message.role === "tool") {
+      return [{ role: "tool", label: text, timestamp: safeTimestamp }];
+    }
+    return [];
+  });
+}
+
+function messageText(message: { content?: unknown }): string {
+  const content = message.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "text" in item) {
+          const text = (item as { text?: unknown }).text;
+          return typeof text === "string" ? text : "";
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("");
+  }
+  return "";
+}

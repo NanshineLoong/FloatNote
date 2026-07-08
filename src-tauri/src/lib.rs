@@ -1,5 +1,6 @@
 mod agent;
 mod capture;
+mod chat_history;
 mod commands;
 mod config;
 mod cursor;
@@ -123,10 +124,21 @@ pub fn run() {
             commands::list_versions,
             commands::snapshot_note,
             commands::restore_version,
+            commands::chat_get_for_scope,
+            commands::chat_create,
+            commands::chat_list_for_scope,
+            commands::chat_list_recent,
+            commands::chat_list_all,
+            commands::chat_open,
+            commands::chat_update_title,
+            commands::chat_delete,
+            commands::chat_clear_before,
             commands::watch_dir,
             commands::unwatch_dir,
             commands::agent_configure,
             commands::agent_send,
+            commands::agent_new_session,
+            commands::agent_open_session,
             commands::agent_cancel,
             commands::set_active_note,
             commands::get_active_note,

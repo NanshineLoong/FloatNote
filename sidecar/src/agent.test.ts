@@ -9,16 +9,16 @@ const ev = (e: unknown): AgentSessionEvent => e as AgentSessionEvent;
 
 describe("translateEvent", () => {
   it("maps a text_delta message_update to a delta line", () => {
-    const out = translateEvent("r1", ev({
+    const out = translateEvent("r1", "c1", ev({
       type: "message_update",
       message: {},
       assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "hi", partial: {} },
     }));
-    expect(out).toEqual({ type: "delta", requestId: "r1", text: "hi" });
+    expect(out).toEqual({ type: "delta", requestId: "r1", conversationId: "c1", text: "hi" });
   });
 
   it("ignores non-text assistant message events", () => {
-    const out = translateEvent("r1", ev({
+    const out = translateEvent("r1", "c1", ev({
       type: "message_update",
       message: {},
       assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "...", partial: {} },
@@ -28,17 +28,18 @@ describe("translateEvent", () => {
 
   it("maps tool execution start/end to tool lines", () => {
     expect(
-      translateEvent("r1", ev({ type: "tool_execution_start", toolCallId: "c", toolName: "write_note", args: {} })),
-    ).toEqual({ type: "tool", requestId: "r1", name: "write_note", phase: "start" });
+      translateEvent("r1", "c1", ev({ type: "tool_execution_start", toolCallId: "c", toolName: "write_note", args: {} })),
+    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", name: "write_note", phase: "start" });
     expect(
-      translateEvent("r1", ev({ type: "tool_execution_end", toolCallId: "c", toolName: "write_note", result: {}, isError: false })),
-    ).toEqual({ type: "tool", requestId: "r1", name: "write_note", phase: "end" });
+      translateEvent("r1", "c1", ev({ type: "tool_execution_end", toolCallId: "c", toolName: "write_note", result: {}, isError: false })),
+    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", name: "write_note", phase: "end" });
   });
 
   it("maps agent_end to a done line", () => {
-    expect(translateEvent("r1", ev({ type: "agent_end", messages: [], willRetry: false }))).toEqual({
+    expect(translateEvent("r1", "c1", ev({ type: "agent_end", messages: [], willRetry: false }))).toEqual({
       type: "done",
       requestId: "r1",
+      conversationId: "c1",
     });
   });
 });
@@ -116,12 +117,14 @@ describe("AgentRunner", () => {
       createSession: async () => session,
     });
     await runner.configure({ provider: "anthropic", model: "claude-opus-4-5", apiKey: "k" });
-    await runner.prompt({ requestId: "r1", noteId: "n", noteText: "note body", userText: "hi" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+    await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "hi" });
 
     expect(sent).toEqual([
-      { type: "delta", requestId: "r1", text: "Hel" },
-      { type: "delta", requestId: "r1", text: "lo" },
-      { type: "done", requestId: "r1" },
+      { type: "session_opened", conversationId: "c1", sessionFile: expect.any(String), messages: [] },
+      { type: "delta", requestId: "r1", conversationId: "c1", text: "Hel" },
+      { type: "delta", requestId: "r1", conversationId: "c1", text: "lo" },
+      { type: "done", requestId: "r1", conversationId: "c1" },
     ]);
   });
 
@@ -136,15 +139,18 @@ describe("AgentRunner", () => {
       createSession: async () => session,
     });
     await runner.configure({ provider: "anthropic", model: "claude-opus-4-5", apiKey: "k" });
-    await runner.prompt({ requestId: "r1", noteId: "n", noteText: "note body", userText: "hi" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+    await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "hi" });
 
     expect(sent).toEqual([
+      { type: "session_opened", conversationId: "c1", sessionFile: expect.any(String), messages: [] },
       {
         type: "error",
         requestId: "r1",
+        conversationId: "c1",
         message: "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。",
       },
-      { type: "done", requestId: "r1" },
+      { type: "done", requestId: "r1", conversationId: "c1" },
     ]);
   });
 
@@ -177,10 +183,11 @@ describe("AgentRunner", () => {
       },
     });
     await runner.configure({ provider: "anthropic", model: "claude-opus-4-5", apiKey: "k" });
-    await runner.prompt({ requestId: "r1", noteId: "我的笔记", noteText: "raw", userText: "整理一下" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+    await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "整理一下" });
 
     const applyWrite = sent.find((m) => m.type === "apply_write");
-    expect(applyWrite).toEqual({ type: "apply_write", callId: expect.any(String), noteId: "我的笔记", content: "tidied note" });
+    expect(applyWrite).toEqual({ type: "apply_write", callId: expect.any(String), noteId: "c1", content: "tidied note" });
     expect(capturedWriteText).toBe("已更新笔记，版本 v4");
     expect(capturedWriteText).not.toBeUndefined();
   });

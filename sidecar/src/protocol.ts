@@ -16,10 +16,20 @@ export type HostToSidecar =
       baseUrl?: string;
     }
   | {
+      type: "open_session";
+      conversationId: string;
+      sessionFile: string;
+    }
+  | {
+      type: "new_session";
+      conversationId: string;
+      cwd: string;
+      sessionDir: string;
+    }
+  | {
       type: "prompt";
       requestId: string;
-      noteId: string;
-      noteText: string;
+      conversationId: string;
       userText: string;
     }
   | {
@@ -37,10 +47,17 @@ export type HostToSidecar =
 /** Sidecar → host messages. */
 export type SidecarToHost =
   | { type: "ready" }
-  | { type: "delta"; requestId: string; text: string }
+  | {
+      type: "session_opened";
+      conversationId: string;
+      sessionFile: string;
+      messages: ChatDisplayMessage[];
+    }
+  | { type: "delta"; requestId: string; conversationId: string; text: string }
   | {
       type: "tool";
       requestId: string;
+      conversationId: string;
       name: string;
       phase: "start" | "end";
     }
@@ -50,8 +67,15 @@ export type SidecarToHost =
       noteId: string;
       content: string;
     }
-  | { type: "done"; requestId: string }
-  | { type: "error"; requestId: string | null; message: string };
+  | { type: "done"; requestId: string; conversationId: string }
+  | { type: "title"; conversationId: string; title: string }
+  | { type: "error"; requestId: string | null; conversationId?: string; message: string };
+
+export type ChatDisplayMessage =
+  | { role: "user"; text: string; timestamp: number }
+  | { role: "assistant"; text: string; timestamp: number }
+  | { role: "tool"; label: string; timestamp: number }
+  | { role: "error"; text: string; timestamp: number };
 
 /**
  * Encode a message as a single newline-terminated JSON line.

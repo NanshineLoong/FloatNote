@@ -150,4 +150,107 @@ describe("reduceEvents", () => {
     const state = run([{ type: "ready" }]);
     expect(state.messages).toEqual([]);
   });
+
+  it("loads a session snapshot and marks it as active", () => {
+    const state = run([
+      {
+        type: "session_opened",
+        conversationId: "c1",
+        sessionFile: "/tmp/c1.jsonl",
+        messages: [
+          { role: "user", text: "之前的问题", timestamp: 1 },
+          { role: "assistant", text: "之前的回答", timestamp: 2 },
+        ],
+      },
+    ]);
+
+    expect(state.activeConversationId).toBe("c1");
+    expect(state.messages).toEqual([
+      { role: "user", text: "之前的问题" },
+      { role: "assistant", text: "之前的回答", streaming: false },
+    ]);
+  });
+
+  it("ignores stream events for a non-active conversation", () => {
+    const state = run([
+      {
+        type: "session_opened",
+        conversationId: "visible",
+        sessionFile: "/tmp/visible.jsonl",
+        messages: [],
+      },
+      { type: "delta", requestId: "r1", conversationId: "hidden", text: "wrong" },
+    ]);
+
+    expect(state.messages).toEqual([]);
+  });
+
+  it("replaces pending only when the delta belongs to the active conversation", () => {
+    const state = run([
+      {
+        type: "session_opened",
+        conversationId: "c1",
+        sessionFile: "/tmp/c1.jsonl",
+        messages: [],
+      },
+      { type: "user", conversationId: "c1", text: "你好" },
+      { type: "pending", conversationId: "c1" },
+      { type: "delta", requestId: "r-other", conversationId: "other", text: "wrong" },
+      { type: "delta", requestId: "r1", conversationId: "c1", text: "right" },
+    ]);
+
+    expect(state.messages).toEqual([
+      { role: "user", text: "你好" },
+      { role: "assistant", text: "right", streaming: true },
+    ]);
+  });
+
+  it("keeps optimistic messages when a same-session empty snapshot arrives late", () => {
+    const state = run([
+      {
+        type: "session_opened",
+        conversationId: "c1",
+        sessionFile: "/tmp/c1.jsonl",
+        messages: [],
+      },
+      { type: "user", conversationId: "c1", text: "新问题" },
+      { type: "pending", conversationId: "c1" },
+      {
+        type: "session_opened",
+        conversationId: "c1",
+        sessionFile: "/tmp/c1.jsonl",
+        messages: [],
+      },
+    ]);
+
+    expect(state.messages).toEqual([
+      { role: "user", text: "新问题" },
+      { role: "assistant", text: "正在思考…", streaming: true, pending: true },
+    ]);
+  });
+
+  it("preserves the active conversation id while replacing a pending bubble", () => {
+    const state = run([
+      {
+        type: "session_opened",
+        conversationId: "c1",
+        sessionFile: "/tmp/c1.jsonl",
+        messages: [],
+      },
+      { type: "user", conversationId: "c1", text: "你好" },
+      { type: "pending", conversationId: "c1" },
+      { type: "delta", requestId: "r1", conversationId: "c1", text: "回答" },
+    ]);
+
+    expect(state.activeConversationId).toBe("c1");
+    expect(reduceEvents(state, {
+      type: "delta",
+      requestId: "r-other",
+      conversationId: "other",
+      text: "wrong",
+    }).messages).toEqual([
+      { role: "user", text: "你好" },
+      { role: "assistant", text: "回答", streaming: true },
+    ]);
+  });
 });

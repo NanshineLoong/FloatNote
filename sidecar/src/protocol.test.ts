@@ -35,9 +35,9 @@ describe("createLineDecoder", () => {
   it("accumulates a half line split across chunks", () => {
     const decode = createLineDecoder();
     expect(decode('{"type":"prom')).toEqual([]);
-    const out = decode('pt","requestId":"r1","noteId":"n","noteText":"t","userText":"u"}\n');
+    const out = decode('pt","requestId":"r1","conversationId":"c1","userText":"u"}\n');
     expect(out).toEqual([
-      { type: "prompt", requestId: "r1", noteId: "n", noteText: "t", userText: "u" },
+      { type: "prompt", requestId: "r1", conversationId: "c1", userText: "u" },
     ]);
   });
 
@@ -56,5 +56,20 @@ describe("createLineDecoder", () => {
     expect(first).toEqual([{ type: "ready" }]);
     const second = decode('ne","requestId":"r1"}\n');
     expect(second).toEqual([{ type: "done", requestId: "r1" }]);
+  });
+
+  it("decodes session lifecycle messages", () => {
+    const decode = createLineDecoder();
+    const out = decode(
+      [
+        '{"type":"new_session","conversationId":"c1","cwd":"/tmp/project","sessionDir":"/tmp/sessions"}',
+        '{"type":"open_session","conversationId":"c2","sessionFile":"/tmp/sessions/c2.jsonl"}',
+        "",
+      ].join("\n"),
+    );
+    expect(out).toEqual([
+      { type: "new_session", conversationId: "c1", cwd: "/tmp/project", sessionDir: "/tmp/sessions" },
+      { type: "open_session", conversationId: "c2", sessionFile: "/tmp/sessions/c2.jsonl" },
+    ]);
   });
 });

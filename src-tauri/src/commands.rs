@@ -1,4 +1,5 @@
 use crate::agent::{ActiveNote, AgentHandle, HostToSidecar};
+use crate::chat_history::{ChatConversationIndexEntry, ChatHistoryStore, ChatScopeType, ChatTitleState};
 use crate::watcher::{FileWatcher, SuppressList};
 use crate::{config::Config, notes, project, versions};
 use std::path::PathBuf;
@@ -128,6 +129,105 @@ pub fn restore_version(
     Ok(restored)
 }
 
+fn chat_store() -> Result<ChatHistoryStore, String> {
+    ChatHistoryStore::default_for_user().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn chat_get_for_scope(
+    scope_type: ChatScopeType,
+    scope_path: String,
+) -> Result<Option<ChatConversationIndexEntry>, String> {
+    chat_store()?
+        .get_for_scope(scope_type, &scope_path)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn chat_create(
+    app: tauri::AppHandle,
+    scope_type: ChatScopeType,
+    scope_path: String,
+    scope_label: String,
+) -> Result<ChatConversationIndexEntry, String> {
+    let entry = chat_store()?
+        .create(scope_type, &scope_path, &scope_label)
+        .map_err(|error| error.to_string())?;
+    let _ = crate::tray::refresh_menu(&app);
+    Ok(entry)
+}
+
+#[tauri::command]
+pub fn chat_list_for_scope(
+    scope_type: ChatScopeType,
+    scope_path: String,
+) -> Result<Vec<ChatConversationIndexEntry>, String> {
+    chat_store()?
+        .list_for_scope(scope_type, &scope_path)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn chat_list_recent(limit: usize) -> Result<Vec<ChatConversationIndexEntry>, String> {
+    chat_store()?
+        .list_recent(limit)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn chat_list_all(cursor: usize, limit: usize) -> Result<Vec<ChatConversationIndexEntry>, String> {
+    chat_store()?
+        .list_all(cursor, limit)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn chat_open(
+    app: tauri::AppHandle,
+    conversation_id: String,
+) -> Result<Option<ChatConversationIndexEntry>, String> {
+    let entry = chat_store()?
+        .open(&conversation_id)
+        .map_err(|error| error.to_string())?;
+    let _ = crate::tray::refresh_menu(&app);
+    Ok(entry)
+}
+
+#[tauri::command]
+pub fn chat_update_title(
+    app: tauri::AppHandle,
+    conversation_id: String,
+    title: String,
+    title_state: ChatTitleState,
+) -> Result<Option<ChatConversationIndexEntry>, String> {
+    let entry = chat_store()?
+        .update_title(&conversation_id, &title, title_state)
+        .map_err(|error| error.to_string())?;
+    let _ = crate::tray::refresh_menu(&app);
+    Ok(entry)
+}
+
+#[tauri::command]
+pub fn chat_delete(
+    app: tauri::AppHandle,
+    conversation_id: String,
+) -> Result<Option<ChatConversationIndexEntry>, String> {
+    let entry = chat_store()?
+        .delete(&conversation_id)
+        .map_err(|error| error.to_string())?;
+    let _ = crate::tray::refresh_menu(&app);
+    Ok(entry)
+}
+
+#[tauri::command]
+pub fn chat_clear_before(app: tauri::AppHandle, timestamp: u64) -> Result<usize, String> {
+    let removed = chat_store()?
+        .clear_before(timestamp)
+        .map_err(|error| error.to_string())?;
+    let _ = crate::tray::refresh_menu(&app);
+    Ok(removed)
+}
+
 /// 配置 sidecar 的 provider / model / key / base_url（经 stdin 发 Configure）。
 #[tauri::command]
 pub fn agent_configure(
@@ -153,32 +253,56 @@ pub fn agent_configure(
 #[tauri::command]
 pub fn agent_send(
     state: State<AppState>,
-    dir: String,
-    note_id: String,
-    path: String,
-    note_text: String,
+    conversation_id: String,
     user_text: String,
 ) -> Result<String, String> {
     let seq = state.agent_seq.fetch_add(1, Ordering::Relaxed) + 1;
     let request_id = format!("r{seq}");
-
-    *state.active_note.lock().unwrap() = Some(ActiveNote {
-        dir,
-        note_id: note_id.clone(),
-        path,
-    });
 
     let mut guard = state.agent.lock().unwrap();
     let agent = guard.as_mut().ok_or("助手未连接")?;
     agent
         .send(&HostToSidecar::Prompt {
             request_id: request_id.clone(),
-            note_id,
-            note_text,
+            conversation_id,
             user_text,
         })
         .map_err(|error| error.to_string())?;
     Ok(request_id)
+}
+
+#[tauri::command]
+pub fn agent_new_session(
+    state: State<AppState>,
+    conversation_id: String,
+    cwd: String,
+    session_dir: String,
+) -> Result<(), String> {
+    let mut guard = state.agent.lock().unwrap();
+    let agent = guard.as_mut().ok_or("助手未连接")?;
+    agent
+        .send(&HostToSidecar::NewSession {
+            conversation_id,
+            cwd,
+            session_dir,
+        })
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn agent_open_session(
+    state: State<AppState>,
+    conversation_id: String,
+    session_file: String,
+) -> Result<(), String> {
+    let mut guard = state.agent.lock().unwrap();
+    let agent = guard.as_mut().ok_or("助手未连接")?;
+    agent
+        .send(&HostToSidecar::OpenSession {
+            conversation_id,
+            session_file,
+        })
+        .map_err(|error| error.to_string())
 }
 
 /// 助手展开状态，供前端启动时读取。
@@ -374,4 +498,3 @@ pub fn config_path(app: &tauri::AppHandle) -> PathBuf {
         .unwrap_or_else(|_| std::env::temp_dir().join("FloatNote"))
         .join("config.json")
 }
-
