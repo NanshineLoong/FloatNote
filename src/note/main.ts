@@ -583,14 +583,22 @@ onConflict(async (path, localContent) => {
     await saveImmediate(path, localContent, { force: true });
     return;
   }
+  // 保留磁盘版本：先丢弃本地 pending（清掉 dirty，避免后续重载被跳过），再按路径把
+  // 磁盘内容重新注入对应编辑器。路由必须与 onFileChanged 一致——否则 tasks 文件或
+  // 已切换项目的旧路径会被错误地塞进 pieceEditor 而覆盖 piece 内容。
   discardPending(path);
-  const content = await loadNote(path);
+  const activeFile = activePieceFile();
   if (current && path === current.entry.path) {
-    applyRemoteDoc(content);
-  } else {
+    applyRemoteDoc(await loadNote(path));
+  } else if (activeFile && path === activeFile.path) {
     applyingRemote = true;
-    setDoc(pieceEditor, content);
+    setDoc(pieceEditor, await loadNote(path));
     applyingRemote = false;
+  } else if (currentProject && path === tasksPath(currentProject.path)) {
+    tasksPanel.reload();
+  } else {
+    // 路径已失效（如项目已切换）—— 仅刷新 lastKnown，无对应编辑器需要更新。
+    await loadNote(path);
   }
 });
 

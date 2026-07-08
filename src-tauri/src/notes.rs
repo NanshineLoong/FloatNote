@@ -224,6 +224,21 @@ mod tests {
         assert_eq!(mtime_millis(std::path::Path::new("/no/such/file.md")), None);
     }
 
+    #[test]
+    fn mtime_millis_returns_some_for_existing_file() {
+        let dir = tempdir();
+        let path = dir.path().join("note.md");
+        std::fs::write(&path, "x").unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        let m = mtime_millis(&path).expect("existing file has mtime");
+        // 文件刚创建，mtime 应在 now 附近（容忍文件系统时间戳精度与调度延迟）。
+        assert!(m <= now + 60_000, "mtime {m} far in the future");
+        assert!(m > now - 60_000, "mtime {m} far in the past");
+    }
+
     fn tempdir() -> TempDir {
         static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let mut path = std::env::temp_dir();
