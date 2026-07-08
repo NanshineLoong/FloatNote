@@ -166,7 +166,9 @@ input {
   width: var(--assist);
 }
 
-/* floating：浮在小人处（左下锚 --bot-x），卡片在小人上方，宽高自适应内容，不占布局。 */
+/* floating：浮在小人处（左下锚 --bot-x），卡片在小人上方，宽高自适应内容，不占布局。
+   z-index 高于 .scroll-thumb(10)：窄窗 floating 时小人压到正文右缘上方，
+   滚动滑块不得画在气泡/小人之上。 */
 #app.assistant-on.mode-floating #assistant-region {
   display: flex;
   flex-direction: column;
@@ -177,6 +179,7 @@ input {
   height: auto;
   max-width: min(320px, 100% - 32px);
   max-height: calc(100% - 32px);
+  z-index: 20;
   pointer-events: none;
 }
 
