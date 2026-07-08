@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseTasks, serializeTasks, toggleTask, addTask, deleteTask, type TaskLine } from "./tasks";
+import { parseTasks, serializeTasks, toggleTask, addTask, deleteTask, reorderTask, renameTask, type TaskLine } from "./tasks";
 
 describe("parseTasks", () => {
   it("parses checked + unchecked todos, one per line", () => {
@@ -64,5 +64,43 @@ describe("deleteTask", () => {
   it("returns the list unchanged for an out-of-range index", () => {
     const items: TaskLine[] = [{ kind: "todo", checked: false, text: "a" }];
     expect(deleteTask(items, 5)).toBe(items);
+  });
+});
+
+describe("reorderTask", () => {
+  it("moves an item from one position to another", () => {
+    const items: TaskLine[] = [
+      { kind: "todo", checked: false, text: "a" },
+      { kind: "todo", checked: false, text: "b" },
+      { kind: "todo", checked: false, text: "c" },
+    ];
+    expect(reorderTask(items, 0, 2)).toEqual([
+      { kind: "todo", checked: false, text: "b" },
+      { kind: "todo", checked: false, text: "c" },
+      { kind: "todo", checked: false, text: "a" },
+    ]);
+    expect(items).toHaveLength(3);
+  });
+
+  it("returns the list unchanged for same index or out-of-range", () => {
+    const items: TaskLine[] = [{ kind: "todo", checked: false, text: "a" }];
+    expect(reorderTask(items, 0, 0)).toBe(items);
+    expect(reorderTask(items, 0, 5)).toBe(items);
+  });
+});
+
+describe("renameTask", () => {
+  it("renames the targeted todo, immutably, trimming whitespace", () => {
+    const items: TaskLine[] = [{ kind: "todo", checked: false, text: "a" }];
+    expect(renameTask(items, 0, "  新名字  ")).toEqual([
+      { kind: "todo", checked: false, text: "新名字" },
+    ]);
+    expect(items[0]).toEqual({ kind: "todo", checked: false, text: "a" });
+  });
+
+  it("ignores raw lines and blank input", () => {
+    const items: TaskLine[] = [{ kind: "raw", text: "x" }];
+    expect(renameTask(items, 0, "y")).toBe(items);
+    expect(renameTask(items, 0, "   ")).toBe(items);
   });
 });

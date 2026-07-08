@@ -1341,20 +1341,10 @@ input {
 .tasks-add-icon i {
   font-size: 16px;
 }
-/* 筛选激活：高亮 + 右上角小蓝点表示「只看未完成」已生效。 */
+/* 筛选激活：高亮表示「只看未完成」已生效。 */
 .tasks-filter.active {
   color: #2563eb;
   background: rgba(37, 99, 235, 0.12);
-}
-.tasks-filter.active::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #2563eb;
 }
 .tasks-add-icon.adding {
   transform: rotate(45deg);
