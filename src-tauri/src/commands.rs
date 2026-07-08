@@ -53,7 +53,7 @@ pub fn read_note(path: String) -> Result<String, String> {
 #[tauri::command]
 pub fn write_note(state: State<AppState>, path: String, content: String) -> Result<(), String> {
     crate::watcher::mark_self_write(&state.write_suppress, &path);
-    std::fs::write(&path, &content).map_err(|error| error.to_string())?;
+    notes::write_atomic(std::path::Path::new(&path), &content).map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -76,7 +76,7 @@ pub fn create_note(
     let path = dir_path.join(&filename);
     let path_str = path.to_string_lossy().to_string();
     crate::watcher::mark_self_write(&state.write_suppress, &path_str);
-    std::fs::write(&path, "").map_err(|error| error.to_string())?;
+    notes::write_atomic(&path, "").map_err(|error| error.to_string())?;
     Ok(notes::NoteEntry {
         name: filename.trim_end_matches(".md").to_string(),
         path: path_str,
@@ -125,7 +125,7 @@ pub fn restore_version(
     let restored =
         versions::read_version(dir_path, &note_id, v).map_err(|error| error.to_string())?;
     crate::watcher::mark_self_write(&state.write_suppress, &path);
-    std::fs::write(&path, &restored).map_err(|error| error.to_string())?;
+    notes::write_atomic(std::path::Path::new(&path), &restored).map_err(|error| error.to_string())?;
     Ok(restored)
 }
 

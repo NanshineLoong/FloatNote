@@ -375,7 +375,7 @@ pub fn apply_write(
 ) -> std::io::Result<u32> {
     let old = std::fs::read_to_string(path).unwrap_or_default();
     let version = versions::snapshot(dir, note_id, &old, "ai")?;
-    std::fs::write(path, new_content)?;
+    crate::notes::write_atomic(path, new_content)?;
     Ok(version)
 }
 
