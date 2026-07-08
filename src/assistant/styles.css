@@ -45,8 +45,15 @@
   background: #fff;
 }
 
-.assistant-scroll {
+.assistant-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.assistant-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;

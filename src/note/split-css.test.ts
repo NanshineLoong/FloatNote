@@ -112,10 +112,10 @@ describe("split view CSS placement", () => {
 
   it("gives the floating assistant a soft background without bubble borders", () => {
     expect(css).toMatch(
-      /#app\.mode-floating\s+#assistant-region\s+\.assistant-scroll\s*{[^}]*background:\s*rgba\([^;]+;[^}]*backdrop-filter:\s*blur\([^}]+;[^}]*box-shadow:/s,
+      /#app\.mode-floating\s+#assistant-region\s+\.assistant-card\s*{[^}]*background:\s*rgba\([^;]+;[^}]*backdrop-filter:\s*blur\([^}]+;[^}]*box-shadow:/s,
     );
     expect(css).not.toMatch(
-      /#app\.mode-floating\s+#assistant-region\s+\.assistant-scroll::before\s*{/,
+      /#app\.mode-floating\s+#assistant-region\s+\.assistant-card::before\s*{/,
     );
     expect(assistantCss).toMatch(
       /#app\.mode-floating\s+\.chat-assistant\s*{[^}]*background:\s*#[0-9a-fA-F]{6};[^}]*border:\s*none;/s,
@@ -124,7 +124,7 @@ describe("split view CSS placement", () => {
       assistantBubbleColor,
     );
     expect(css).toMatch(
-      /@media\s*\(prefers-color-scheme:\s*dark\)\s*{[\s\S]*#app\.mode-floating\s+#assistant-region\s+\.assistant-scroll\s*{[^}]*background:\s*rgba\([^;]+;[^}]*box-shadow:/s,
+      /@media\s*\(prefers-color-scheme:\s*dark\)\s*{[\s\S]*#app\.mode-floating\s+#assistant-region\s+\.assistant-card\s*{[^}]*background:\s*rgba\([^;]+;[^}]*box-shadow:/s,
     );
   });
 

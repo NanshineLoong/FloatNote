@@ -46,8 +46,9 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
 
   root.classList.add("assistant");
   root.innerHTML = `
-    <div class="assistant-scroll">
+    <div class="assistant-card">
       <button class="assistant-new" type="button" aria-label="新对话" title="新对话"><i class="ph ph-plus"></i></button>
+      <div class="assistant-scroll"></div>
     </div>
     <div class="assistant-dock">
       <button class="assistant-bot" type="button" aria-label="展开输入框">${socratesSvg}</button>
@@ -71,7 +72,8 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   let scopeToken = 0;
 
   function rerender() {
-    scroll.replaceChildren(newBtn, renderMessages(state));
+    // 新对话按钮在 .assistant-card 内、滚动容器之外，锚定卡片右上角，不随消息滚动。
+    scroll.replaceChildren(renderMessages(state));
     scroll.scrollTop = scroll.scrollHeight;
     // 无消息时不渲染聊天历史容器，避免 floating 态出现空的卡片/气泡（inline 态无副作用）。
     root.classList.toggle("has-messages", state.messages.length > 0);
