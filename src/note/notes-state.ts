@@ -1,6 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save, confirm, open } from "@tauri-apps/plugin-dialog";
 
+/** read_note 命令返回：文件内容 + 磁盘 mtime（ms）。 */
+export interface NoteContent {
+  content: string;
+  mtime: number | null;
+}
+
+/** write_note 命令返回：是否冲突 + 写入后的新 mtime。 */
+export interface WriteOutcome {
+  conflict: boolean;
+  mtime: number | null;
+}
+
 export interface NoteEntry {
   name: string;
   path: string;
@@ -167,26 +179,138 @@ export async function renameNote(dir: string, oldName: string, newStem: string):
   return invoke<string>("rename_note", { dir, oldName, newStem });
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
-/** 有未保存修改的路径集合，用于外部文件变更时判断是否可以安全覆盖。 */
-const dirtyPaths = new Set<string>();
-
-export function scheduleSave(path: string, content: string) {
-  dirtyPaths.add(path);
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    invoke("write_note", { path, content })
-      .then(() => dirtyPaths.delete(path))
-      .catch((error) => {
-        console.error("save failed", error);
-        dirtyPaths.delete(path);
-      });
-  }, 500);
+interface PendingWrite {
+  content: string;
+  timer: ReturnType<typeof setTimeout> | null;
+  retry: number;
 }
 
-/** 某路径是否有未保存的本地修改（用于外部文件变更时决定是否覆盖编辑器）。 */
+const pending = new Map<string, PendingWrite>();
+/** 最近一次已知磁盘 mtime（ms），用于写入时做冲突守卫。 */
+const lastKnown = new Map<string, number | null>();
+let conflictHandler:
+  | ((path: string, content: string) => void | Promise<void>)
+  | null = null;
+
+const DEBOUNCE_MS = 500;
+const MAX_RETRIES = 3;
+const BACKOFF_MS = [500, 1000, 2000];
+
+/** 登记某路径最近一次已知的磁盘 mtime（读盘/AI 改写后调用）。 */
+export function setLastKnown(path: string, mtime: number | null): void {
+  lastKnown.set(path, mtime);
+}
+
+/** 某路径是否有未保存的本地修改（外部文件变更时决定是否安全覆盖）。 */
 export function isDirty(path: string): boolean {
-  return dirtyPaths.has(path);
+  return pending.has(path);
+}
+
+/** 注册冲突处理器：写盘检测到外部已改动时回调。 */
+export function onConflict(
+  handler: (path: string, content: string) => void | Promise<void>,
+): void {
+  conflictHandler = handler;
+}
+
+/** 丢弃某路径的待保存状态（用户选择"保留磁盘版本"后调用）。 */
+export function discardPending(path: string): void {
+  const entry = pending.get(path);
+  if (entry?.timer) clearTimeout(entry.timer);
+  pending.delete(path);
+}
+
+/** 排一次防抖写入：500ms 尾沿，per-path 独立计时。连续编辑合并为最后一次内容。 */
+export function scheduleSave(path: string, content: string): void {
+  const prev = pending.get(path);
+  if (prev?.timer) clearTimeout(prev.timer);
+  pending.set(path, { content, timer: null, retry: 0 });
+  const entry = pending.get(path)!;
+  entry.timer = setTimeout(() => {
+    entry.timer = null;
+    void flushPath(path);
+  }, DEBOUNCE_MS);
+}
+
+/** 立即写入（不经防抖计时）：tasks 面板与冲突"保留我的"用。 */
+export async function saveImmediate(
+  path: string,
+  content: string,
+  opts: { force?: boolean } = {},
+): Promise<void> {
+  const prev = pending.get(path);
+  if (prev?.timer) clearTimeout(prev.timer);
+  pending.set(path, { content, timer: null, retry: 0 });
+  await flushPath(path, opts.force === true);
+}
+
+/** 关闭/隐藏前清空所有待保存：立即触发每条 pending 的写入（fire-and-forget）。 */
+export function flushAll(): void {
+  for (const [path, entry] of pending) {
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.timer = null;
+    void flushPath(path);
+  }
+}
+
+/** 执行一次写入：取 expectedMtime → invoke → 处理 conflict/重试/续写。 */
+async function flushPath(path: string, force = false): Promise<void> {
+  const entry = pending.get(path);
+  if (!entry) return;
+  const contentWritten = entry.content;
+  const expectedMtime = force ? null : (lastKnown.get(path) ?? null);
+  try {
+    const outcome = await invoke<WriteOutcome>("write_note", {
+      path,
+      content: contentWritten,
+      expectedMtime,
+    });
+    if (outcome.conflict) {
+      if (conflictHandler) {
+        await conflictHandler(path, contentWritten);
+      } else {
+        console.error("save conflict (no handler registered)", path);
+      }
+      return;
+    }
+    lastKnown.set(path, outcome.mtime);
+    const cur = pending.get(path);
+    if (!cur) return;
+    if (cur.content === contentWritten) {
+      pending.delete(path);
+    } else {
+      // 写入期间又来了新编辑 → 重新排一次防抖写，避免新内容滞留。
+      cur.retry = 0;
+      if (cur.timer) clearTimeout(cur.timer);
+      cur.timer = setTimeout(() => {
+        cur.timer = null;
+        void flushPath(path);
+      }, DEBOUNCE_MS);
+    }
+  } catch (error) {
+    console.error("save failed", error);
+    const cur = pending.get(path);
+    if (!cur) return;
+    if (cur.retry < MAX_RETRIES) {
+      const backoff = BACKOFF_MS[cur.retry] ?? BACKOFF_MS[BACKOFF_MS.length - 1];
+      cur.retry += 1;
+      if (cur.timer) clearTimeout(cur.timer);
+      cur.timer = setTimeout(() => {
+        cur.timer = null;
+        void flushPath(path, force);
+      }, backoff);
+    }
+    // 重试耗尽：保留 pending，下次 scheduleSave 会重置 retry 续写。
+  }
+}
+
+/** 测试专用：清空保存状态（清计时、pending、lastKnown、handler）。 */
+export function __resetSaveStateForTests(): void {
+  for (const [, entry] of pending) {
+    if (entry.timer) clearTimeout(entry.timer);
+  }
+  pending.clear();
+  lastKnown.clear();
+  conflictHandler = null;
 }
 
