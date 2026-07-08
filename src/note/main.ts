@@ -28,17 +28,21 @@ import {
   confirmDialog,
   deleteNote,
   deleteProject,
+  discardPending,
+  flushAll,
   getConfig,
   inboxEntry,
   isDirty,
   listPieces,
   listProjects,
+  loadNote,
+  onConflict,
   openDocumentFromFile,
-  readNote,
   renameNote,
   renameProject,
   resolveDocuments,
   resolveProjects,
+  saveImmediate,
   scheduleSave,
   setRecentDocuments,
   setRecentProjects,
@@ -349,7 +353,7 @@ async function openPiece(entry: NoteEntry) {
   currentPiece = entry;
   pieceHeader?.setLabel(entry.name);
   applyingRemote = true;
-  setDoc(pieceEditor, await readNote(entry.path));
+  setDoc(pieceEditor, await loadNote(entry.path));
   applyingRemote = false;
 }
 
@@ -362,7 +366,7 @@ async function openDocument(doc: NoteEntry) {
   setProjectLabel(doc.name);
   clearEmptyState();
   applyingRemote = true;
-  setDoc(pieceEditor, await readNote(doc.path));
+  setDoc(pieceEditor, await loadNote(doc.path));
   applyingRemote = false;
   pieceHeader?.setLabel(doc.name);
   applyView();
@@ -511,14 +515,14 @@ function currentChatScope(): ChatScope | null {
 void onNoteUpdated(async (payload) => {
   // 采集面（项目模式）被 AI 改写。
   if (current && payload.path === current.entry.path) {
-    applyRemoteDoc(await readNote(current.entry.path));
+    applyRemoteDoc(await loadNote(current.entry.path));
     return;
   }
   // 成品 / 独立文档被 AI 改写（文档模式无文件监听，靠这条热刷新）。
   const f = activePieceFile();
   if (f && payload.path === f.path) {
     applyingRemote = true;
-    setDoc(pieceEditor, await readNote(f.path));
+    setDoc(pieceEditor, await loadNote(f.path));
     applyingRemote = false;
   }
 });
@@ -540,7 +544,7 @@ void onFileChanged(async (changedPath) => {
   // Inbox 被外部修改。
   if (current && changedPath === current.entry.path) {
     try {
-      applyRemoteDoc(await readNote(current.entry.path));
+      applyRemoteDoc(await loadNote(current.entry.path));
     } catch {
       // _inbox.md 被外部删除 → 该目录不再是项目空间，回到 bootstrap 重新定位。
       console.warn("inbox vanished, re-bootstrapping");
@@ -554,7 +558,7 @@ void onFileChanged(async (changedPath) => {
   if (activeFile && changedPath === activeFile.path) {
     try {
       applyingRemote = true;
-      setDoc(pieceEditor, await readNote(activeFile.path));
+      setDoc(pieceEditor, await loadNote(activeFile.path));
       applyingRemote = false;
     } catch {
       // 文件已不存在（外部删除）→ 列剩余 pieces，切下一片或 NO_PIECE。
@@ -568,6 +572,33 @@ void onFileChanged(async (changedPath) => {
     return;
   }
 });
+
+// 保存冲突：磁盘被外部改动而本地有未保存编辑时，由 write_note 的 mtime 守卫触发。
+onConflict(async (path, localContent) => {
+  const keepMine = await confirmDialog(
+    `文件已在外部被修改：\n${path}\n\n「确定」保留我的编辑并覆盖磁盘；「取消」用磁盘版本替换本地。`,
+    "保存冲突",
+  );
+  if (keepMine) {
+    await saveImmediate(path, localContent, { force: true });
+    return;
+  }
+  discardPending(path);
+  const content = await loadNote(path);
+  if (current && path === current.entry.path) {
+    applyRemoteDoc(content);
+  } else {
+    applyingRemote = true;
+    setDoc(pieceEditor, content);
+    applyingRemote = false;
+  }
+});
+
+// 关闭/隐藏前尽量把 pending 写盘（窗口关闭被后端改为隐藏，webview 存活，invoke 可完成）。
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushAll();
+});
+window.addEventListener("pagehide", () => flushAll());
 
 /** 当前装载的 piece / 文档被外部删除后的兜底：项目模式 → 切下一片或 NO_PIECE；
  * 文档模式 → 回到项目或弹切换菜单。不再兜底建时间戳文件。 */
@@ -706,7 +737,7 @@ async function openProject(project: ProjectEntry) {
   const entry = inboxEntry(project);
   current = { dir: project.path, entry };
   setProjectLabel(project.name);
-  setDoc(editor, await readNote(entry.path));
+  setDoc(editor, await loadNote(entry.path));
   // 加载第一篇 piece — 不再兜底建时间戳文件；空列表 → NO_PIECE 空态。
   let pieces: NoteEntry[];
   try {

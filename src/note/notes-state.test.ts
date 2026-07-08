@@ -7,7 +7,9 @@ import {
   flushAll,
   isDirty,
   onConflict,
+  setLastKnown,
   discardPending,
+  loadNote,
   __resetSaveStateForTests,
 } from "./notes-state";
 import { invoke } from "@tauri-apps/api/core";
@@ -140,5 +142,30 @@ describe("save scheduling", () => {
     scheduleSave("/a.md", "x");
     discardPending("/a.md");
     expect(isDirty("/a.md")).toBe(false);
+  });
+
+  it("loadNote records mtime and scheduleSave passes it as expectedMtime", async () => {
+    mockedInvoke.mockResolvedValueOnce({ content: "disk", mtime: 42 });
+    const content = await loadNote("/a.md");
+    expect(content).toBe("disk");
+    mockedInvoke.mockResolvedValueOnce(okWrite(43));
+    scheduleSave("/a.md", "edited");
+    await vi.advanceTimersByTimeAsync(500);
+    expect(mockedInvoke).toHaveBeenLastCalledWith("write_note", {
+      path: "/a.md",
+      content: "edited",
+      expectedMtime: 42,
+    });
+  });
+
+  it("saveImmediate force write passes expectedMtime null", async () => {
+    mockedInvoke.mockResolvedValue(okWrite(50));
+    setLastKnown("/a.md", 42);
+    await saveImmediate("/a.md", "force", { force: true });
+    expect(mockedInvoke).toHaveBeenCalledWith("write_note", {
+      path: "/a.md",
+      content: "force",
+      expectedMtime: null,
+    });
   });
 });

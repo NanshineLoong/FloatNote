@@ -74,8 +74,15 @@ export async function listNotes(dir: string): Promise<NoteEntry[]> {
   return invoke<NoteEntry[]>("list_notes", { dir });
 }
 
-export async function readNote(path: string): Promise<string> {
-  return invoke<string>("read_note", { path });
+export async function readNote(path: string): Promise<NoteContent> {
+  return invoke<NoteContent>("read_note", { path });
+}
+
+/** 读取笔记并登记 lastKnown mtime，返回内容。UI 加载/重载笔记统一走这里。 */
+export async function loadNote(path: string): Promise<string> {
+  const { content, mtime } = await readNote(path);
+  lastKnown.set(path, mtime);
+  return content;
 }
 
 export async function listProjects(root: string): Promise<ProjectEntry[]> {
