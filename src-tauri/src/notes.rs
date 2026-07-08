@@ -11,6 +11,20 @@ pub struct NoteEntry {
     pub path: String,
 }
 
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteContent {
+    pub content: String,
+    pub mtime: Option<u64>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteOutcome {
+    pub conflict: bool,
+    pub mtime: Option<u64>,
+}
+
 pub fn timestamp_stem(now: NaiveDateTime) -> String {
     now.format("%Y-%m-%d %H-%M").to_string()
 }

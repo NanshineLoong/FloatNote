@@ -46,15 +46,35 @@ pub fn list_notes(dir: String) -> Result<Vec<notes::NoteEntry>, String> {
 }
 
 #[tauri::command]
-pub fn read_note(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|error| error.to_string())
+pub fn read_note(path: String) -> Result<notes::NoteContent, String> {
+    let content = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
+    let mtime = notes::mtime_millis(std::path::Path::new(&path));
+    Ok(notes::NoteContent { content, mtime })
 }
 
 #[tauri::command]
-pub fn write_note(state: State<AppState>, path: String, content: String) -> Result<(), String> {
+pub fn write_note(
+    state: State<AppState>,
+    path: String,
+    content: String,
+    expected_mtime: Option<u64>,
+) -> Result<notes::WriteOutcome, String> {
+    let p = std::path::Path::new(&path);
+    if let Some(expected) = expected_mtime {
+        if notes::mtime_millis(p) != Some(expected) {
+            return Ok(notes::WriteOutcome {
+                conflict: true,
+                mtime: None,
+            });
+        }
+    }
     crate::watcher::mark_self_write(&state.write_suppress, &path);
-    notes::write_atomic(std::path::Path::new(&path), &content).map_err(|error| error.to_string())?;
-    Ok(())
+    notes::write_atomic(p, &content).map_err(|error| error.to_string())?;
+    let mtime = notes::mtime_millis(p);
+    Ok(notes::WriteOutcome {
+        conflict: false,
+        mtime,
+    })
 }
 
 #[tauri::command]
