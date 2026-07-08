@@ -20,7 +20,7 @@ import { tagFilter, setTagFilter } from "./tags/filter";
 import { openBlockTagMenu } from "./tags/picker";
 import { createLayoutController } from "./layout-controller";
 import { createPieceHeader } from "./piece-switcher";
-import { createTasksPanel } from "./tasks-panel";
+import { actionTargetForTransition, createTasksPanel } from "./tasks-panel";
 import {
   createDocument,
   createNote,
@@ -180,6 +180,9 @@ let currentProject: ProjectEntry | null = null;
 let current: CurrentNote | null = null;
 /** 当前窗口模式：项目（含采集/写作/双栏）或独立文档（单一编辑器，无滑拨杆）。 */
 let mode: "project" | "document" = "project";
+/** 进入文档模式前行动面板是否开着 —— 独立文档无 _tasks.md，进文档时关掉行动，
+ *  返回项目时按此值恢复，呈现「临时遮挡」语义。仅项目→文档那一刻写入。 */
+let actionDesiredOpen = false;
 /** 文档模式下打开的独立文档；项目模式下为 null。复用 pieceEditor 渲染。 */
 let currentDocument: NoteEntry | null = null;
 let menuEl: HTMLElement | null = null;
@@ -355,6 +358,16 @@ async function openPiece(entry: NoteEntry) {
 
 /** 打开一个独立文档：切到文档模式，复用 pieceEditor 渲染该文件。 */
 async function openDocument(doc: NoteEntry) {
+  // 独立文档无 _tasks.md：进入文档模式时把行动「临时遮挡」——记下开关并关掉，
+  // 返回项目时按记忆恢复（见 openProject）。
+  const plan = actionTargetForTransition({
+    from: mode,
+    to: "document",
+    currentOpen: tasksPanel.isOpen(),
+    rememberedOpen: actionDesiredOpen,
+  });
+  if (plan.remember !== null) actionDesiredOpen = plan.remember;
+  tasksPanel.setOpen(plan.open);
   mode = "document";
   currentDocument = doc;
   recentDocs = pushRecent(recentDocs, doc.path);
@@ -699,6 +712,8 @@ async function rememberDocument(path: string) {
 }
 
 async function openProject(project: ProjectEntry) {
+  // 从文档模式返回项目：按离开项目时记下的开关恢复行动面板。
+  const wasDocument = mode === "document";
   mode = "project";
   currentDocument = null;
   currentProject = project;
@@ -725,6 +740,15 @@ async function openProject(project: ProjectEntry) {
   }
   renderWindowState(state);
   tasksPanel.reload();
+  // 文档→项目恢复行动面板：reload 已加载新项目 tasks，setOpen 仅切可见态。
+  // 同模式（项目→项目）时 plan.open === 当前开关，setOpen 的 no-op 守卫不触发副作用。
+  const plan = actionTargetForTransition({
+    from: wasDocument ? "document" : "project",
+    to: "project",
+    currentOpen: tasksPanel.isOpen(),
+    rememberedOpen: actionDesiredOpen,
+  });
+  tasksPanel.setOpen(plan.open);
   applyView();
   // 发布活动笔记（= 当前项目的 _inbox.md），供独立助手窗 / apply_write 定位。
   void invoke("set_active_note", { dir: project.path, noteId: entry.name, path: entry.path });

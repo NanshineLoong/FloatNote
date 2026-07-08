@@ -18,6 +18,33 @@ export interface TasksPanelHost {
   onOpenChange: (open: boolean) => void;
 }
 
+/** 窗口模式：项目（含 _tasks.md）或独立文档（无 _tasks.md）。 */
+export type WindowMode = "project" | "document";
+
+/**
+ * 项目↔文档切换时行动面板的目标状态。独立文档无 _tasks.md，进入文档模式时把行动
+ * 「临时遮挡」——记下当时的开关并关掉，返回项目时按记忆恢复。项目→项目、文档→文档
+ * 不变。`remember` 仅在项目→文档时非 null，为调用方写入「离开项目land时的开关」。
+ */
+export function actionTargetForTransition(args: {
+  from: WindowMode;
+  to: WindowMode;
+  currentOpen: boolean;
+  rememberedOpen: boolean;
+}): { open: boolean; remember: boolean | null } {
+  const { from, to, currentOpen, rememberedOpen } = args;
+  // 项目 → 文档：记下当前开关，关掉面板（文档无 _tasks.md）。
+  if (from === "project" && to === "document") {
+    return { open: false, remember: currentOpen };
+  }
+  // 文档 → 项目：按离开项目时记下的开关恢复。
+  if (from === "document" && to === "project") {
+    return { open: rememberedOpen, remember: null };
+  }
+  // 同模式切换（项目间 / 文档间）：保持原样，不触碰记忆。
+  return { open: currentOpen, remember: null };
+}
+
 /** inline 态下「行动」面板与下方助手之间的竖向间隙（px）。 */
 const PUSH_GAP = 8;
 
@@ -460,8 +487,10 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
     draw();
   }
 
-  function toggle() {
-    open = !open;
+  /** 程序化开/关到指定状态。已是目标状态时为 no-op（不触发 onOpenChange / 不 reload）。 */
+  function setOpen(target: boolean) {
+    if (open === target) return;
+    open = target;
     panel.style.display = open ? "flex" : "none";
     if (!open) {
       setAdding(false);
@@ -473,5 +502,13 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
     if (open) void reload();
   }
 
-  return { toggle, reload, syncLayout };
+  function toggle() {
+    setOpen(!open);
+  }
+
+  function isOpen() {
+    return open;
+  }
+
+  return { toggle, setOpen, isOpen, reload, syncLayout };
 }
