@@ -51,6 +51,23 @@ describe("tag_create", () => {
     await (c as any).execute("id", { name: "重点", color: "#e5484d" });
     expect(writes[0].newContent).toContain("重点");
   });
+  it("rejects non-palette color", async () => {
+    const { deps, writes } = makeDups("第一块");
+    const tools = createNoteTools(deps);
+    const c = tools.find((t) => t.name === "tag_create")!;
+    const r = await (c as any).execute("id", { name: "重点", color: "#000000" });
+    expect(r.content[0].text).toContain("不可用");
+    expect(writes.length).toBe(0);
+  });
+  it("rejects already-taken color", async () => {
+    const note = '<!-- floatnote-tags: review="复习"|c=#e5484d -->\n第一块';
+    const { deps, writes } = makeDups(note);
+    const tools = createNoteTools(deps);
+    const c = tools.find((t) => t.name === "tag_create")!;
+    const r = await (c as any).execute("id", { name: "重点", color: "#e5484d" });
+    expect(r.content[0].text).toContain("不可用");
+    expect(writes.length).toBe(0);
+  });
 });
 
 describe("list_tags", () => {

@@ -2,7 +2,7 @@ import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent
 import { Type } from "typebox";
 import {
   replaceOnce, findBlockByAnchor, setBlockTagChange, addTagDefChange,
-  deleteTagChanges, parseDefs,
+  deleteTagChanges, parseDefs, stripTagMarker,
 } from "@floatnote/note-logic";
 import type { NoteTarget, EditPreview } from "./protocol.js";
 
@@ -104,7 +104,8 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
       const newContent = change ? applyChange(old, change) : old;
       const tagName = params.tagId ? (parseDefs(old).get(params.tagId)?.name ?? params.tagId) : "(清除)";
       const tagColor = params.tagId ? (parseDefs(old).get(params.tagId)?.color ?? "#888") : "#888";
-      const blockPreview = old.slice(r.range.from, r.range.to).split("\n")[0].slice(0, 20);
+      const blockText = stripTagMarker(old.slice(r.range.from, r.range.to));
+      const blockPreview = blockText.split("\n")[0].slice(0, 20);
       const preview: EditPreview = { tool: "set_tag", summary: `给块「${blockPreview}」${params.tagId ? "打上" : "清除"}标签`, detail: { kind: "tag_assign", blockPreview, tagName, tagColor } };
       const res = await deps.requestWrite({ target, toolName: "set_tag", oldContent: old, newContent, preview });
       return writeResultText(res);
@@ -124,6 +125,12 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     async execute(_id, params: { name: string; color: string; target?: NoteTarget }) {
       const target: NoteTarget = { kind: "inbox", ...(params.target?.name ? { name: params.target.name } : {}) };
       const old = await deps.getNoteText(target);
+      const map = parseDefs(old);
+      const used = new Set([...map.values()].map((d) => d.color.toLowerCase()));
+      const free = freeColors(used);
+      if (!free.map((c) => c.toLowerCase()).includes(params.color.toLowerCase())) {
+        return { content: [{ type: "text" as const, text: `颜色 ${params.color} 不可用；可用：${JSON.stringify(free)}` }], details: {} };
+      }
       const r = addTagDefChange(old, params.name, params.color);
       if (!r.id) return { content: [{ type: "text", text: `建标签失败：颜色 ${params.color} 已被占用；可用：${JSON.stringify(freeColors(new Set([...parseDefs(old).values()].map((d) => d.color.toLowerCase()))))}` }], details: {} };
       const newContent = r.change ? applyChange(old, r.change) : old;
