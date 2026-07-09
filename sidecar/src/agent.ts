@@ -12,7 +12,7 @@ import {
 import { getModel, type Api, type Model } from "@earendil-works/pi-ai";
 import { createNoteTools, type WriteResult } from "./note-tools.js";
 import { TUTOR_SYSTEM_PROMPT } from "./tutor-prompt.js";
-import type { ChatDisplayMessage, HostToSidecar, SidecarToHost } from "./protocol.js";
+import type { ChatDisplayMessage, EditPreview, HostToSidecar, NoteTarget, SidecarToHost } from "./protocol.js";
 
 export interface AgentConfig {
   provider: string;
@@ -161,7 +161,9 @@ export class AgentRunner {
   private cfg?: AgentConfig;
   private readonly sessions = new Map<string, SessionLike>();
   private writeSeq = 0;
-  private readonly pendingWrites = new Map<string, (r: WriteResult) => void>();
+  private textSeq = 0;
+  private readonly pendingEdits = new Map<string, (r: WriteResult) => void>();
+  private readonly pendingTexts = new Map<string, (r: { content: string; found: boolean }) => void>();
 
   constructor(options: AgentRunnerOptions) {
     this.send = options.send;
@@ -211,12 +213,21 @@ export class AgentRunner {
     }
   }
 
-  /** Resolve a pending write once the host reports the snapshot result. */
-  onApplyWriteResult(msg: Extract<HostToSidecar, { type: "apply_write_result" }>): void {
-    const resolve = this.pendingWrites.get(msg.callId);
+  /** Resolve a pending get_note_text round-trip with the host-supplied content. */
+  onNoteText(msg: Extract<HostToSidecar, { type: "note_text" }>): void {
+    const resolve = this.pendingTexts.get(msg.callId);
     if (resolve) {
-      this.pendingWrites.delete(msg.callId);
-      resolve({ ok: msg.ok, version: msg.version, error: msg.error });
+      this.pendingTexts.delete(msg.callId);
+      resolve({ content: msg.content, found: msg.found });
+    }
+  }
+
+  /** Resolve a pending apply_edit round-trip with the host-supplied result. */
+  onApplyEditResult(msg: Extract<HostToSidecar, { type: "apply_edit_result" }>): void {
+    const resolve = this.pendingEdits.get(msg.callId);
+    if (resolve) {
+      this.pendingEdits.delete(msg.callId);
+      resolve({ ok: msg.ok, denied: msg.denied, version: msg.version, error: msg.error });
     }
   }
 
@@ -230,8 +241,8 @@ export class AgentRunner {
     }
     this.sessions.get(conversationId)?.dispose?.();
     const tools = createNoteTools({
-      getNoteText: () => "",
-      requestWrite: (content) => this.requestWrite(conversationId, content),
+      getNoteText: (target) => this.getNoteText(conversationId, target),
+      requestWrite: (args) => this.requestWrite(conversationId, args),
     });
     const session = await this.factory(this.cfg, tools, sessionManager);
     this.sessions.set(conversationId, session);
@@ -247,11 +258,31 @@ export class AgentRunner {
     });
   }
 
-  private requestWrite(conversationId: string, content: string): Promise<WriteResult> {
+  private getNoteText(conversationId: string, target?: NoteTarget): Promise<string> {
+    const callId = `g${++this.textSeq}`;
+    return new Promise<string>((resolve) => {
+      this.pendingTexts.set(callId, (r) => resolve(r.content));
+      this.send({ type: "get_note_text", callId, conversationId, target: target ?? { kind: "inbox" } });
+    });
+  }
+
+  private requestWrite(
+    conversationId: string,
+    args: { target?: NoteTarget; toolName: string; oldContent: string; newContent: string; preview: EditPreview },
+  ): Promise<WriteResult> {
     const callId = `w${++this.writeSeq}`;
     return new Promise<WriteResult>((resolve) => {
-      this.pendingWrites.set(callId, resolve);
-      this.send({ type: "apply_write", callId, noteId: conversationId, content });
+      this.pendingEdits.set(callId, resolve);
+      this.send({
+        type: "apply_edit",
+        callId,
+        conversationId,
+        target: args.target ?? { kind: "inbox" },
+        toolName: args.toolName,
+        oldContent: args.oldContent,
+        newContent: args.newContent,
+        preview: args.preview,
+      });
     });
   }
 }
@@ -282,7 +313,7 @@ const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager) 
   const { session } = await createAgentSession({
     model,
     customTools: tools,
-    tools: ["read_note", "write_note"],
+    tools: ["read_note", "list_tags", "edit_note", "write_note", "set_tag", "tag_create", "tag_delete"],
     noTools: "builtin",
     resourceLoader,
     authStorage,
