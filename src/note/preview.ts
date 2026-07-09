@@ -10,7 +10,10 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { parseChips, readBidMarker, stripBidMarker, type Source } from "./quote";
+import { renderInline } from "./inline";
+import { parseGfmTable, type Align } from "./table";
 import { stripTagMarker } from "@floatnote/note-logic";
+import hljs from "highlight.js/lib/common";
 
 function getCursorLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
@@ -133,21 +136,71 @@ class TableWidget extends WidgetType {
   toDOM(): HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "cm-preview-table-wrap";
+    const parsed = parseGfmTable(this.src);
+    if (!parsed) { wrap.textContent = this.src; return wrap; }
     const table = document.createElement("table");
     table.className = "cm-preview-table";
-    let isHeader = true;
-    for (const line of this.src.trim().split("\n")) {
-      if (/^\s*\|?[\s\-:]+\|/.test(line)) { isHeader = false; continue; }
-      const cells = line.replace(/^\||\|$/g, "").split("|");
+    const alignStyle = (a: Align): string => (a === "none" ? "" : a);
+
+    const thead = document.createElement("thead");
+    const htr = document.createElement("tr");
+    parsed.header.forEach((cell, i) => {
+      const th = document.createElement("th");
+      th.innerHTML = renderInline(cell);
+      th.style.textAlign = alignStyle(parsed.aligns[i] ?? "none");
+      htr.appendChild(th);
+    });
+    thead.appendChild(htr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    for (const row of parsed.rows) {
       const tr = document.createElement("tr");
-      for (const cell of cells) {
-        const el = isHeader ? document.createElement("th") : document.createElement("td");
-        el.textContent = cell.trim();
-        tr.appendChild(el);
-      }
-      table.appendChild(tr);
+      row.forEach((cell, i) => {
+        const td = document.createElement("td");
+        td.innerHTML = renderInline(cell);
+        td.style.textAlign = alignStyle(parsed.aligns[i] ?? "none");
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
     }
+    table.appendChild(tbody);
     wrap.appendChild(table);
+    return wrap;
+  }
+  ignoreEvent() { return true; }
+}
+
+class CodeBlockWidget extends WidgetType {
+  constructor(readonly code: string, readonly lang: string) { super(); }
+  eq(o: CodeBlockWidget): boolean {
+    return o.code === this.code && o.lang === this.lang;
+  }
+  toDOM(): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "cm-codeblock";
+
+    if (this.lang) {
+      const label = document.createElement("span");
+      label.className = "cm-code-lang";
+      label.textContent = this.lang;
+      wrap.appendChild(label);
+    }
+
+    const pre = document.createElement("pre");
+    const codeEl = document.createElement("code");
+    codeEl.className = "hljs";
+    try {
+      const lang = this.lang.toLowerCase();
+      const html = lang && hljs.getLanguage(lang)
+        ? hljs.highlight(this.code, { language: lang }).value
+        : hljs.highlightAuto(this.code).value;
+      codeEl.innerHTML = html;
+    } catch {
+      codeEl.textContent = this.code;
+    }
+    pre.appendChild(codeEl);
+    wrap.appendChild(pre);
     return wrap;
   }
   ignoreEvent() { return true; }
@@ -523,40 +576,29 @@ function buildDecorations(view: EditorView): DecorationSet {
 
         case "FencedCode": {
           // Block-level: reveal the whole block (fences + source) when the
-          // cursor is on any of its lines, like Table. Otherwise style each
-          // line as a code container and hide the ``` fences.
+          // cursor is on any of its lines, like Table. Otherwise render the
+          // whole block as a single highlighted <pre> widget.
           const fromLine = doc.lineAt(node.from).number;
           const toLine = doc.lineAt(node.to).number;
           for (let l = fromLine; l <= toLine; l++) {
             if (cursorLines.has(l)) return false;
           }
-          for (let l = fromLine; l <= toLine; l++) {
-            const cl = doc.line(l);
-            entries.push({
-              from: cl.from,
-              to: cl.from,
-              deco: Decoration.line({ class: "cm-preview-codeblock" }),
-            });
-          }
-          // Hide the opening and closing fence lines' ``` (and info string).
-          const firstLine = doc.line(fromLine);
-          const lastLine = doc.line(toLine);
-          const openFence = /^([ \t]*```)[^]*$/.exec(firstLine.text);
-          if (openFence) {
-            entries.push({
-              from: firstLine.from,
-              to: firstLine.from + openFence[1].length,
-              deco: hide,
-            });
-          }
-          const closeFence = /^([ \t]*```)[ \t]*$/.exec(lastLine.text);
-          if (closeFence && toLine > fromLine) {
-            entries.push({
-              from: lastLine.from,
-              to: lastLine.from + closeFence[1].length,
-              deco: hide,
-            });
-          }
+          const firstLine = doc.line(fromLine).text;
+          const lang = (/^[ \t]*```[ \t]*(\S*)/.exec(firstLine)?.[1] ?? "");
+          // Body = lines strictly between the fences (drop first & last line).
+          // Guard the 2-line block (open fence + close fence, no content):
+          // fromLine+1 would point at the close fence; body should be empty.
+          const body = fromLine + 1 <= toLine - 1
+            ? doc.sliceString(doc.line(fromLine + 1).from, doc.line(toLine - 1).to)
+            : "";
+          entries.push({
+            from: node.from,
+            to: node.to,
+            deco: Decoration.replace({
+              widget: new CodeBlockWidget(body, lang),
+              block: true,
+            }),
+          });
           return false;
         }
 
@@ -763,13 +805,41 @@ const previewTheme = EditorView.theme({
     textAlign: "left",
   },
   ".cm-preview-table th": { fontWeight: "600", background: "rgba(0,0,0,0.04)" },
-  ".cm-preview-codeblock": {
+  ".cm-codeblock": {
+    position: "relative",
     background: "rgba(0,0,0,0.05)",
+    borderRadius: "8px",
+    margin: "4px 0",
+    overflow: "hidden",
+  },
+  ".cm-codeblock:hover": {
+    background: "rgba(0,0,0,0.08)",
+  },
+  ".cm-codeblock pre": {
+    margin: "0",
+    padding: "10px 12px",
+    overflowX: "auto",
+  },
+  ".cm-codeblock code": {
     fontFamily: "ui-monospace, 'SF Mono', monospace",
     fontSize: "0.9em",
-    whiteSpace: "pre-wrap",
-    paddingLeft: "10px",
-    paddingRight: "10px",
+    background: "transparent",
+    whiteSpace: "pre",
+  },
+  ".cm-codeblock .hljs": {
+    background: "transparent",
+  },
+  ".cm-code-lang": {
+    position: "absolute",
+    top: "4px",
+    right: "8px",
+    fontSize: "0.75em",
+    color: "rgba(0,0,0,0.35)",
+    fontFamily: "ui-monospace, 'SF Mono', monospace",
+    pointerEvents: "none",
+  },
+  ".cm-codeblock:hover .cm-code-lang": {
+    color: "rgba(0,0,0,0.6)",
   },
   ".cm-preview-link": {
     color: "#2563eb",

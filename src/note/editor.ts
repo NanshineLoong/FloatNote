@@ -1,10 +1,12 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
+import { Strikethrough, Table, TaskList } from "@lezer/markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { livePreview } from "./preview";
+import { listKeymap } from "./list-keymap";
 import { htmlPasteHandler } from "./paste";
 
 const highlight = HighlightStyle.define([
@@ -48,9 +50,10 @@ export function createEditor(
     extensions: [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
-      markdown(),
+      markdown({ extensions: [Table, Strikethrough, TaskList] }),
       syntaxHighlighting(highlight),
       ...livePreview(),
+      listKeymap(),
       htmlPasteHandler(),
       buildTheme(opts.grow ?? false),
       EditorView.lineWrapping,
