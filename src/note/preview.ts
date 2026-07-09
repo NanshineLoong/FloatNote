@@ -815,8 +815,44 @@ const previewTheme = EditorView.theme({
     paddingLeft: "calc(var(--list-depth, 0) * 1em + 0.6em)",
     listStyleType: "none",
   },
+  ".cm-preview-figure.cm-img-active": { outline: "2px solid #3b82f6", borderRadius: "4px" },
+  ".cm-img-toolbar": {
+    display: "flex",
+    gap: "4px",
+    alignItems: "center",
+    background: "rgba(255,255,255,0.95)",
+    border: "1px solid rgba(0,0,0,0.15)",
+    borderRadius: "4px",
+    padding: "2px 4px",
+    marginTop: "2px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+  },
+  ".cm-img-toolbar button": {
+    border: "1px solid rgba(0,0,0,0.15)",
+    borderRadius: "3px",
+    background: "#fff",
+    padding: "0 6px",
+    cursor: "pointer",
+  },
+  ".cm-img-caption-input": {
+    border: "1px solid rgba(0,0,0,0.15)",
+    borderRadius: "3px",
+    padding: "0 4px",
+    fontSize: "0.8em",
+    minWidth: "120px",
+  },
+  ".cm-img-resize-handle": {
+    width: "12px",
+    height: "12px",
+    background: "#3b82f6",
+    borderRadius: "2px",
+    cursor: "nwse-resize",
+    alignSelf: "flex-end",
+  },
 });
 
 export function livePreview(): Extension[] {
   return [previewPlugin, previewTheme];
 }
+
+export { attachImageToolbar } from "./image-toolbar";
