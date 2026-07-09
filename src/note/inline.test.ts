@@ -18,6 +18,10 @@ describe("renderInline", () => {
     expect(renderInline("[t](http://u/x)")).toBe('<a href="http://u/x">t</a>');
   });
 
+  it("escapes double quotes in a link URL (href attribute safety)", () => {
+    expect(renderInline('[t](http://u/a"b)')).toBe('<a href="http://u/a&quot;b">t</a>');
+  });
+
   it("renders strikethrough", () => {
     expect(renderInline("~~s~~")).toBe("<del>s</del>");
   });
