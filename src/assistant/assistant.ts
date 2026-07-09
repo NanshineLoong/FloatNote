@@ -56,6 +56,10 @@ export interface AssistantHandle {
   isHistoryPopoverOpen: () => boolean;
   /** 关闭历史浮层。 */
   closeHistoryPopover: () => void;
+  /** 权限气泡是否打开（等待用户允许/拒绝）。 */
+  isPermissionBubbleOpen: () => boolean;
+  /** 拒绝当前权限请求并关闭气泡（Esc 最高优先级）。 */
+  closePermissionBubble: () => void;
 }
 
 export function mountAssistant(root: HTMLElement, deps: AssistantDeps): AssistantHandle {
@@ -360,5 +364,11 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       return !historyPopover.hidden;
     },
     closeHistoryPopover,
+    isPermissionBubbleOpen() {
+      return permBubble.isOpen();
+    },
+    closePermissionBubble() {
+      permBubble.reject();
+    },
   };
 }

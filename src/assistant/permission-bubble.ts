@@ -100,13 +100,24 @@ export function renderPreviewCard(preview: EditPreview, canSnapshot: boolean): H
   return card;
 }
 
-export function mountPermissionBubble(root: HTMLElement): { destroy: () => void } {
+export function mountPermissionBubble(root: HTMLElement): {
+  destroy: () => void;
+  isOpen: () => boolean;
+  reject: () => void;
+} {
   root.classList.add("perm-bubble-root");
   let unlisten: UnlistenFn | null = null;
   let destroyed = false;
+  let currentReq: PermissionRequest | null = null;
+
+  function clearBubble() {
+    root.replaceChildren();
+    currentReq = null;
+  }
 
   function show(req: PermissionRequest) {
     root.replaceChildren();
+    currentReq = req;
     const card = renderPreviewCard(req.preview, req.can_snapshot);
     const allow = document.createElement("button");
     allow.textContent = "允许写入";
@@ -115,11 +126,11 @@ export function mountPermissionBubble(root: HTMLElement): { destroy: () => void 
     const select = card.querySelector<HTMLSelectElement>(".perm-mode")!;
     allow.addEventListener("click", () => {
       void invoke("resolve_permission", { requestId: req.request_id, decision: "allow", writeMode: select.value });
-      root.replaceChildren();
+      clearBubble();
     });
     deny.addEventListener("click", () => {
       void invoke("resolve_permission", { requestId: req.request_id, decision: "deny", writeMode: "direct" });
-      root.replaceChildren();
+      clearBubble();
     });
     root.append(card, allow, deny);
   }
@@ -134,6 +145,15 @@ export function mountPermissionBubble(root: HTMLElement): { destroy: () => void 
       unlisten?.();
       root.classList.remove("perm-bubble-root");
       root.replaceChildren();
+      currentReq = null;
+    },
+    isOpen() {
+      return root.childNodes.length > 0;
+    },
+    reject() {
+      if (!currentReq) return;
+      void invoke("resolve_permission", { requestId: currentReq.request_id, decision: "deny", writeMode: "direct" });
+      clearBubble();
     },
   };
 }

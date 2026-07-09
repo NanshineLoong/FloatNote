@@ -36,12 +36,26 @@ describe("viewTargetFor", () => {
 
 describe("resolveEsc 优先级链", () => {
   const base = {
+    permissionBubbleOpen: false,
     historyPopoverOpen: false,
     focusInAssistant: false,
     streaming: false,
     actionPanelOpen: false,
     bubbleOpen: false,
   };
+  it("0. 权限气泡最优先（高于历史浮层/行动面板/气泡/流式取消）", () => {
+    expect(
+      resolveEsc({
+        ...base,
+        permissionBubbleOpen: true,
+        historyPopoverOpen: true,
+        focusInAssistant: true,
+        streaming: true,
+        actionPanelOpen: true,
+        bubbleOpen: true,
+      }),
+    ).toBe("closePermissionBubble");
+  });
   it("1. 历史浮层最优先", () => {
     expect(
       resolveEsc({ ...base, historyPopoverOpen: true, actionPanelOpen: true, bubbleOpen: true }),

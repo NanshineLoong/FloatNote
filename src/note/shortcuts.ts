@@ -35,6 +35,7 @@ export function viewTargetFor(
 }
 
 export interface EscContext {
+  permissionBubbleOpen: boolean;
   historyPopoverOpen: boolean;
   focusInAssistant: boolean;
   streaming: boolean;
@@ -43,12 +44,14 @@ export interface EscContext {
 }
 
 export type EscAction =
+  | "closePermissionBubble"
   | "closeHistoryPopover"
   | "cancelAssistant"
   | "closeActionPanel"
   | "collapseBubble";
 
 export function resolveEsc(ctx: EscContext): EscAction | null {
+  if (ctx.permissionBubbleOpen) return "closePermissionBubble";
   if (ctx.historyPopoverOpen) return "closeHistoryPopover";
   if (ctx.focusInAssistant && ctx.streaming) return "cancelAssistant";
   if (ctx.actionPanelOpen) return "closeActionPanel";
@@ -71,6 +74,8 @@ export interface ShortcutActions {
   collapseAssistantBubble(): void;
   isHistoryPopoverOpen(): boolean;
   closeHistoryPopover(): void;
+  isPermissionBubbleOpen(): boolean;
+  closePermissionBubble(): void;
   canSplit(): boolean;
   bumpFont(delta: number): void; // +1 / -1 / 0 复位
 }
@@ -95,6 +100,7 @@ function runBound(id: WindowShortcutId, a: ShortcutActions): void {
 
 function runEsc(act: EscAction, a: ShortcutActions): void {
   switch (act) {
+    case "closePermissionBubble": a.closePermissionBubble(); break;
     case "closeHistoryPopover": a.closeHistoryPopover(); break;
     case "cancelAssistant": a.cancelAssistant(); break;
     case "closeActionPanel": a.closeActionPanel(); break;
@@ -106,6 +112,7 @@ export function installShortcuts(actions: ShortcutActions, bindings: Bindings): 
   const handler = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
       const act = resolveEsc({
+        permissionBubbleOpen: actions.isPermissionBubbleOpen(),
         historyPopoverOpen: actions.isHistoryPopoverOpen(),
         focusInAssistant: isFocusInAssistant(),
         streaming: actions.isAssistantStreaming(),
@@ -120,17 +127,17 @@ export function installShortcuts(actions: ShortcutActions, bindings: Bindings): 
     }
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
-    if (e.key === "=" || e.key === "+") {
+    if (mod && !e.shiftKey && !e.altKey && e.key === "=") {
       e.preventDefault();
       actions.bumpFont(1);
       return;
     }
-    if (e.key === "-") {
+    if (mod && !e.shiftKey && !e.altKey && e.key === "-") {
       e.preventDefault();
       actions.bumpFont(-1);
       return;
     }
-    if (e.key === "0") {
+    if (mod && !e.shiftKey && !e.altKey && e.key === "0") {
       e.preventDefault();
       actions.bumpFont(0);
       return;

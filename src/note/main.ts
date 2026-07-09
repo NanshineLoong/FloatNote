@@ -1537,6 +1537,8 @@ async function init() {
     collapseAssistantBubble: () => assistantHandle.setInputOpen(false),
     isHistoryPopoverOpen: () => assistantHandle.isHistoryPopoverOpen(),
     closeHistoryPopover: () => assistantHandle.closeHistoryPopover(),
+    isPermissionBubbleOpen: () => assistantHandle.isPermissionBubbleOpen(),
+    closePermissionBubble: () => assistantHandle.closePermissionBubble(),
     canSplit: () => canSplit(window.innerWidth),
     bumpFont,
   };
