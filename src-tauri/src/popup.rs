@@ -22,12 +22,7 @@ impl PopupCache {
         }
     }
 
-    pub fn set(
-        &self,
-        text: String,
-        html: Option<String>,
-        source: Option<crate::source::Source>,
-    ) {
+    pub fn set(&self, text: String, html: Option<String>, source: Option<crate::source::Source>) {
         *self.text.lock().unwrap() = Some(text);
         *self.html.lock().unwrap() = html;
         *self.source.lock().unwrap() = source;

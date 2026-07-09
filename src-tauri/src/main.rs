@@ -3,4 +3,3 @@
 fn main() {
     floatnote_lib::run()
 }
-

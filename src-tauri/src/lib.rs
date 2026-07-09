@@ -43,10 +43,7 @@ pub fn run() {
                     .body("forbidden".as_bytes().to_vec())
                     .unwrap();
             }
-            let ext = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("");
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
             match std::fs::read(&path) {
                 Ok(bytes) => tauri::http::Response::builder()
                     .header(

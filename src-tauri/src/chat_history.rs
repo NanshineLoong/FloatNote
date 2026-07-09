@@ -58,8 +58,9 @@ pub struct ChatHistoryStore {
 
 impl ChatHistoryStore {
     pub fn default_for_user() -> io::Result<Self> {
-        let home = user_home_dir()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "user home directory not found"))?;
+        let home = user_home_dir().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotFound, "user home directory not found")
+        })?;
         let floatnote = home.join(".floatnote");
         try_hide_on_windows(&floatnote);
         Ok(Self::new_at(floatnote.join("chat-history")))
@@ -138,7 +139,11 @@ impl ChatHistoryStore {
         Ok(entries)
     }
 
-    pub fn list_all(&self, cursor: usize, limit: usize) -> io::Result<Vec<ChatConversationIndexEntry>> {
+    pub fn list_all(
+        &self,
+        cursor: usize,
+        limit: usize,
+    ) -> io::Result<Vec<ChatConversationIndexEntry>> {
         let mut entries = self.load_index()?.conversations;
         sort_by_recent(&mut entries);
         Ok(entries.into_iter().skip(cursor).take(limit).collect())
@@ -363,10 +368,13 @@ mod tests {
         store.open(&first.id).unwrap();
 
         let recent = store.list_recent(2).unwrap();
-        assert_eq!(recent.iter().map(|entry| entry.id.as_str()).collect::<Vec<_>>(), [
-            first.id.as_str(),
-            second.id.as_str(),
-        ]);
+        assert_eq!(
+            recent
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            [first.id.as_str(), second.id.as_str(),]
+        );
     }
 
     #[test]

@@ -193,7 +193,10 @@ pub fn open_existing_project(dir: &Path) -> std::io::Result<ProjectEntry> {
 /// separate version handling is needed.
 pub fn rename_project(dir: &Path, new_name: &str) -> std::io::Result<String> {
     let parent = dir.parent().ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "project has no parent dir")
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "project has no parent dir",
+        )
     })?;
     let target = parent.join(sanitize_folder_name(new_name));
     if target.exists() && target != dir {
@@ -407,7 +410,10 @@ mod tests {
 
         open_existing_project(&dir).unwrap();
         // Second open does not clobber the existing inbox.
-        assert_eq!(std::fs::read_to_string(dir.join(INBOX_FILE)).unwrap(), "keep me");
+        assert_eq!(
+            std::fs::read_to_string(dir.join(INBOX_FILE)).unwrap(),
+            "keep me"
+        );
     }
 
     #[test]

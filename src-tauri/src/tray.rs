@@ -62,7 +62,13 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         } else {
             for entry in recent {
                 let label = format_chat_label(&entry.title, &entry.scope_label);
-                let item = MenuItem::with_id(app, format!("chat_open:{}", entry.id), label, true, None::<&str>)?;
+                let item = MenuItem::with_id(
+                    app,
+                    format!("chat_open:{}", entry.id),
+                    label,
+                    true,
+                    None::<&str>,
+                )?;
                 menu.append(&item)?;
             }
         }
@@ -102,7 +108,10 @@ mod tests {
 
     #[test]
     fn tray_chat_label_weakens_scope_with_parentheses() {
-        assert_eq!(format_chat_label("生成周报草稿", "FloatNote"), "生成周报草稿 (FloatNote)");
+        assert_eq!(
+            format_chat_label("生成周报草稿", "FloatNote"),
+            "生成周报草稿 (FloatNote)"
+        );
         assert_eq!(format_chat_label("生成周报草稿", ""), "生成周报草稿");
         assert!(!format_chat_label("生成周报草稿", "FloatNote").contains("·"));
     }

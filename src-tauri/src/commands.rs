@@ -1,5 +1,7 @@
 use crate::agent::{ActiveNote, AgentHandle, HostToSidecar, NoteUpdated, PendingEdit};
-use crate::chat_history::{ChatConversationIndexEntry, ChatHistoryStore, ChatScopeType, ChatTitleState};
+use crate::chat_history::{
+    ChatConversationIndexEntry, ChatHistoryStore, ChatScopeType, ChatTitleState,
+};
 use crate::watcher::{FileWatcher, SuppressList};
 use crate::{
     config::{Config, WindowShortcuts},
@@ -157,7 +159,8 @@ pub fn restore_version(
     let restored =
         versions::read_version(dir_path, &note_id, v).map_err(|error| error.to_string())?;
     crate::watcher::mark_self_write(&state.write_suppress, &path);
-    notes::write_atomic(std::path::Path::new(&path), &restored).map_err(|error| error.to_string())?;
+    notes::write_atomic(std::path::Path::new(&path), &restored)
+        .map_err(|error| error.to_string())?;
     Ok(restored)
 }
 
@@ -397,7 +400,12 @@ pub fn set_active_note(
     path: String,
     kind: String,
 ) {
-    *state.active_note.lock().unwrap() = Some(ActiveNote { dir, note_id, path, kind });
+    *state.active_note.lock().unwrap() = Some(ActiveNote {
+        dir,
+        note_id,
+        path,
+        kind,
+    });
 }
 
 /// 查询当前活动笔记（独立助手窗发消息前用来定位 dir / noteId / path）。
@@ -434,7 +442,9 @@ pub fn resolve_permission(
     write_mode: String,
 ) -> Result<(), String> {
     let pending = state.pending_edits.lock().unwrap().remove(&request_id);
-    let Some(p) = pending else { return Ok(()); };
+    let Some(p) = pending else {
+        return Ok(());
+    };
     if decision != "allow" {
         let _ = state.agent.lock().unwrap().as_mut().map(|a| {
             a.send(&HostToSidecar::ApplyEditResult {
@@ -667,9 +677,8 @@ pub fn save_pasted_image(
     mime: String,
 ) -> Result<SaveImageResult, String> {
     let dir = std::path::Path::new(&project_dir);
-    let (filename, rel_path) =
-        notes::save_pasted_image(dir, &suggested_stem, &data_base64, &mime)
-            .map_err(|e| e.to_string())?;
+    let (filename, rel_path) = notes::save_pasted_image(dir, &suggested_stem, &data_base64, &mime)
+        .map_err(|e| e.to_string())?;
     Ok(SaveImageResult { filename, rel_path })
 }
 

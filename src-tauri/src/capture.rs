@@ -139,11 +139,7 @@ pub fn read_selection() -> Option<CapturedContent> {
     // formatting when converting to Markdown. `get().html()` errors when no
     // HTML flavor is present (plain-text sources) — that's the common, benign
     // case, so we just drop to None.
-    let html = clipboard
-        .get()
-        .html()
-        .ok()
-        .filter(|h| !h.trim().is_empty());
+    let html = clipboard.get().html().ok().filter(|h| !h.trim().is_empty());
     log_line(&format!(
         "selection len = {} html = {}",
         text.len(),
@@ -164,7 +160,10 @@ pub fn read_selection() -> Option<CapturedContent> {
         log_line("empty selection, ignoring");
         None
     } else {
-        Some(CapturedContent { text: trimmed, html })
+        Some(CapturedContent {
+            text: trimmed,
+            html,
+        })
     }
 }
 

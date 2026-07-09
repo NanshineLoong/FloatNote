@@ -66,8 +66,7 @@ pub struct FileWatcher {
 impl FileWatcher {
     /// 创建一个空的 watcher，尚未监听任何目录。
     pub fn new(app: AppHandle, suppress: SuppressList) -> Result<Self, String> {
-        let last_emit: Arc<Mutex<HashMap<String, Instant>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let last_emit: Arc<Mutex<HashMap<String, Instant>>> = Arc::new(Mutex::new(HashMap::new()));
         let last_emit_for_cb = last_emit.clone();
 
         let watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {

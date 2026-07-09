@@ -13,7 +13,11 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
 /// Host → sidecar 消息。JSON 字段为 camelCase，与 Sprint 2 的 protocol.ts 对齐。
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum HostToSidecar {
     Configure {
         provider: String,
@@ -59,7 +63,11 @@ pub enum HostToSidecar {
 
 /// Sidecar → host 消息。
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum SidecarToHost {
     Ready,
     SessionOpened {
@@ -111,7 +119,11 @@ pub enum SidecarToHost {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-#[serde(tag = "role", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "role",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum ChatDisplayMessage {
     User { text: String, timestamp: u64 },
     Assistant { text: String, timestamp: u64 },
@@ -158,16 +170,28 @@ pub struct NoteTarget {
 /// `rename_all_fields = "camelCase"` 序列化为 `hunks`/`blockPreview`/
 /// `tagName`/`tagColor`/`markerCount`。
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum EditPreviewDetail {
-    Diff { hunks: String },
+    Diff {
+        hunks: String,
+    },
     TagAssign {
         block_preview: String,
         tag_name: String,
         tag_color: String,
     },
-    TagCreate { tag_name: String, tag_color: String },
-    TagDelete { tag_name: String, marker_count: u32 },
+    TagCreate {
+        tag_name: String,
+        tag_color: String,
+    },
+    TagDelete {
+        tag_name: String,
+        marker_count: u32,
+    },
 }
 
 /// apply_edit 携带的编辑预览：工具名 + 摘要 + 详情。
@@ -415,7 +439,9 @@ fn handle_apply_edit(
     new_content: String,
     preview: EditPreview,
 ) {
-    let Some(state) = app.try_state::<AppState>() else { return; };
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
     let resolved = resolve_target(&state, target.as_ref());
     match resolved {
         Some((dir, note_id, path, kind)) => {
@@ -437,11 +463,9 @@ fn handle_apply_edit(
                 payload["target"] = serde_json::to_value(t).unwrap_or(serde_json::Value::Null);
             }
             let _ = app.emit("permission://request", &payload);
-            state
-                .pending_edits
-                .lock()
-                .unwrap()
-                .insert(request_id, PendingEdit {
+            state.pending_edits.lock().unwrap().insert(
+                request_id,
+                PendingEdit {
                     call_id,
                     conversation_id,
                     old_content,
@@ -451,7 +475,8 @@ fn handle_apply_edit(
                     note_id,
                     path: path.to_string_lossy().to_string(),
                     can_snapshot,
-                });
+                },
+            );
         }
         None => {
             // 无法定位目标笔记：无 pending 可待裁决，直接回 deny 解除 sidecar 等待。
@@ -479,7 +504,9 @@ fn handle_get_note_text(
     _conversation_id: String,
     target: Option<NoteTarget>,
 ) {
-    let Some(state) = app.try_state::<AppState>() else { return; };
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
     let (content, found) = match resolve_target(&state, target.as_ref()) {
         Some((_, _, path, _)) => match std::fs::read_to_string(&path) {
             Ok(c) => (c, true),
@@ -487,12 +514,13 @@ fn handle_get_note_text(
         },
         None => (String::new(), false),
     };
-    let _ = state
-        .agent
-        .lock()
-        .unwrap()
-        .as_mut()
-        .map(|a| a.send(&HostToSidecar::NoteText { call_id, content, found }));
+    let _ = state.agent.lock().unwrap().as_mut().map(|a| {
+        a.send(&HostToSidecar::NoteText {
+            call_id,
+            content,
+            found,
+        })
+    });
 }
 
 /// sidecar 退出/崩溃：标记不可用、清空句柄、发错误事件，绝不 panic。
@@ -539,7 +567,11 @@ fn resolve_target(
     let active = state.active_note.lock().unwrap().clone()?;
     let dir = PathBuf::from(&active.dir);
     let (note_id, path, kind) = match target {
-        None => (active.note_id.clone(), PathBuf::from(&active.path), active.kind.clone()),
+        None => (
+            active.note_id.clone(),
+            PathBuf::from(&active.path),
+            active.kind.clone(),
+        ),
         Some(t) => {
             let kind = t.kind.clone();
             let (note_id, path) = match t.kind.as_str() {
@@ -627,7 +659,8 @@ mod tests {
             conversation_id: "c1".into(),
             user_text: "你好".into(),
         };
-        let value: serde_json::Value = serde_json::from_str(&serde_json::to_string(&msg).unwrap()).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&msg).unwrap()).unwrap();
         assert_eq!(value["type"], "prompt");
         assert_eq!(value["requestId"], "r1");
         assert_eq!(value["conversationId"], "c1");
@@ -640,7 +673,8 @@ mod tests {
             conversation_id: "c1".into(),
             session_file: "/tmp/c1.jsonl".into(),
         };
-        let value: serde_json::Value = serde_json::from_str(&serde_json::to_string(&open).unwrap()).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&open).unwrap()).unwrap();
         assert_eq!(value["type"], "open_session");
         assert_eq!(value["conversationId"], "c1");
         assert_eq!(value["sessionFile"], "/tmp/c1.jsonl");
@@ -666,8 +700,14 @@ mod tests {
             base_url: None,
         };
         let json = serde_json::to_string(&msg).unwrap();
-        assert!(!json.contains("apiKey"), "absent api key should be skipped: {json}");
-        assert!(!json.contains("baseUrl"), "absent base url should be skipped: {json}");
+        assert!(
+            !json.contains("apiKey"),
+            "absent api key should be skipped: {json}"
+        );
+        assert!(
+            !json.contains("baseUrl"),
+            "absent base url should be skipped: {json}"
+        );
     }
 
     #[test]
@@ -703,7 +743,11 @@ mod tests {
         let line = r##"{"type":"apply_edit","callId":"w1","conversationId":"c1","target":{"kind":"inbox"},"toolName":"set_tag","oldContent":"a","newContent":"b","preview":{"tool":"set_tag","summary":"s","detail":{"kind":"tag_assign","blockPreview":"块","tagName":"review","tagColor":"#e5484d"}}}"##;
         let msg: SidecarToHost = serde_json::from_str(line).unwrap();
         match msg {
-            SidecarToHost::ApplyEdit { ref tool_name, ref target, .. } => {
+            SidecarToHost::ApplyEdit {
+                ref tool_name,
+                ref target,
+                ..
+            } => {
                 assert_eq!(tool_name, "set_tag");
                 let t = target.as_ref().expect("target present");
                 assert_eq!(t.kind, "inbox");
@@ -742,7 +786,10 @@ mod tests {
             },
         };
         let json = serde_json::to_string(&msg).unwrap();
-        assert!(!json.contains("\"target\""), "absent target should be skipped: {json}");
+        assert!(
+            !json.contains("\"target\""),
+            "absent target should be skipped: {json}"
+        );
         // 反序列化回来仍是 None。
         let back: SidecarToHost = serde_json::from_str(&json).unwrap();
         assert_eq!(back, msg);
@@ -768,7 +815,12 @@ mod tests {
         let line = r#"{"type":"note_text","callId":"g1","content":"doc","found":true}"#;
         let msg: HostToSidecar = serde_json::from_str(line).unwrap();
         match msg {
-            HostToSidecar::NoteText { call_id, found, content, .. } => {
+            HostToSidecar::NoteText {
+                call_id,
+                found,
+                content,
+                ..
+            } => {
                 assert_eq!(call_id, "g1");
                 assert!(found);
                 assert_eq!(content, "doc");
@@ -785,11 +837,15 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&diff).unwrap()).unwrap();
         assert_eq!(v["kind"], "diff");
         assert_eq!(v["hunks"], "@@");
-        let back: EditPreviewDetail = serde_json::from_str(&serde_json::to_string(&diff).unwrap()).unwrap();
+        let back: EditPreviewDetail =
+            serde_json::from_str(&serde_json::to_string(&diff).unwrap()).unwrap();
         assert_eq!(back, diff);
 
         // tag_create
-        let tc = EditPreviewDetail::TagCreate { tag_name: "review".into(), tag_color: "#e5484d".into() };
+        let tc = EditPreviewDetail::TagCreate {
+            tag_name: "review".into(),
+            tag_color: "#e5484d".into(),
+        };
         let v: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&tc).unwrap()).unwrap();
         assert_eq!(v["kind"], "tag_create");
@@ -797,7 +853,10 @@ mod tests {
         assert_eq!(v["tagColor"], "#e5484d");
 
         // tag_delete
-        let td = EditPreviewDetail::TagDelete { tag_name: "review".into(), marker_count: 3 };
+        let td = EditPreviewDetail::TagDelete {
+            tag_name: "review".into(),
+            marker_count: 3,
+        };
         let v: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&td).unwrap()).unwrap();
         assert_eq!(v["kind"], "tag_delete");
@@ -810,13 +869,19 @@ mod tests {
         let req = SidecarToHost::GetNoteText {
             call_id: "g1".into(),
             conversation_id: "c1".into(),
-            target: Some(NoteTarget { kind: "piece".into(), name: Some("piece.md".into()) }),
+            target: Some(NoteTarget {
+                kind: "piece".into(),
+                name: Some("piece.md".into()),
+            }),
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"type\":\"get_note_text\""), "{json}");
         assert!(json.contains("\"callId\":\"g1\""), "{json}");
         assert!(json.contains("\"conversationId\":\"c1\""), "{json}");
-        assert!(json.contains("\"target\":{\"kind\":\"piece\",\"name\":\"piece.md\"}"), "{json}");
+        assert!(
+            json.contains("\"target\":{\"kind\":\"piece\",\"name\":\"piece.md\"}"),
+            "{json}"
+        );
         let back: SidecarToHost = serde_json::from_str(&json).unwrap();
         assert_eq!(back, req);
 
@@ -827,7 +892,10 @@ mod tests {
             target: None,
         };
         let json2 = serde_json::to_string(&req_no_target).unwrap();
-        assert!(!json2.contains("\"target\""), "absent target should be skipped: {json2}");
+        assert!(
+            !json2.contains("\"target\""),
+            "absent target should be skipped: {json2}"
+        );
         let back2: SidecarToHost = serde_json::from_str(&json2).unwrap();
         assert_eq!(back2, req_no_target);
     }
@@ -894,8 +962,14 @@ mod tests {
             path: "/tmp/proj/piece.md".into(),
             kind: "piece".into(),
         }));
-        let (_, note_id, _, kind) =
-            resolve_target(&state, Some(&NoteTarget { kind: "inbox".into(), name: None })).unwrap();
+        let (_, note_id, _, kind) = resolve_target(
+            &state,
+            Some(&NoteTarget {
+                kind: "inbox".into(),
+                name: None,
+            }),
+        )
+        .unwrap();
         assert_eq!(note_id, "_inbox");
         assert_eq!(kind, "inbox");
     }
@@ -920,7 +994,10 @@ mod tests {
         let res = handle_apply_edit_at(dir.path(), "piece", &path, "old", "new", "snapshot", true);
         assert!(res.ok);
         assert_eq!(res.version, Some(1));
-        assert_eq!(versions::read_version(dir.path(), "piece", 1).unwrap(), "old");
+        assert_eq!(
+            versions::read_version(dir.path(), "piece", 1).unwrap(),
+            "old"
+        );
     }
 
     #[test]
@@ -928,7 +1005,8 @@ mod tests {
         let dir = tempdir();
         let path = dir.path().join("_inbox.md");
         std::fs::write(&path, "old").unwrap();
-        let res = handle_apply_edit_at(dir.path(), "_inbox", &path, "old", "new", "snapshot", false);
+        let res =
+            handle_apply_edit_at(dir.path(), "_inbox", &path, "old", "new", "snapshot", false);
         assert!(res.ok);
         assert_eq!(res.version, None); // _ 前缀不快照
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
