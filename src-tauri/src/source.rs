@@ -210,6 +210,17 @@ fn frontmost_app() -> Option<(Option<String>, Option<String>)> {
     Some((name.map(|s| s.to_string()), bid.map(|s| s.to_string())))
 }
 
+/// pid_t of NSWorkspace.shared.frontmostApplication for AX menu-copy targeting.
+#[cfg(target_os = "macos")]
+pub fn frontmost_pid() -> Option<i32> {
+    use objc2_app_kit::NSWorkspace;
+    unsafe {
+        let workspace = NSWorkspace::sharedWorkspace();
+        let app = workspace.frontmostApplication()?;
+        Some(app.processIdentifier())
+    }
+}
+
 /// Build a per-family osascript that returns `URL\nTitle` of the active tab,
 /// or None if the bundle is not a supported browser. Uses `tell application id`
 /// so localization of the app name cannot break the script.

@@ -106,6 +106,12 @@ pub fn dismiss_popup(state: State<AppState>, app: AppHandle) -> Result<(), Strin
 /// Global shortcut entry: eagerly capture the selection while the source app
 /// is still focused, cache it, then tell the popup window to show at the cursor.
 pub fn run_popup_capture(app: &AppHandle) {
+    run_popup_capture_with(app, false);
+}
+
+/// Automatic-popup entry. `via_menu=true` first tries AX menu copy, which keeps
+/// Option-held selection capture from being interpreted as Option+Cmd+C.
+pub fn run_popup_capture_with(app: &AppHandle, via_menu: bool) {
     // Share capture.rs's guard so a popup capture and a direct capture can't
     // race the single shared system clipboard.
     let Some(_guard) = crate::capture::CaptureGuard::try_enter() else {
@@ -116,7 +122,11 @@ pub fn run_popup_capture(app: &AppHandle) {
         return;
     }
 
-    let captured = crate::capture::read_selection(); // Option<CapturedContent>
+    let captured = if via_menu {
+        crate::capture::read_selection_via_menu().or_else(crate::capture::read_selection)
+    } else {
+        crate::capture::read_selection()
+    };
     let has_text = captured.is_some();
     if let Some(ref c) = captured {
         // Source app is still frontmost here (popup window is shown only below).

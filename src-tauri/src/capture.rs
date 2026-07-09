@@ -108,13 +108,12 @@ pub struct CapturedContent {
     pub html: Option<String>,
 }
 
-/// Backup clipboard, simulate Cmd+C, read the new clipboard content, restore.
-/// Returns the trimmed selection text plus any HTML flavor the source wrote,
-/// or None if the selection was empty or capture failed. Restoring the
-/// clipboard is text-only today (a pre-existing limitation: an HTML flavor
-/// originally on the clipboard is replaced by its plain-text backup). Restoring
-/// HTML too is tracked as a follow-up.
-pub fn read_selection() -> Option<CapturedContent> {
+/// Backup clipboard, run `copy`, read the new clipboard content, restore.
+/// `copy` is the variable step: keyboard Cmd+C (`simulate_copy`) or AX menu copy
+/// (`ax_copy::copy_via_menu`) for Option-held automatic popup capture.
+fn read_selection_with(
+    copy: impl FnOnce() -> Result<(), Box<dyn std::error::Error>>,
+) -> Option<CapturedContent> {
     let mut clipboard = match arboard::Clipboard::new() {
         Ok(c) => c,
         Err(error) => {
@@ -125,8 +124,8 @@ pub fn read_selection() -> Option<CapturedContent> {
     let backup = clipboard.get_text().ok();
     let _ = clipboard.set_text(String::new());
 
-    if let Err(error) = simulate_copy() {
-        log_line(&format!("simulate_copy error: {error}"));
+    if let Err(error) = copy() {
+        log_line(&format!("copy error: {error}"));
         if let Some(text) = backup {
             let _ = clipboard.set_text(text);
         }
@@ -165,6 +164,22 @@ pub fn read_selection() -> Option<CapturedContent> {
             html,
         })
     }
+}
+
+/// Keyboard Cmd+C path: source app is still frontmost and the selection is live.
+pub fn read_selection() -> Option<CapturedContent> {
+    read_selection_with(simulate_copy)
+}
+
+/// AX menu-triggered copy path: avoids physical Option polluting Cmd+C.
+#[cfg(target_os = "macos")]
+pub fn read_selection_via_menu() -> Option<CapturedContent> {
+    read_selection_with(|| crate::ax_copy::copy_via_menu().map_err(|e| e.into()))
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn read_selection_via_menu() -> Option<CapturedContent> {
+    None
 }
 
 #[cfg(target_os = "macos")]

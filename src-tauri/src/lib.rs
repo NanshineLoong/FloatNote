@@ -1,4 +1,5 @@
 mod agent;
+mod ax_copy;
 mod capture;
 mod chat_history;
 mod commands;
@@ -7,6 +8,7 @@ mod cursor;
 mod notes;
 mod popup;
 mod project;
+mod selection_monitor;
 mod shortcuts;
 mod source;
 mod tray;
@@ -137,6 +139,9 @@ pub fn run() {
                 ) {
                     eprintln!("shortcut registration failed: {error}");
                 }
+                if config.auto_popup_mode != "off" {
+                    selection_monitor::install(app.handle().clone());
+                }
             }
 
             Ok(())
@@ -187,6 +192,7 @@ pub fn run() {
             commands::toggle_assistant,
             commands::get_agent_status,
             commands::apply_shortcuts,
+            commands::set_auto_popup_mode,
             commands::get_window_shortcuts,
             commands::open_url,
             source::app_icon,

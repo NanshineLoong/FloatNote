@@ -55,6 +55,8 @@ export interface Config {
   working_dir: string | null;
   shortcut_capture: string;
   shortcut_toggle: string;
+  shortcut_popup: string;
+  auto_popup_mode: string;
   piece_outline_default: boolean;
   font_size: number;
   launch_at_login: boolean;

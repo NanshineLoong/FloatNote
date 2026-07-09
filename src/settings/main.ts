@@ -14,6 +14,7 @@ interface Config {
   shortcut_capture: string;
   shortcut_toggle: string;
   shortcut_popup: string;
+  auto_popup_mode: string;
   piece_outline_default: boolean;
   font_size: number;
   launch_at_login: boolean;
@@ -104,6 +105,15 @@ async function render() {
             <span class="key-recorder-label">${escapeHtml(config.shortcut_popup)}</span>
           </div>
         </div>
+
+        <div class="settings-row">
+          <label class="settings-label">划词悬浮窗自动触发</label>
+          <select id="auto-popup-mode" class="settings-select">
+            <option value="off" ${(config.auto_popup_mode ?? "off") === "off" ? "selected" : ""}>关闭</option>
+            <option value="every" ${config.auto_popup_mode === "every" ? "selected" : ""}>每次选中弹出</option>
+            <option value="modifier" ${config.auto_popup_mode === "modifier" ? "selected" : ""}>按住 ⌥ 选中时弹出</option>
+          </select>
+        </div>
       </section>
 
       <!-- ── 窗口快捷键 ── -->
@@ -189,6 +199,7 @@ async function render() {
     config.shortcut_popup,
     recomputeConflicts,
   );
+  const autoPopupSelect = document.querySelector<HTMLSelectElement>("#auto-popup-mode")!;
 
   // ── 窗口快捷键录制器 ──
   const windowRecorders: Partial<Record<WindowShortcutId, KeyRecorder>> = {};
@@ -254,6 +265,7 @@ async function render() {
     const capture = captureRecorder.value;
     const toggle = toggleRecorder.value;
     const popup = popupRecorder.value;
+    const autoPopupMode = autoPopupSelect.value;
     const windowShortcuts = {} as Record<WindowShortcutId, string>;
     for (const id of WINDOW_SHORTCUT_IDS) {
       windowShortcuts[id] = windowRecorders[id]!.value;
@@ -274,6 +286,7 @@ async function render() {
       shortcut_capture: capture,
       shortcut_toggle: toggle,
       shortcut_popup: popup,
+      auto_popup_mode: autoPopupMode,
       piece_outline_default: document.querySelector<HTMLInputElement>("#piece-outline-default")!.checked,
       launch_at_login: document.querySelector<HTMLInputElement>("#autostart")!.checked,
       ai_provider: providerSelect.value,
@@ -293,7 +306,17 @@ async function render() {
     // 3. 持久化
     await invoke("set_config", { newConfig });
 
-    // 4. 同步自启动
+    // 4. 即时切换划词悬浮窗监听（无需重启）
+    let autoPopupError = "";
+    if ((config.auto_popup_mode ?? "off") !== autoPopupMode) {
+      try {
+        await invoke("set_auto_popup_mode", { mode: autoPopupMode });
+      } catch (error) {
+        autoPopupError = String(error);
+      }
+    }
+
+    // 5. 同步自启动
     const launchAtLogin = newConfig.launch_at_login;
     if (launchAtLogin) {
       if (!(await isEnabled())) await enable();
@@ -301,7 +324,7 @@ async function render() {
       await disable();
     }
 
-    // 5. 立即配置 sidecar（如已配置 AI）
+    // 6. 立即配置 sidecar（如已配置 AI）
     let sidecarOk = true;
     let sidecarError = "";
     if (newConfig.ai_provider && newConfig.ai_model) {
@@ -318,7 +341,10 @@ async function render() {
       }
     }
 
-    if (sidecarOk) {
+    if (autoPopupError) {
+      statusEl.textContent = `已保存，但悬浮窗监听未生效：${autoPopupError}`;
+      statusEl.classList.add("error");
+    } else if (sidecarOk) {
       statusEl.textContent = "已保存";
       statusEl.classList.add("success");
     } else {

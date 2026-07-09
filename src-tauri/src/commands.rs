@@ -559,6 +559,28 @@ pub fn apply_shortcuts(
 }
 
 #[tauri::command]
+pub fn set_auto_popup_mode(
+    mode: String,
+    state: State<AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    if mode != "off" && mode != "every" && mode != "modifier" {
+        return Err(format!("无效的 auto_popup_mode: {mode}"));
+    }
+    {
+        let mut config = state.config.lock().unwrap();
+        config.auto_popup_mode = mode.clone();
+        crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
+    }
+    if mode == "off" {
+        crate::selection_monitor::uninstall();
+    } else {
+        crate::selection_monitor::install(app);
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn list_projects(root: String) -> Result<Vec<project::ProjectEntry>, String> {
     project::list_projects(std::path::Path::new(&root)).map_err(|error| error.to_string())
 }

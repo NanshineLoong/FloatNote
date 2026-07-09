@@ -37,6 +37,8 @@ pub struct Config {
     pub shortcut_toggle: String,
     /// 划词悬浮窗快捷键（弹窗式抓取），默认 ⌥⌘P。与 shortcut_capture（直接抓取）独立。
     pub shortcut_popup: String,
+    /// 划词悬浮窗自动触发模式："off"（关闭）/ "every"（每次选中即弹）/ "modifier"（按住 ⌥ 选中时弹）。
+    pub auto_popup_mode: String,
     /// 笔记窗内快捷键（窗口聚焦时生效，纯前端分派）。默认值见 WindowShortcuts::default。
     pub window_shortcuts: WindowShortcuts,
     /// 写作区默认是否以大纲模式打开。窗口内手动切换只影响当前会话。
@@ -69,6 +71,7 @@ impl Default for Config {
             shortcut_capture: "Alt+Cmd+C".to_string(),
             shortcut_toggle: "Alt+Cmd+N".to_string(),
             shortcut_popup: "Alt+Cmd+P".to_string(),
+            auto_popup_mode: "off".to_string(),
             window_shortcuts: WindowShortcuts::default(),
             piece_outline_default: false,
             font_size: 15,
@@ -133,6 +136,12 @@ mod tests {
     fn partial_json_keeps_popup_default() {
         let config: Config = serde_json::from_str(r#"{"font_size":20}"#).unwrap();
         assert_eq!(config.shortcut_popup, "Alt+Cmd+P");
+    }
+
+    #[test]
+    fn auto_popup_mode_defaults_off() {
+        let config = Config::default();
+        assert_eq!(config.auto_popup_mode, "off");
     }
 
     #[test]
