@@ -20,6 +20,7 @@ export function imageDropHandler(
     const view = getView();
     const dir = getNoteDir();
     if (!view || !dir) return;
+    if (!view.hasFocus) return; // only the focused editor handles a window-global drop
     const paths = (event.payload.paths ?? []).filter((p) => IMAGE_EXT_RE.test(p));
     if (!paths.length) return;
     // Capture selection synchronously at drop-fire time, before the async
