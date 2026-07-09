@@ -191,8 +191,9 @@ class CodeBlockWidget extends WidgetType {
     const codeEl = document.createElement("code");
     codeEl.className = "hljs";
     try {
-      const html = this.lang && hljs.getLanguage(this.lang)
-        ? hljs.highlight(this.code, { language: this.lang }).value
+      const lang = this.lang.toLowerCase();
+      const html = lang && hljs.getLanguage(lang)
+        ? hljs.highlight(this.code, { language: lang }).value
         : hljs.highlightAuto(this.code).value;
       codeEl.innerHTML = html;
     } catch {
@@ -583,7 +584,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             if (cursorLines.has(l)) return false;
           }
           const firstLine = doc.line(fromLine).text;
-          const lang = (/^[ \t]*```[ \t]*(\S*)/.exec(firstLine)?.[1] ?? "").toLowerCase();
+          const lang = (/^[ \t]*```[ \t]*(\S*)/.exec(firstLine)?.[1] ?? "");
           // Body = lines strictly between the fences (drop first & last line).
           // Guard the 2-line block (open fence + close fence, no content):
           // fromLine+1 would point at the close fence; body should be empty.

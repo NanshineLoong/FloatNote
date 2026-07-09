@@ -19,6 +19,15 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** Allowlist URL schemes/relative forms for href attributes. Returns "" for
+ *  anything that could execute script (javascript:, data:, vbscript:, …). */
+function safeHref(url: string): string {
+  const u = url.trim();
+  if (u === "") return "";
+  if (/^(https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(u)) return u;
+  return "";
+}
+
 // Walk a node's children in order, interleaving the (escaped) text that lives
 // in the gaps between named child nodes. Lezer's markdown tree represents
 // inline prose as uncovered spans between syntax nodes — e.g. in
@@ -62,7 +71,10 @@ function renderNode(node: SyntaxNode, text: string): string {
     case "Link": {
       const raw = text.slice(node.from, node.to);
       const m = /^\[([\s\S]*)\]\(([\s\S]*)\)$/.exec(raw);
-      if (m) return `<a href="${escapeHtml(m[2].trim())}">${renderInline(m[1])}</a>`;
+      if (m) {
+        const href = escapeHtml(safeHref(m[2]));
+        return `<a href="${href}">${renderInline(m[1])}</a>`;
+      }
       return escapeHtml(raw);
     }
     case "Escape": {
