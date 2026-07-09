@@ -67,7 +67,7 @@
 .chat-messages {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 }
 
 /* 消息节点：user 是单气泡；assistant 是块容器（块各自带样式）。 */
@@ -81,7 +81,10 @@
 }
 
 .chat-msg.chat-user {
+  position: relative;
   align-self: flex-end;
+  width: fit-content;
+  max-width: 72%;
   padding: 9px 12px;
   background: #e8f0fe;
   color: #1b3a6b;
@@ -104,7 +107,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: 12px;
   width: 100%;
 }
 
@@ -116,6 +119,8 @@
 /* AI 文本气泡：暖色 cream、左下小尖角。 */
 .chat-block-text {
   position: relative;
+  width: fit-content;
+  max-width: 100%;
   padding: 9px 12px;
   background: #f3f1ec;
   border-radius: 14px 14px 14px 4px;
@@ -233,32 +238,41 @@ pre.chat-codeblock code {
   word-break: break-word;
 }
 
-/* 复制按钮：hover 时浮在文本气泡下方。 */
+/* 复制按钮：hover 时浮在文本气泡下方。图标按钮（无背景）。 */
 .chat-copy-btn {
   position: absolute;
   left: 2px;
   bottom: -22px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 22px;
   height: 20px;
-  padding: 0 8px;
+  padding: 0;
   border: none;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.06);
-  color: rgba(32, 33, 36, 0.62);
-  font-size: 11px;
+  background: transparent;
+  color: rgba(32, 33, 36, 0.55);
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s ease, background 0.15s ease;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.chat-copy-btn.is-right {
+  left: auto;
+  right: 2px;
+}
+.chat-copy-btn .ph {
+  font-size: 14px;
 }
 .chat-copy-btn.is-copied {
   color: #059669;
-  background: rgba(5, 150, 105, 0.12);
 }
 @media (hover: hover) {
-  .chat-block-text:hover .chat-copy-btn {
+  .chat-block-text:hover .chat-copy-btn,
+  .chat-msg.chat-user:hover .chat-copy-btn {
     opacity: 1;
     pointer-events: auto;
   }
@@ -270,30 +284,26 @@ pre.chat-codeblock code {
   }
 }
 
-/* thinking 块：默认折叠为 chip，展开为 muted 文本。 */
+/* thinking 块：默认折叠为纯文字行，展开为 muted 文本。 */
 .chat-block-thinking {
   width: 100%;
 }
 .chat-thinking-head {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 10px 3px 8px;
+  gap: 4px;
+  padding: 2px 0;
   border: none;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.05);
-  color: rgba(32, 33, 36, 0.6);
-  font-size: 12px;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: rgba(32, 33, 36, 0.5);
+  font-size: 12.5px;
   line-height: 1.4;
   cursor: pointer;
 }
 .chat-thinking-head:hover {
-  background: rgba(0, 0, 0, 0.08);
-}
-.chat-thinking-icon::before {
-  content: "✦";
-  font-size: 13px;
-  color: rgba(37, 99, 235, 0.6);
+  color: rgba(32, 33, 36, 0.72);
 }
 .chat-thinking-head::after {
   content: "";
@@ -323,13 +333,6 @@ pre.chat-codeblock code {
 .chat-block-thinking:not(.chat-thinking-collapsed) .chat-thinking-body {
   display: block;
 }
-.chat-block-thinking:not(.chat-thinking-done) .chat-thinking-icon {
-  animation: thinking-pulse 1.4s ease-in-out infinite;
-}
-@keyframes thinking-pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
-}
 
 /* 动作卡：流内只读白板卡。 */
 .chat-block-action {
@@ -358,6 +361,47 @@ pre.chat-codeblock code {
 .chat-action-icon {
   display: inline-flex;
   color: rgba(32, 33, 36, 0.55);
+}
+/* 只读工具：紧凑行，无卡片背景/边框/阴影，仅图标+标题(+活跃 spinner)。 */
+.chat-action.chat-action-readonly {
+  width: auto;
+  max-width: 100%;
+  padding: 2px 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font-size: 12.5px;
+}
+.chat-action.chat-action-readonly .chat-action-header {
+  gap: 5px;
+  font-weight: 400;
+  color: rgba(32, 33, 36, 0.55);
+}
+.chat-action.chat-action-readonly .chat-action-title {
+  font-weight: 400;
+}
+.chat-action.chat-action-done .chat-action-title {
+  color: rgba(32, 33, 36, 0.5);
+}
+/* 活跃 spinner：细旋转圆环，仅 pending 时显示（无 ✓ 完成符号）。 */
+.chat-action-spinner {
+  display: none;
+  width: 10px;
+  height: 10px;
+  margin-left: 2px;
+  border: 1.5px solid rgba(32, 33, 36, 0.25);
+  border-top-color: rgba(32, 33, 36, 0.6);
+  border-radius: 50%;
+  animation: chat-action-spin 0.7s linear infinite;
+}
+.chat-action-spinner.is-active {
+  display: inline-block;
+}
+@keyframes chat-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .chat-action-summary {
   margin-top: 2px;
@@ -983,20 +1027,18 @@ pre.chat-codeblock code {
   }
 
   .chat-copy-btn {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(229, 229, 229, 0.62);
+    background: transparent;
+    color: rgba(229, 229, 229, 0.55);
   }
   .chat-copy-btn.is-copied {
     color: #34d399;
-    background: rgba(5, 150, 105, 0.18);
   }
 
   .chat-thinking-head {
-    background: rgba(255, 255, 255, 0.07);
-    color: rgba(229, 229, 229, 0.62);
+    color: rgba(229, 229, 229, 0.5);
   }
   .chat-thinking-head:hover {
-    background: rgba(255, 255, 255, 0.12);
+    color: rgba(229, 229, 229, 0.72);
   }
   .chat-thinking-body {
     border-left-color: rgba(255, 255, 255, 0.16);
@@ -1034,6 +1076,17 @@ pre.chat-codeblock code {
   }
   .chat-action-deny:hover {
     background: rgba(255, 255, 255, 0.14);
+  }
+  .chat-action.chat-action-readonly .chat-action-header,
+  .chat-action.chat-action-readonly .chat-action-title {
+    color: rgba(229, 229, 229, 0.5);
+  }
+  .chat-action.chat-action-done .chat-action-title {
+    color: rgba(229, 229, 229, 0.42);
+  }
+  .chat-action-spinner {
+    border-color: rgba(229, 229, 229, 0.22);
+    border-top-color: rgba(229, 229, 229, 0.62);
   }
 
   .chat-diff-newonly {

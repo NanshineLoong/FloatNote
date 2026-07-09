@@ -127,6 +127,8 @@ function updateBlockNode(node: HTMLElement, block: Block, streaming: boolean): v
       if (body) body.textContent = block.text;
       const head = node.querySelector<HTMLElement>(".chat-thinking-head");
       if (head) head.setAttribute("aria-expanded", String(!block.collapsed));
+      const label = node.querySelector<HTMLElement>(".chat-thinking-label");
+      if (label) label.textContent = block.done ? "思考" : "思考中…";
       break;
     }
     case "action":

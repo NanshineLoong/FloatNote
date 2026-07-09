@@ -18,15 +18,38 @@ function titleFor(tool: string): string {
   return TOOL_LABEL[tool] ?? tool;
 }
 
+/** 写入/标签工具：产出可交互 action 卡（detail 由 permission://request 填充）。
+ *  其余工具（read_note/list_tags/read_skill…）为只读，渲染为紧凑行。 */
+const INTERACTIVE_TOOLS = new Set([
+  "edit_note",
+  "write_note",
+  "set_tag",
+  "tag_create",
+  "tag_delete",
+]);
+function isReadonly(tool: string): boolean {
+  return !INTERACTIVE_TOOLS.has(tool);
+}
+
 /** SVG 图标（线性、stroke 1.5、与项目调性一致；aria-hidden）。 */
 function toolIcon(tool: string): string {
-  // 统一用一支笔的图标代表"编辑/写入/标签"类动作，简洁不分散。
-  const path =
-    tool.startsWith("tag") ? tagPath() : editPath();
+  const path = tool.startsWith("tag")
+    ? tagPath()
+    : tool === "read_note" || tool === "read_skill"
+      ? readPath()
+      : tool === "list_tags"
+        ? listPath()
+        : editPath();
   return `<span class="chat-action-icon" aria-hidden="true">${path}</span>`;
 }
 function editPath(): string {
   return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+}
+function readPath(): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v15a1 1 0 0 0-1-1H4a2 2 0 0 1-2-2Z"/><path d="M22 5a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v15a1 1 0 0 1 1-1h6a2 2 0 0 0 2-2Z"/></svg>`;
+}
+function listPath(): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>`;
 }
 function tagPath(): string {
   return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L3 13V3h10l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>`;
@@ -42,6 +65,17 @@ export function buildActionCard(block: Extract<Block, { kind: "action" }>): HTML
   header.className = "chat-action-header";
   header.innerHTML = `${toolIcon(block.tool)}<span class="chat-action-title">${escapeText(titleFor(block.tool))}</span>`;
   el.appendChild(header);
+
+  if (isReadonly(block.tool)) {
+    // 只读工具：紧凑行（图标 + 标题 + 活跃 spinner），无 summary/body/footer。
+    el.classList.add("chat-action-readonly");
+    const spinner = document.createElement("span");
+    spinner.className = "chat-action-spinner";
+    spinner.setAttribute("aria-hidden", "true");
+    header.appendChild(spinner);
+    updateActionCard(el, block);
+    return el;
+  }
 
   const summary = document.createElement("div");
   summary.className = "chat-action-summary";
@@ -105,6 +139,13 @@ export function updateActionCard(el: HTMLElement, block: Extract<Block, { kind: 
 
   const titleEl = el.querySelector<HTMLElement>(".chat-action-title");
   if (titleEl) titleEl.textContent = titleFor(block.tool);
+
+  // 只读紧凑行：只切 done + spinner 可见性（无 summary/body/footer，无 ✓ 对勾）。
+  if (el.classList.contains("chat-action-readonly")) {
+    const spinner = el.querySelector<HTMLElement>(".chat-action-spinner");
+    if (spinner) spinner.classList.toggle("is-active", block.status === "pending");
+    return;
+  }
 
   const summaryEl = el.querySelector<HTMLElement>(".chat-action-summary");
   if (summaryEl) {

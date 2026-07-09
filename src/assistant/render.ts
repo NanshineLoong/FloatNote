@@ -1,5 +1,5 @@
 import type { ChatDisplayMessage } from "../note/agent";
-import { TOOL_LABEL, type EditPreviewDetail, type WriteMode } from "./permission-bubble";
+import { type EditPreviewDetail, type WriteMode } from "./permission-bubble";
 import { buildActionCard } from "./action-card";
 import { fillMarkdown } from "./markdown";
 
@@ -216,9 +216,9 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
     case "tool": {
       if (!acceptsConversation(state, event)) return state;
       if (event.phase === "start") {
-        // 仅写入/权限工具产出流内 action 卡；只读工具（read_note/list_tags/read_skill）
-        // 是瞬时内部调用，不展示卡（其结果由后续文本回复承载）。
-        if (!TOOL_LABEL[event.name]) return state;
+        // 所有工具都产出流内块：写入/标签工具走完整 action 卡（detail 由
+        // permission://request 填充），只读工具（read_note/list_tags/read_skill）
+        // 走紧凑行（无 detail/requestId → action-card 渲染 header-only）。
         const { state: s, msg } = ensureStreaming(state);
         return updateLast(s, {
           ...msg,
@@ -429,22 +429,26 @@ export function renderMessages(state: ChatState): HTMLElement {
 }
 
 /**
- * 在 text 块下方挂载复制按钮（hover 浮出）。一次性挂载：节点稳定，
+ * 在气泡下方挂载复制按钮（hover 浮出）。一次性挂载：节点稳定，
  * 不随 token delta 重建。复制原始 markdown 文本（非渲染后纯文本）。
+ * align: "left"（AI 气泡，靠左）/ "right"（用户气泡，靠右）。
  */
-function attachCopyButton(textEl: HTMLElement, rawText: string): void {
+function attachCopyButton(textEl: HTMLElement, rawText: string, align: "left" | "right" = "left"): void {
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "chat-copy-btn";
-  btn.textContent = "复制";
+  btn.className = "chat-copy-btn" + (align === "right" ? " is-right" : "");
   btn.setAttribute("aria-label", "复制原文");
+  btn.title = "复制";
+  btn.innerHTML = `<i class="ph ph-copy" aria-hidden="true"></i>`;
   btn.addEventListener("click", () => {
     void copyText(rawText).then((ok) => {
       if (!ok) return;
-      btn.textContent = "已复制";
+      btn.title = "已复制";
+      btn.innerHTML = `<i class="ph ph-check" aria-hidden="true"></i>`;
       btn.classList.add("is-copied");
       window.setTimeout(() => {
-        btn.textContent = "复制";
+        btn.title = "复制";
+        btn.innerHTML = `<i class="ph ph-copy" aria-hidden="true"></i>`;
         btn.classList.remove("is-copied");
       }, 1200);
     });
@@ -488,6 +492,7 @@ export function renderMessage(message: ChatMessage): HTMLElement {
     body.className = "chat-msg-text";
     body.textContent = message.text;
     el.appendChild(body);
+    attachCopyButton(el, message.text, "right");
     return el;
   }
   // assistant：纵向平级块容器。
@@ -524,13 +529,10 @@ export function renderBlock(block: Block, streaming: boolean): HTMLElement {
         head.type = "button";
         head.className = "chat-thinking-head";
         head.setAttribute("aria-expanded", String(!block.collapsed));
-        const icon = document.createElement("span");
-        icon.className = "chat-thinking-icon";
-        icon.setAttribute("aria-hidden", "true");
         const label = document.createElement("span");
         label.className = "chat-thinking-label";
-        label.textContent = "思考过程";
-        head.append(icon, label);
+        label.textContent = block.done ? "思考" : "思考中…";
+        head.append(label);
         head.addEventListener("click", () => {
           el.dispatchEvent(new CustomEvent("chat:toggle-thinking", { bubbles: true, detail: { blockId: block.id } }));
         });

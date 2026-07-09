@@ -122,13 +122,17 @@ describe("reduceEvents", () => {
     ]);
   });
 
-  it("does not create action blocks for read-only tools", () => {
-    const state = run([
-      { type: "tool", requestId: "r1", name: "read_note", phase: "start" },
-      { type: "tool", requestId: "r1", name: "read_note", phase: "end" },
+  it("creates a readonly action block for read-only tools (no permission flow)", () => {
+    const started = run([{ type: "tool", requestId: "r1", name: "read_note", phase: "start" }]);
+    // read_note 不进 permission 流，但仍产出 action block（渲染为紧凑行）。
+    expect(norm(started.messages)).toEqual([
+      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "read_note", status: "pending" }] },
     ]);
-    // read_note 不进 permission 流：不产出 action block，消息为空。
-    expect(norm(state.messages)).toEqual([]);
+
+    const ended = reduceEvents(started, { type: "tool", requestId: "r1", name: "read_note", phase: "end" });
+    expect(norm(ended.messages)).toEqual([
+      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "read_note", status: "done" }] },
+    ]);
   });
 
   it("keeps the action card as a record and adds a following text block", () => {

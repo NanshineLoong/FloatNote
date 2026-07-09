@@ -32,6 +32,9 @@ export interface PermissionRequest {
 
 /** 工具名 → 卡片标题（语义化中文标签，不暴露内部 tool 名）。 */
 export const TOOL_LABEL: Record<string, string> = {
+  read_note: "读取笔记",
+  list_tags: "列出标签",
+  read_skill: "读取技能",
   edit_note: "编辑文本",
   write_note: "编辑文本",
   set_tag: "设置标签",
