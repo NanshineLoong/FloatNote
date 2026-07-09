@@ -48,6 +48,7 @@ pub fn run() {
                 watcher: Mutex::new(file_watcher),
                 write_suppress,
                 popup_cache: crate::popup::PopupCache::new(),
+                pending_edits: Mutex::new(std::collections::HashMap::new()),
             });
 
             // 拉起 agent-sidecar；失败存入状态供前端查询，不阻断 app 启动。
@@ -140,6 +141,7 @@ pub fn run() {
             commands::agent_new_session,
             commands::agent_open_session,
             commands::agent_cancel,
+            commands::resolve_permission,
             commands::set_active_note,
             commands::get_active_note,
             commands::get_assistant_state,

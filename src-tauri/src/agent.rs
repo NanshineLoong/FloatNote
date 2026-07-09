@@ -11,7 +11,6 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
-
 /// Host → sidecar 消息。JSON 字段为 camelCase，与 Sprint 2 的 protocol.ts 对齐。
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
@@ -173,6 +172,40 @@ pub struct EditPreview {
     pub tool: String,
     pub summary: String,
     pub detail: EditPreviewDetail,
+}
+
+/// `handle_apply_edit_at` 的结果：是否成功、是否被拒、版本号、错误信息。
+///
+/// 抽离为结构体便于纯函数测试与 `resolve_permission` 组装回 `ApplyEditResult`。
+#[derive(Debug, Clone, PartialEq)]
+pub struct EditOutcome {
+    pub ok: bool,
+    pub denied: bool,
+    pub version: Option<u32>,
+    pub error: Option<String>,
+}
+
+/// `handle_apply_edit` 暂存的待裁决编辑：用户在 `permission://request` 气泡上
+/// 点击 allow/deny 后，`resolve_permission` 取出此项完成落盘并回 sidecar。
+///
+/// `dir`/`note_id`/`path` 是 `handle_apply_edit` 已解析好的目标（来自
+/// `resolve_target`），`resolve_permission` 直接复用、不再重算。
+#[derive(Debug, Clone)]
+pub struct PendingEdit {
+    pub call_id: String,
+    /// 暂存以备日志/调试，当前 resolve_permission 不读取。
+    #[allow(dead_code)]
+    pub conversation_id: String,
+    pub target: NoteTarget,
+    pub old_content: String,
+    pub new_content: String,
+    /// 默认写入模式（暂存时的初值 "direct"）；实际生效的 write_mode 由
+    /// `resolve_permission` 的前端入参决定，此字段仅作记录，暂不读取。
+    #[allow(dead_code)]
+    pub write_mode: String,
+    pub dir: PathBuf,
+    pub note_id: String,
+    pub path: String,
 }
 
 impl AgentHandle {
@@ -360,34 +393,96 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
     }
 }
 
-/// 收到 apply_edit：执行编辑并回 sidecar 结果。
+/// 收到 apply_edit：解析 target、emit `permission://request` 给前端、暂存
+/// `PendingEdit`。**不落盘、不回结果**——落盘与回 `ApplyEditResult` 发生在
+/// 用户裁决后调用的 `resolve_permission` 命令里。
 ///
-/// TODO(Task 5)：实现快照旧版 → 应用编辑 → 广播 note://updated → 回
-/// `ApplyEditResult`。当前为占位空实现，仅保证协议编译通过、序列化测试可跑。
+/// target 无法解析（无活动笔记）时直接回 deny，避免 sidecar 在 call_id 上悬挂。
 fn handle_apply_edit(
-    _app: &AppHandle,
-    _call_id: String,
-    _conversation_id: String,
-    _target: NoteTarget,
-    _tool_name: String,
-    _old_content: String,
-    _new_content: String,
-    _preview: EditPreview,
+    app: &AppHandle,
+    call_id: String,
+    conversation_id: String,
+    target: NoteTarget,
+    tool_name: String,
+    old_content: String,
+    new_content: String,
+    preview: EditPreview,
 ) {
-    // Task 5 fills this in.
+    let Some(state) = app.try_state::<AppState>() else { return; };
+    let can_snapshot = target.kind == "piece";
+    let resolved = resolve_target(&state, &target);
+    let request_id = call_id.clone();
+    let payload = serde_json::json!({
+        "request_id": request_id,
+        "conversation_id": conversation_id,
+        "target": target,
+        "tool_name": tool_name,
+        "old_content": old_content,
+        "new_content": new_content,
+        "preview": preview,
+        "can_snapshot": can_snapshot,
+        "resolved_dir": resolved.as_ref().map(|(d, _, _)| d.to_string_lossy().to_string()),
+        "resolved_note_id": resolved.as_ref().map(|(_, n, _)| n.clone()),
+        "resolved_path": resolved.as_ref().map(|(_, _, p)| p.to_string_lossy().to_string()),
+    });
+    let _ = app.emit("permission://request", &payload);
+    match resolved {
+        Some((dir, note_id, path)) => {
+            state
+                .pending_edits
+                .lock()
+                .unwrap()
+                .insert(request_id, PendingEdit {
+                    call_id,
+                    conversation_id,
+                    target,
+                    old_content,
+                    new_content,
+                    write_mode: "direct".into(),
+                    dir,
+                    note_id,
+                    path: path.to_string_lossy().to_string(),
+                });
+        }
+        None => {
+            // 无法定位目标笔记：无 pending 可待裁决，直接回 deny 解除 sidecar 等待。
+            let _ = state.agent.lock().unwrap().as_mut().map(|a| {
+                a.send(&HostToSidecar::ApplyEditResult {
+                    call_id,
+                    ok: false,
+                    denied: Some(true),
+                    version: None,
+                    error: Some("无法定位目标笔记".into()),
+                })
+            });
+        }
+    }
 }
 
-/// 收到 get_note_text：读取目标笔记内容并回 sidecar `NoteText`。
+/// 收到 get_note_text：按 `NoteTarget` 定位文件、读取内容、回 `NoteText`。
 ///
-/// TODO(Task 5)：实现按 `NoteTarget` 定位文件、读取内容、回 `NoteText`。
-/// 当前为占位空实现。
+/// **总是回一条**（found=false 当文件缺失或 target 无法解析），避免 sidecar
+/// 在 call_id 上悬挂。
 fn handle_get_note_text(
-    _app: &AppHandle,
-    _call_id: String,
+    app: &AppHandle,
+    call_id: String,
     _conversation_id: String,
-    _target: NoteTarget,
+    target: NoteTarget,
 ) {
-    // Task 5 fills this in.
+    let Some(state) = app.try_state::<AppState>() else { return; };
+    let (content, found) = match resolve_target(&state, &target) {
+        Some((_, _, path)) => match std::fs::read_to_string(&path) {
+            Ok(c) => (c, true),
+            Err(_) => (String::new(), false),
+        },
+        None => (String::new(), false),
+    };
+    let _ = state
+        .agent
+        .lock()
+        .unwrap()
+        .as_mut()
+        .map(|a| a.send(&HostToSidecar::NoteText { call_id, content, found }));
 }
 
 /// sidecar 退出/崩溃：标记不可用、清空句柄、发错误事件，绝不 panic。
@@ -409,28 +504,93 @@ fn on_sidecar_exit(app: &AppHandle) {
 /// note://updated 事件载荷。
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
-struct NoteUpdated {
-    note_id: String,
-    path: String,
-    version: u32,
+pub struct NoteUpdated {
+    pub note_id: String,
+    pub path: String,
+    pub version: u32,
 }
 
-/// 纯函数：把"即将被覆盖的旧内容"留作一版 AI 快照，再写入新内容，返回新版本号。
+/// 解析 `NoteTarget` → `(dir, note_id, path)`。
 ///
-/// 抽离便于单测；任一步失败返回 io::Error，不破坏既有笔记（写盘是最后一步）。
-/// 当前在 Task 4 后暂未被调用（apply_edit 的真实实现在 Task 5 接入），保留供 Task 5 复用。
-#[allow(dead_code)]
-pub fn apply_write(
+/// 依据 `AppState.active_note`（当前活动笔记，携带其所在项目空间 dir、
+/// note_id 与文件 path）：
+/// - `inbox`/`tasks` → 项目空间根下固定文件名 `_inbox.md`/`_tasks.md`；
+/// - `piece`/`doc`/其它 → `target.name` 缺省回退到活动笔记；显式给出且与
+///   活动 note_id 不同时，按 `<dir>/<name>.md` 解析（v1 简化：pieces 即以
+///   文件名直存在项目空间根下）。
+///
+/// 无活动笔记时返回 None（调用方据此决定是否回 deny）。
+fn resolve_target(state: &AppState, target: &NoteTarget) -> Option<(PathBuf, String, PathBuf)> {
+    let active = state.active_note.lock().unwrap().clone()?;
+    let dir = PathBuf::from(&active.dir);
+    let (note_id, path) = match target.kind.as_str() {
+        "inbox" => ("_inbox".to_string(), dir.join("_inbox.md")),
+        "tasks" => ("_tasks".to_string(), dir.join("_tasks.md")),
+        // piece / doc / 未知 kind 一律按 piece 语义处理（v1 简化）。
+        _ => match &target.name {
+            Some(name) if name == &active.note_id => {
+                (active.note_id.clone(), PathBuf::from(&active.path))
+            }
+            Some(name) => {
+                // 兼容传入带 `.md` 后缀的 name：取 stem 作为 note_id。
+                let stem = name.trim_end_matches(".md");
+                (stem.to_string(), dir.join(format!("{stem}.md")))
+            }
+            None => (active.note_id.clone(), PathBuf::from(&active.path)),
+        },
+    };
+    Some((dir, note_id, path))
+}
+
+/// 纯函数：并发校验 → （可选拍快照）→ 落盘，返回 `EditOutcome`。
+///
+/// 抽离便于单测；真实 `handle_apply_edit` 解析好 target 后委托给它，
+/// `resolve_permission` 在用户裁决后也调用它完成实际写入。
+///
+/// - 并发校验：磁盘内容须等于 `old_content`，否则拒绝（"笔记已变更"）。
+/// - 快照守卫：仅当 `write_mode == "snapshot"` 且 `can_snapshot`（target 为
+///   piece）且 note_id 非 `_` 前缀时，把旧内容留作一版 AI 快照。
+/// - 落盘是最后一步，任一前置失败均不改动文件。
+pub fn handle_apply_edit_at(
     dir: &Path,
     note_id: &str,
     path: &Path,
+    old_content: &str,
     new_content: &str,
-) -> std::io::Result<u32> {
-    let old = std::fs::read_to_string(path).unwrap_or_default();
-    let version = versions::snapshot(dir, note_id, &old, "ai")?;
-    std::fs::write(path, new_content)?;
-    Ok(version)
+    write_mode: &str,
+    can_snapshot: bool,
+) -> EditOutcome {
+    let on_disk = std::fs::read_to_string(path).unwrap_or_default();
+    if on_disk != old_content {
+        return EditOutcome {
+            ok: false,
+            denied: false,
+            version: None,
+            error: Some("笔记已变更，请重读".to_string()),
+        };
+    }
+    let version = if write_mode == "snapshot" && can_snapshot && !note_id.starts_with('_') {
+        match versions::snapshot(dir, note_id, old_content, "ai") {
+            Ok(v) => Some(v),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+    if let Err(e) = std::fs::write(path, new_content) {
+        return EditOutcome {
+            ok: false,
+            denied: false,
+            version: None,
+            error: Some(e.to_string()),
+        };
+    }
+    EditOutcome {
+        ok: true,
+        denied: false,
+        version,
+        error: None,
+    }
 }
 
 #[cfg(test)]
@@ -612,5 +772,77 @@ mod tests {
         assert!(json.contains("\"target\":{\"kind\":\"piece\",\"name\":\"piece.md\"}"), "{json}");
         let back: SidecarToHost = serde_json::from_str(&json).unwrap();
         assert_eq!(back, req);
+    }
+
+    #[test]
+    fn apply_edit_direct_writes_without_snapshot() {
+        let dir = tempdir();
+        let path = dir.path().join("piece.md");
+        std::fs::write(&path, "old").unwrap();
+        // direct 模式：不快照
+        let res = handle_apply_edit_at(dir.path(), "piece", &path, "old", "new", "direct", true);
+        assert!(res.ok);
+        assert_eq!(res.version, None);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
+    }
+
+    #[test]
+    fn apply_edit_snapshot_for_piece_creates_version() {
+        let dir = tempdir();
+        let path = dir.path().join("piece.md");
+        std::fs::write(&path, "old").unwrap();
+        let res = handle_apply_edit_at(dir.path(), "piece", &path, "old", "new", "snapshot", true);
+        assert!(res.ok);
+        assert_eq!(res.version, Some(1));
+        assert_eq!(versions::read_version(dir.path(), "piece", 1).unwrap(), "old");
+    }
+
+    #[test]
+    fn apply_edit_snapshot_ignored_for_inbox() {
+        let dir = tempdir();
+        let path = dir.path().join("_inbox.md");
+        std::fs::write(&path, "old").unwrap();
+        let res = handle_apply_edit_at(dir.path(), "_inbox", &path, "old", "new", "snapshot", false);
+        assert!(res.ok);
+        assert_eq!(res.version, None); // _ 前缀不快照
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
+    }
+
+    #[test]
+    fn apply_edit_rejects_concurrent_change() {
+        let dir = tempdir();
+        let path = dir.path().join("piece.md");
+        std::fs::write(&path, "user changed").unwrap(); // 磁盘已变
+        let res = handle_apply_edit_at(dir.path(), "piece", &path, "old", "new", "direct", true);
+        assert!(!res.ok);
+        assert!(res.error.unwrap().contains("已变更"));
+    }
+
+    fn tempdir() -> TempDir {
+        static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "floatnote-agent-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&path).unwrap();
+        TempDir(path)
+    }
+
+    struct TempDir(std::path::PathBuf);
+    impl TempDir {
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
     }
 }
