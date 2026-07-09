@@ -19,6 +19,7 @@ import { parseGfmTableOffsets, type Align, type CellRange } from "./table";
 import { stripTagMarker } from "@floatnote/note-logic";
 import { parseImage, type ImageAlign } from "./image-attrs";
 import { imageSrc } from "./image-fs";
+import { olOrdinal } from "./list-indent";
 
 function getCursorLines(state: EditorState): Set<number> {
   const lines = new Set<number>();
@@ -59,6 +60,21 @@ class BulletWidget extends WidgetType {
     span.textContent = "•";
     return span;
   }
+}
+
+/** Ordered-list marker: shows the ordinal computed from the list tree (via
+ *  olOrdinal) instead of the literal source digits, so indent/outdent
+ *  re-numbers automatically. Keeps the user's delimiter (`.` or `)`). */
+class OlNumberWidget extends WidgetType {
+  constructor(readonly ordinal: number, readonly delim: string) { super(); }
+  eq(o: OlNumberWidget): boolean { return o.ordinal === this.ordinal && o.delim === this.delim; }
+  toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "cm-preview-ol-mark";
+    span.textContent = `${this.ordinal}${this.delim}`;
+    return span;
+  }
+  ignoreEvent() { return true; }
 }
 
 class HrWidget extends WidgetType {
@@ -562,12 +578,16 @@ function buildDecorations(state: EditorState): DecorationSet {
               deco: Decoration.replace({ widget: new BulletWidget() }),
             });
           } else {
-            // Ordered list marker (`1.`, `2.` …): keep the text but soften it so
-            // it reads as a rendered marker rather than raw markdown.
+            // Ordered list marker (`1.`, `2.` …): replace the literal digits
+            // with a widget that shows the ordinal computed from the list tree,
+            // so indent/outdent re-numbers automatically. Source digits are
+            // preserved (saved file keeps what the user typed).
+            const raw = doc.sliceString(node.from, node.to);
+            const delim = raw.replace(/^\d+/, ""); // "." | ")" — keep user delimiter
             entries.push({
               from: node.from,
               to: node.to,
-              deco: Decoration.mark({ class: "cm-preview-ol-mark" }),
+              deco: Decoration.replace({ widget: new OlNumberWidget(olOrdinal(node.node), delim) }),
             });
           }
           return false;
@@ -704,10 +724,11 @@ function buildDecorations(state: EditorState): DecorationSet {
     },
   });
 
-  // List line styling + nesting indent. `--list-depth` drives per-level
-  // padding-left in the theme; `cm-preview-list` gives list lines their marker
-  // spacing. Source leading whitespace still renders, so the depth padding only
-  // amplifies nesting — giving lists a visibly rendered rather than raw feel.
+  // List line styling. `--list-depth` is still recorded (harmless) but no
+  // longer drives padding: per-level indent comes solely from the 4-space
+  // source whitespace CM6 renders, so visual level === source level and a
+  // single Backspace unit retreats exactly one level. `cm-preview-list` gives
+  // list lines a uniform `0.6em` marker-side baseline.
   for (const [lineNo, depth] of listLineDepth) {
     const cl = doc.line(lineNo);
     if (lineNo < vpFrom || lineNo > vpTo) continue;
@@ -915,7 +936,7 @@ const previewTheme = EditorView.theme({
   ".cm-preview-link:hover": { color: "#1d4ed8" },
   ".cm-preview-ol-mark": { color: "#374151", fontWeight: "600" },
   ".cm-preview-list": {
-    paddingLeft: "calc(var(--list-depth, 0) * 1em + 0.6em)",
+    paddingLeft: "0.6em",
     listStyleType: "none",
   },
   ".cm-preview-figure.cm-img-active": { outline: "2px solid #3b82f6", borderRadius: "4px" },

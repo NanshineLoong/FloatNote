@@ -1,3 +1,5 @@
+import type { SyntaxNode } from "@lezer/common";
+
 const INDENT = "    "; // 4 spaces
 
 export function isListItemLine(line: string): boolean {
@@ -28,6 +30,22 @@ export function outdentLine(line: string): string {
 export function canDemote(prevDepth: number | null, curDepth: number): boolean {
   if (prevDepth === null) return false;
   return curDepth <= prevDepth;
+}
+
+/** 有序列表 ListMark 在其所属列表中的 1 基序号。沿父 ListItem 的
+ *  prevSibling 链统计 ListItem 前驱个数 +1；不同 OrderedList 父节点之间
+ *  prevSibling 链自然在边界断开 → 自动从 1 重计。无状态、按节点自洽，
+ *  与源码里写什么数字无关。 */
+export function olOrdinal(listMark: SyntaxNode): number {
+  const item = listMark.parent;
+  if (!item) return 1;
+  let count = 0;
+  let s = item.prevSibling;
+  while (s) {
+    if (s.name === "ListItem") count++;
+    s = s.prevSibling;
+  }
+  return count + 1;
 }
 
 /** Depth of the nearest preceding list line. `index` is the current line's

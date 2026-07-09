@@ -1,9 +1,13 @@
+import { EditorState } from "@codemirror/state";
+import { markdown } from "@codemirror/lang-markdown";
+import { syntaxTree } from "@codemirror/language";
 import { describe, expect, it } from "vitest";
 import {
   canDemote,
   indentLine,
   isListItemLine,
   lineDepth,
+  olOrdinal,
   outdentLine,
   prevListItemDepth,
 } from "./list-indent";
@@ -82,5 +86,39 @@ describe("prevListItemDepth", () => {
   });
   it("returns null at the top", () => {
     expect(prevListItemDepth(["- a"], 0)).toBe(null);
+  });
+});
+
+/** Ordered-list ListMark ordinals in document order, computed by walking the
+ *  markdown syntax tree (same as preview.ts does). Mirrors the editor's live
+ *  preview so the test exercises the real grammar. */
+function ordinals(doc: string): number[] {
+  const s = EditorState.create({ doc, extensions: [markdown()] });
+  const out: number[] = [];
+  syntaxTree(s).iterate({
+    enter(node) {
+      if (node.name !== "ListMark") return;
+      const text = s.doc.sliceString(node.from, node.to);
+      if (!/\d/.test(text)) return; // skip unordered markers
+      if (node.node.parent?.name !== "ListItem") return;
+      out.push(olOrdinal(node.node));
+    },
+  });
+  return out;
+}
+
+describe("olOrdinal", () => {
+  it("numbers a single ordered list 1..n", () => {
+    expect(ordinals("1. a\n2. b\n3. c")).toEqual([1, 2, 3]);
+  });
+  it("restarts at 1 in each nested sublist", () => {
+    // outer 1, inner 1, inner 2, outer 2
+    expect(ordinals("1. a\n    1. b\n    2. c\n2. d")).toEqual([1, 1, 2, 2]);
+  });
+  it("resets across a list boundary / non-list line", () => {
+    expect(ordinals("1. a\n2. b\n\nplain\n\n3. c")).toEqual([1, 2, 1]);
+  });
+  it("ignores the literal source digits — ordinal is tree-derived", () => {
+    expect(ordinals("9. a\n1. b")).toEqual([1, 2]);
   });
 });
