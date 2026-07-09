@@ -157,6 +157,35 @@ pub fn sanitize_folder_name(name: &str) -> String {
     }
 }
 
+/// Open an existing folder as a project space. If it lacks `_inbox.md`, scaffold
+/// an empty one (written atomically so a crash can't leave a half-written
+/// inbox); if it already has one, return as-is. Unlike `create_project`, the
+/// folder itself is user-supplied — this never creates the directory, only the
+/// inbox file inside it, and surfaces `NotADirectory` when the path isn't a
+/// folder. `_tasks.md` and the first piece stay lazily-created, matching
+/// `create_project`.
+pub fn open_existing_project(dir: &Path) -> std::io::Result<ProjectEntry> {
+    if !dir.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotADirectory,
+            "所选路径不是文件夹",
+        ));
+    }
+    let inbox = dir.join(INBOX_FILE);
+    if !inbox.is_file() {
+        crate::notes::write_atomic(&inbox, "")?;
+    }
+    let name = dir
+        .file_name()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "无法解析文件夹名"))?
+        .to_string_lossy()
+        .to_string();
+    Ok(ProjectEntry {
+        name,
+        path: dir.to_string_lossy().to_string(),
+    })
+}
+
 /// Rename a project folder in place (same parent directory). The new name is
 /// sanitized; a name equal to the current one is a no-op; a name colliding with
 /// an existing sibling errors with `AlreadyExists`. Returns the new path.
@@ -349,6 +378,49 @@ mod tests {
         assert!(!dir.exists());
         // Already gone — no error.
         delete_project(&dir).unwrap();
+    }
+
+    #[test]
+    fn open_existing_project_scaffolds_inbox_for_plain_folder() {
+        let root = tempdir();
+        let dir = root.path().join("notes");
+        std::fs::create_dir_all(&dir).unwrap();
+        // Existing .md files become pieces; _inbox.md is created if missing.
+        std::fs::write(dir.join("piece.md"), "x").unwrap();
+
+        assert!(!is_project_dir(&dir));
+        let entry = open_existing_project(&dir).unwrap();
+        assert_eq!(entry.name, "notes");
+        assert!(is_project_dir(&dir));
+        // Existing files are left untouched.
+        assert!(dir.join("piece.md").is_file());
+        // _tasks.md stays lazily-absent.
+        assert!(!dir.join("_tasks.md").is_file());
+    }
+
+    #[test]
+    fn open_existing_project_is_idempotent_when_inbox_exists() {
+        let root = tempdir();
+        let dir = root.path().join("has-inbox");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(INBOX_FILE), "keep me").unwrap();
+
+        open_existing_project(&dir).unwrap();
+        // Second open does not clobber the existing inbox.
+        assert_eq!(std::fs::read_to_string(dir.join(INBOX_FILE)).unwrap(), "keep me");
+    }
+
+    #[test]
+    fn open_existing_project_errors_on_non_directory() {
+        let root = tempdir();
+        let file = root.path().join("not-a-folder.md");
+        std::fs::write(&file, "x").unwrap();
+        let err = open_existing_project(&file).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotADirectory);
+
+        let missing = root.path().join("gone");
+        let err = open_existing_project(&missing).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotADirectory);
     }
 
     fn tempdir() -> TempDir {

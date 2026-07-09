@@ -24,6 +24,7 @@ export interface EmptyStateProps {
   icon?: string;
   primary?: EmptyStateAction;
   secondary?: EmptyStateAction;
+  tertiary?: EmptyStateAction;
 }
 
 function escapeHtml(input: string): string {
@@ -60,7 +61,12 @@ export function emptyStateMarkup(props: EmptyStateProps): string {
         props.secondary.label,
       )}</button>`
     : "";
-  const actions = primary || secondary ? `<div class="empty-state-actions">${primary}${secondary}</div>` : "";
+  const tertiary = props.tertiary
+    ? `<button class="empty-state-btn secondary" data-action="tertiary">${escapeHtml(
+        props.tertiary.label,
+      )}</button>`
+    : "";
+  const actions = primary || secondary || tertiary ? `<div class="empty-state-actions">${primary}${secondary}${tertiary}</div>` : "";
   return `${icon}<h2 class="empty-state-title">${escapeHtml(
     props.title,
   )}</h2>${hint}${actions}`;
@@ -78,7 +84,7 @@ export function renderEmptyState(
   const inner = document.createElement("div");
   inner.className = "empty-state-inner";
   inner.innerHTML = emptyStateMarkup(props);
-  const wire = (action: "primary" | "secondary") => {
+  const wire = (action: "primary" | "secondary" | "tertiary") => {
     const btn = inner.querySelector<HTMLButtonElement>(
       `button[data-action="${action}"]`,
     );
@@ -86,6 +92,7 @@ export function renderEmptyState(
   };
   wire("primary");
   wire("secondary");
+  wire("tertiary");
   target.appendChild(inner);
   return () => {
     target.classList.remove("empty-state");

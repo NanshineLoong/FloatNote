@@ -428,6 +428,32 @@ pub fn create_project(
     Ok(entry)
 }
 
+/// Open an existing folder as a project space: ensure `_inbox.md` exists (the
+/// backend scaffolds an empty one if missing; the folder itself is never
+/// created). The frontend picks the folder via the OS dialog. Mirrors
+/// `create_project` by persisting `working_dir` to the folder's parent so "在
+/// 当前目录新建" and `list_projects` stay consistent — a failed working_dir
+/// write does not block opening (Inbox is already good), only logs a warning.
+#[tauri::command]
+pub fn open_existing_project(
+    state: State<AppState>,
+    dir: String,
+) -> Result<project::ProjectEntry, String> {
+    let dir_path = std::path::Path::new(&dir);
+    let entry = project::open_existing_project(dir_path).map_err(|error| error.to_string())?;
+    if let Some(parent) = dir_path.parent() {
+        let parent_str = parent.to_string_lossy().to_string();
+        if !parent_str.is_empty() {
+            let mut config = state.config.lock().unwrap();
+            config.working_dir = Some(parent_str);
+            if let Err(error) = crate::config::save(&state.config_path, &config) {
+                eprintln!("warn: failed to persist working_dir: {error}");
+            }
+        }
+    }
+    Ok(entry)
+}
+
 #[tauri::command]
 pub fn list_pieces(project_dir: String) -> Result<Vec<notes::NoteEntry>, String> {
     project::list_pieces(std::path::Path::new(&project_dir)).map_err(|error| error.to_string())

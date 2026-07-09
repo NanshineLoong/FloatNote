@@ -116,6 +116,7 @@ pub fn run() {
             commands::list_projects,
             commands::resolve_projects,
             commands::create_project,
+            commands::open_existing_project,
             commands::list_pieces,
             commands::resolve_documents,
             commands::rename_project,

@@ -590,6 +590,20 @@ input {
   background: transparent;
 }
 
+/* 危险操作（删除）项：红色文字，hover 红底。 */
+.switch-submenu-item.danger {
+  color: #dc2626;
+}
+
+.switch-submenu-item.danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+/* kebab 按钮：沿用 .switch-row-action 基础样式，仅微调命中区域。 */
+.switch-row-kebab {
+  cursor: pointer;
+}
+
 /* 切换菜单某区块列表为空时的灰色提示行。 */
 .switch-empty-hint {
   padding: 4px 10px 6px;
@@ -852,6 +866,14 @@ input {
 
   .switch-submenu-item:disabled {
     color: #555;
+  }
+
+  .switch-submenu-item.danger {
+    color: #f87171;
+  }
+
+  .switch-submenu-item.danger:hover {
+    background: rgba(248, 113, 113, 0.14);
   }
 
   .switch-row-label {
@@ -2093,6 +2115,8 @@ input {
 
 .empty-state-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
   margin-top: 14px;
 }
