@@ -116,10 +116,10 @@ export function imagePasteHandler(getNoteDir: () => string): Extension {
       if (!file) return false;
       event.preventDefault();
       const dir = getNoteDir();
-      if (!dir) return true;
+      if (!dir) { showToast("未打开项目"); return true; }
+      const { from, to } = view.state.selection.main;
       void savePastedImage(dir, file)
         .then((link) => {
-          const { from, to } = view.state.selection.main;
           view.dispatch({
             changes: { from, to, insert: `${link}\n` },
             selection: { anchor: from + link.length + 1 },
