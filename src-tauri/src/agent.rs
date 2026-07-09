@@ -1,8 +1,9 @@
-//! agent-sidecar 生命周期 + 行分隔 JSON 协议 + 事件转发 + apply_write 处理。
+//! agent-sidecar 生命周期 + 行分隔 JSON 协议 + 事件转发 + apply_edit 处理。
 //!
 //! Rust 是唯一状态源：拉起 Node sidecar 子进程，单独线程按行读 stdout，
-//! 把流式事件经 Tauri `agent://event` 广播给所有助手视图；收到 `apply_write`
-//! 时执行"快照旧版 → 写新内容 → 广播 `note://updated`"，再把结果回传 sidecar。
+//! 把流式事件经 Tauri `agent://event` 广播给所有助手视图；收到 `apply_edit`/
+//! `get_note_text` 时分派到对应处理函数（Task 5 实装真实逻辑），再把
+//! `apply_edit_result`/`note_text` 回传 sidecar。
 
 use crate::{commands::AppState, versions};
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,7 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// Host → sidecar 消息。JSON 字段为 camelCase，与 Sprint 2 的 protocol.ts 对齐。
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum HostToSidecar {
     Configure {
@@ -37,13 +38,20 @@ pub enum HostToSidecar {
         conversation_id: String,
         user_text: String,
     },
-    ApplyWriteResult {
+    ApplyEditResult {
         call_id: String,
         ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        denied: Option<bool>,
         #[serde(skip_serializing_if = "Option::is_none")]
         version: Option<u32>,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+    },
+    NoteText {
+        call_id: String,
+        content: String,
+        found: bool,
     },
     Cancel {
         request_id: String,
@@ -71,10 +79,19 @@ pub enum SidecarToHost {
         name: String,
         phase: String,
     },
-    ApplyWrite {
+    ApplyEdit {
         call_id: String,
-        note_id: String,
-        content: String,
+        conversation_id: String,
+        target: NoteTarget,
+        tool_name: String,
+        old_content: String,
+        new_content: String,
+        preview: EditPreview,
+    },
+    GetNoteText {
+        call_id: String,
+        conversation_id: String,
+        target: NoteTarget,
     },
     Done {
         request_id: String,
@@ -102,7 +119,7 @@ pub enum ChatDisplayMessage {
 }
 
 /// 当前活动笔记：由笔记窗 `set_active_note` 发布、`agent_send` 也会更新，
-/// 供 apply_write 定位 dir / path，并供独立助手窗 `get_active_note` 查询。
+/// 供 apply_edit / get_note_text 定位 dir / path，并供独立助手窗 `get_active_note` 查询。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActiveNote {
@@ -116,6 +133,46 @@ pub struct AgentHandle {
     #[allow(dead_code)]
     child: Child,
     stdin: ChildStdin,
+}
+
+/// apply_edit / get_note_text 的目标笔记定位。
+///
+/// `kind` 取值与 sidecar `protocol.ts` 的 `NoteTarget` 一致：
+/// `inbox`/`tasks`/`piece`/`doc`；`name` 仅在 `piece`/`doc` 时给出文件名。
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteTarget {
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// apply_edit 的预览细节（判别联合，`kind` 区分）。
+///
+/// 变体名用 `rename_all = "snake_case"` 序列化为 `diff`/`tag_assign`/
+/// `tag_create`/`tag_delete`（与 TS 线格式一致）；字段名用
+/// `rename_all_fields = "camelCase"` 序列化为 `hunks`/`blockPreview`/
+/// `tagName`/`tagColor`/`markerCount`。
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+pub enum EditPreviewDetail {
+    Diff { hunks: String },
+    TagAssign {
+        block_preview: String,
+        tag_name: String,
+        tag_color: String,
+    },
+    TagCreate { tag_name: String, tag_color: String },
+    TagDelete { tag_name: String, marker_count: u32 },
+}
+
+/// apply_edit 携带的编辑预览：工具名 + 摘要 + 详情。
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct EditPreview {
+    pub tool: String,
+    pub summary: String,
+    pub detail: EditPreviewDetail,
 }
 
 impl AgentHandle {
@@ -253,11 +310,29 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             }
             let _ = app.emit("agent://event", &SidecarToHost::Ready);
         }
-        SidecarToHost::ApplyWrite {
+        SidecarToHost::ApplyEdit {
             call_id,
-            note_id,
-            content,
-        } => handle_apply_write(app, call_id, note_id, content),
+            conversation_id,
+            target,
+            tool_name,
+            old_content,
+            new_content,
+            preview,
+        } => handle_apply_edit(
+            app,
+            call_id,
+            conversation_id,
+            target,
+            tool_name,
+            old_content,
+            new_content,
+            preview,
+        ),
+        SidecarToHost::GetNoteText {
+            call_id,
+            conversation_id,
+            target,
+        } => handle_get_note_text(app, call_id, conversation_id, target),
         SidecarToHost::Title {
             conversation_id,
             title,
@@ -285,58 +360,34 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
     }
 }
 
-/// 收到 apply_write：快照旧版 → 写新内容 → 广播 note://updated → 回 sidecar 结果。
-fn handle_apply_write(app: &AppHandle, call_id: String, _note_id: String, content: String) {
-    let Some(state) = app.try_state::<AppState>() else {
-        return;
-    };
-    let active = state.active_note.lock().unwrap().clone();
+/// 收到 apply_edit：执行编辑并回 sidecar 结果。
+///
+/// TODO(Task 5)：实现快照旧版 → 应用编辑 → 广播 note://updated → 回
+/// `ApplyEditResult`。当前为占位空实现，仅保证协议编译通过、序列化测试可跑。
+fn handle_apply_edit(
+    _app: &AppHandle,
+    _call_id: String,
+    _conversation_id: String,
+    _target: NoteTarget,
+    _tool_name: String,
+    _old_content: String,
+    _new_content: String,
+    _preview: EditPreview,
+) {
+    // Task 5 fills this in.
+}
 
-    let reply = match active {
-        Some(note) => {
-            crate::watcher::mark_self_write(&state.write_suppress, &note.path);
-            match apply_write(
-                Path::new(&note.dir),
-                &note.note_id,
-                Path::new(&note.path),
-                &content,
-            ) {
-                Ok(version) => {
-                    let _ = app.emit(
-                        "note://updated",
-                        NoteUpdated {
-                            note_id: note.note_id.clone(),
-                            path: note.path.clone(),
-                            version,
-                        },
-                    );
-                    HostToSidecar::ApplyWriteResult {
-                        call_id,
-                        ok: true,
-                        version: Some(version),
-                        error: None,
-                    }
-                }
-                Err(error) => HostToSidecar::ApplyWriteResult {
-                    call_id,
-                    ok: false,
-                    version: None,
-                    error: Some(error.to_string()),
-                },
-            }
-        }
-        None => HostToSidecar::ApplyWriteResult {
-            call_id,
-            ok: false,
-            version: None,
-            error: Some("no active note".to_string()),
-        },
-    };
-
-    let mut guard = state.agent.lock().unwrap();
-    if let Some(agent) = guard.as_mut() {
-        let _ = agent.send(&reply);
-    }
+/// 收到 get_note_text：读取目标笔记内容并回 sidecar `NoteText`。
+///
+/// TODO(Task 5)：实现按 `NoteTarget` 定位文件、读取内容、回 `NoteText`。
+/// 当前为占位空实现。
+fn handle_get_note_text(
+    _app: &AppHandle,
+    _call_id: String,
+    _conversation_id: String,
+    _target: NoteTarget,
+) {
+    // Task 5 fills this in.
 }
 
 /// sidecar 退出/崩溃：标记不可用、清空句柄、发错误事件，绝不 panic。
@@ -358,6 +409,7 @@ fn on_sidecar_exit(app: &AppHandle) {
 /// note://updated 事件载荷。
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct NoteUpdated {
     note_id: String,
     path: String,
@@ -367,6 +419,8 @@ struct NoteUpdated {
 /// 纯函数：把"即将被覆盖的旧内容"留作一版 AI 快照，再写入新内容，返回新版本号。
 ///
 /// 抽离便于单测；任一步失败返回 io::Error，不破坏既有笔记（写盘是最后一步）。
+/// 当前在 Task 4 后暂未被调用（apply_edit 的真实实现在 Task 5 接入），保留供 Task 5 复用。
+#[allow(dead_code)]
 pub fn apply_write(
     dir: &Path,
     note_id: &str,
@@ -434,20 +488,6 @@ mod tests {
     }
 
     #[test]
-    fn apply_write_result_uses_call_id() {
-        let msg = HostToSidecar::ApplyWriteResult {
-            call_id: "w1".into(),
-            ok: true,
-            version: Some(3),
-            error: None,
-        };
-        let json = serde_json::to_string(&msg).unwrap();
-        assert!(json.contains("\"type\":\"apply_write_result\""), "{json}");
-        assert!(json.contains("\"callId\":\"w1\""), "{json}");
-        assert!(json.contains("\"version\":3"), "{json}");
-    }
-
-    #[test]
     fn parses_delta_line() {
         let line = r#"{"type":"delta","requestId":"r1","conversationId":"c1","text":"hi"}"#;
         let msg: SidecarToHost = serde_json::from_str(line).unwrap();
@@ -457,20 +497,6 @@ mod tests {
                 request_id: "r1".into(),
                 conversation_id: "c1".into(),
                 text: "hi".into(),
-            }
-        );
-    }
-
-    #[test]
-    fn parses_apply_write_line() {
-        let line = r#"{"type":"apply_write","callId":"w1","noteId":"note","content":"new"}"#;
-        let msg: SidecarToHost = serde_json::from_str(line).unwrap();
-        assert_eq!(
-            msg,
-            SidecarToHost::ApplyWrite {
-                call_id: "w1".into(),
-                note_id: "note".into(),
-                content: "new".into(),
             }
         );
     }
@@ -490,61 +516,101 @@ mod tests {
     }
 
     #[test]
-    fn apply_write_snapshots_old_then_overwrites() {
-        let dir = tempdir();
-        let path = dir.path().join("note.md");
-        std::fs::write(&path, "old content").unwrap();
+    fn parses_apply_edit_line() {
+        let line = r##"{"type":"apply_edit","callId":"w1","conversationId":"c1","target":{"kind":"inbox"},"toolName":"set_tag","oldContent":"a","newContent":"b","preview":{"tool":"set_tag","summary":"s","detail":{"kind":"tag_assign","blockPreview":"块","tagName":"review","tagColor":"#e5484d"}}}"##;
+        let msg: SidecarToHost = serde_json::from_str(line).unwrap();
+        match msg {
+            SidecarToHost::ApplyEdit { ref tool_name, ref target, .. } => {
+                assert_eq!(tool_name, "set_tag");
+                assert_eq!(target.kind, "inbox");
+                assert!(target.name.is_none());
+            }
+            _ => panic!("not ApplyEdit"),
+        }
 
-        let version = apply_write(dir.path(), "note", &path, "new content").unwrap();
-
-        assert_eq!(version, 1);
-        // 旧内容被留作 v1。
-        assert_eq!(versions::read_version(dir.path(), "note", 1).unwrap(), "old content");
-        // 文件已被新内容覆盖。
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new content");
-        // manifest 记录一条 ai 版本。
-        let entries = versions::list(dir.path(), "note");
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].source, "ai");
+        // Round-trip back to JSON and verify camelCase field names + snake_case type.
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"apply_edit\""), "{json}");
+        assert!(json.contains("\"callId\":\"w1\""), "{json}");
+        assert!(json.contains("\"conversationId\":\"c1\""), "{json}");
+        assert!(json.contains("\"toolName\":\"set_tag\""), "{json}");
+        assert!(json.contains("\"oldContent\":\"a\""), "{json}");
+        assert!(json.contains("\"newContent\":\"b\""), "{json}");
+        assert!(json.contains("\"blockPreview\":\"块\""), "{json}");
+        assert!(json.contains("\"tagName\":\"review\""), "{json}");
+        assert!(json.contains("\"tagColor\":\"#e5484d\""), "{json}");
     }
 
     #[test]
-    fn apply_write_handles_missing_old_file() {
-        let dir = tempdir();
-        let path = dir.path().join("fresh.md");
-
-        let version = apply_write(dir.path(), "fresh", &path, "first").unwrap();
-
-        assert_eq!(version, 1);
-        assert_eq!(versions::read_version(dir.path(), "fresh", 1).unwrap(), "");
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "first");
+    fn serializes_apply_edit_result_denied() {
+        let msg = HostToSidecar::ApplyEditResult {
+            call_id: "w1".into(),
+            ok: false,
+            denied: Some(true),
+            version: None,
+            error: None,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"apply_edit_result\""), "{json}");
+        assert!(json.contains("\"callId\":\"w1\""), "{json}");
+        assert!(json.contains("\"denied\":true"), "{json}");
     }
 
-    fn tempdir() -> TempDir {
-        static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let mut path = std::env::temp_dir();
-        path.push(format!(
-            "floatnote-agent-{}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
-            NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&path).unwrap();
-        TempDir(path)
-    }
-
-    struct TempDir(std::path::PathBuf);
-    impl TempDir {
-        fn path(&self) -> &std::path::Path {
-            &self.0
+    #[test]
+    fn parses_note_text_line() {
+        let line = r#"{"type":"note_text","callId":"g1","content":"doc","found":true}"#;
+        let msg: HostToSidecar = serde_json::from_str(line).unwrap();
+        match msg {
+            HostToSidecar::NoteText { call_id, found, content, .. } => {
+                assert_eq!(call_id, "g1");
+                assert!(found);
+                assert_eq!(content, "doc");
+            }
+            _ => panic!("not NoteText"),
         }
     }
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
+
+    #[test]
+    fn round_trips_edit_preview_detail_variants() {
+        // diff
+        let diff = EditPreviewDetail::Diff { hunks: "@@".into() };
+        let v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&diff).unwrap()).unwrap();
+        assert_eq!(v["kind"], "diff");
+        assert_eq!(v["hunks"], "@@");
+        let back: EditPreviewDetail = serde_json::from_str(&serde_json::to_string(&diff).unwrap()).unwrap();
+        assert_eq!(back, diff);
+
+        // tag_create
+        let tc = EditPreviewDetail::TagCreate { tag_name: "review".into(), tag_color: "#e5484d".into() };
+        let v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&tc).unwrap()).unwrap();
+        assert_eq!(v["kind"], "tag_create");
+        assert_eq!(v["tagName"], "review");
+        assert_eq!(v["tagColor"], "#e5484d");
+
+        // tag_delete
+        let td = EditPreviewDetail::TagDelete { tag_name: "review".into(), marker_count: 3 };
+        let v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&td).unwrap()).unwrap();
+        assert_eq!(v["kind"], "tag_delete");
+        assert_eq!(v["tagName"], "review");
+        assert_eq!(v["markerCount"], 3);
+    }
+
+    #[test]
+    fn round_trips_get_note_text_line() {
+        let req = SidecarToHost::GetNoteText {
+            call_id: "g1".into(),
+            conversation_id: "c1".into(),
+            target: NoteTarget { kind: "piece".into(), name: Some("piece.md".into()) },
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"type\":\"get_note_text\""), "{json}");
+        assert!(json.contains("\"callId\":\"g1\""), "{json}");
+        assert!(json.contains("\"conversationId\":\"c1\""), "{json}");
+        assert!(json.contains("\"target\":{\"kind\":\"piece\",\"name\":\"piece.md\"}"), "{json}");
+        let back: SidecarToHost = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, req);
     }
 }
