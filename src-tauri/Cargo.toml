@@ -21,6 +21,7 @@ tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 trash = "5"
+base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 macos-accessibility-client = "0.0.1"
@@ -29,5 +30,4 @@ objc2 = "0.2"
 objc2-foundation = { version = "0.2", features = ["NSString", "NSData", "NSURL"] }
 objc2-app-kit = { version = "0.2", features = ["NSWorkspace", "NSRunningApplication", "NSImage"] }
 image = { version = "0.25", features = ["tiff", "png"] }
-base64 = "0.22"
 plist = "1.9"
