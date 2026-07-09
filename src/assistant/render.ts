@@ -42,6 +42,11 @@ export function emptyChat(): ChatState {
   return { messages: [] };
 }
 
+/** 当前是否正在流式输出（存在 streaming 的 assistant 气泡）。 */
+export function isChatStreaming(state: ChatState): boolean {
+  return state.messages.some((m) => m.role === "assistant" && m.streaming);
+}
+
 /** 纯函数：根据一条事件返回新状态（不变更入参）。 */
 export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
   switch (event.type) {

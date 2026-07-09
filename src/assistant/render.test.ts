@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { type ChatState, emptyChat, reduceEvents } from "./render";
+import { type ChatState, emptyChat, reduceEvents, isChatStreaming } from "./render";
 
 function run(events: Parameters<typeof reduceEvents>[1][]): ChatState {
   return events.reduce(reduceEvents, emptyChat());
@@ -252,5 +252,23 @@ describe("reduceEvents", () => {
       { role: "user", text: "你好" },
       { role: "assistant", text: "回答", streaming: true },
     ]);
+  });
+});
+
+describe("isChatStreaming", () => {
+  it("空状态不流式", () => {
+    expect(isChatStreaming(emptyChat())).toBe(false);
+  });
+  it("pending 事件后处于流式", () => {
+    let s = reduceEvents(emptyChat(), { type: "user", text: "hi" });
+    s = reduceEvents(s, { type: "pending" });
+    expect(isChatStreaming(s)).toBe(true);
+  });
+  it("done 事件后停止流式", () => {
+    let s = reduceEvents(emptyChat(), { type: "user", text: "hi" });
+    s = reduceEvents(s, { type: "pending" });
+    s = reduceEvents(s, { type: "delta", requestId: "r1", text: "x" });
+    s = reduceEvents(s, { type: "done", requestId: "r1" });
+    expect(isChatStreaming(s)).toBe(false);
   });
 });
