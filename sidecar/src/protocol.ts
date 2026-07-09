@@ -33,16 +33,32 @@ export type HostToSidecar =
       userText: string;
     }
   | {
-      type: "apply_write_result";
+      type: "apply_edit_result";
       callId: string;
       ok: boolean;
+      denied?: boolean;
       version?: number;
       error?: string;
     }
+  | { type: "note_text"; callId: string; content: string; found: boolean }
   | {
       type: "cancel";
       requestId: string;
     };
+
+export type NoteTarget = { kind: "inbox" | "tasks" | "piece" | "doc"; name?: string };
+
+export type EditPreviewDetail =
+  | { kind: "diff"; hunks: string }
+  | { kind: "tag_assign"; blockPreview: string; tagName: string; tagColor: string }
+  | { kind: "tag_create"; tagName: string; tagColor: string }
+  | { kind: "tag_delete"; tagName: string; markerCount: number };
+
+export interface EditPreview {
+  tool: string;
+  summary: string;
+  detail: EditPreviewDetail;
+}
 
 /** Sidecar → host messages. */
 export type SidecarToHost =
@@ -62,11 +78,16 @@ export type SidecarToHost =
       phase: "start" | "end";
     }
   | {
-      type: "apply_write";
+      type: "apply_edit";
       callId: string;
-      noteId: string;
-      content: string;
+      conversationId: string;
+      target: NoteTarget;
+      toolName: string;
+      oldContent: string;
+      newContent: string;
+      preview: EditPreview;
     }
+  | { type: "get_note_text"; callId: string; conversationId: string; target: NoteTarget }
   | { type: "done"; requestId: string; conversationId: string }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string };
