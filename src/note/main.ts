@@ -226,6 +226,7 @@ const editor = createEditor(
       }
     }),
   ],
+  { noteDirProvider: () => currentProject?.path ?? currentStartDir },
 );
 // 二级标签栏挂在采集区网格顶行（不在全局顶栏，也不受正文列宽限制）。
 tagBar = mountTagBar(editor);
@@ -257,7 +258,15 @@ const pieceEditor = createEditor(
     if (f) scheduleSave(f.path, doc);
   },
   [scrollerPositionTheme, placeholder("开始写……")],
-  { grow: true },
+  {
+    grow: true,
+    // pieceEditor is shared by project piece mode AND document mode. Branch on
+    // mode so document images land next to the document file, not the project dir.
+    noteDirProvider: () =>
+      mode === "document" && currentDocument
+        ? parentDir(currentDocument.path)
+        : (currentProject?.path ?? currentStartDir),
+  },
 );
 // 滑块挂在不滚动的 #piece-col 上，监听真正滚动的 #piece-scroll。
 requestAnimationFrame(() => initScrollbar(pieceCol, pieceScroll));
