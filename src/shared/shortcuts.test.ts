@@ -1,0 +1,113 @@
+import { describe, it, expect } from "vitest";
+import {
+  canonicalize,
+  checkConflict,
+  findAllConflicts,
+  eventToCombo,
+  WINDOW_SHORTCUT_DEFAULTS,
+  WINDOW_SHORTCUT_IDS,
+  type WindowShortcutId,
+} from "./shortcuts";
+
+function fakeKey(key: string, mods: { ctrl?: boolean; meta?: boolean; shift?: boolean; alt?: boolean }): KeyboardEvent {
+  return { key, ctrlKey: !!mods.ctrl, metaKey: !!mods.meta, shiftKey: !!mods.shift, altKey: !!mods.alt } as KeyboardEvent;
+}
+
+describe("eventToCombo", () => {
+  it("产出 Cmd/Ctrl+主键 格式；无修饰键或仅修饰键返回 null", () => {
+    expect(canonicalize(eventToCombo(fakeKey("j", { meta: true }))!)).toBe("Mod+J");
+    expect(canonicalize(eventToCombo(fakeKey("b", { ctrl: true }))!)).toBe("Mod+B");
+    expect(eventToCombo(fakeKey("j", {}))).toBeNull();
+    expect(eventToCombo(fakeKey("Shift", { shift: true }))).toBeNull();
+  });
+  it("保留 Shift/Alt", () => {
+    expect(canonicalize(eventToCombo(fakeKey("k", { meta: true, shift: true }))!)).toBe("Shift+Mod+K");
+    expect(canonicalize(eventToCombo(fakeKey("1", { meta: true }))!)).toBe("Mod+1");
+  });
+});
+
+describe("canonicalize", () => {
+  it("Cmd/Win/Ctrl/Meta 归一为 Mod，字母大写", () => {
+    expect(canonicalize("Cmd+J")).toBe("Mod+J");
+    expect(canonicalize("Ctrl+j")).toBe("Mod+J");
+    expect(canonicalize("Win+J")).toBe("Mod+J");
+  });
+  it("修饰键顺序统一为 Shift,Alt,Mod", () => {
+    expect(canonicalize("Cmd+Shift+U")).toBe("Shift+Mod+U");
+    expect(canonicalize("Alt+Cmd+C")).toBe("Alt+Mod+C");
+  });
+  it("符号与功能键原样", () => {
+    expect(canonicalize("Cmd+=")).toBe("Mod+=");
+    expect(canonicalize("Cmd+-")).toBe("Mod+-");
+    expect(canonicalize("Cmd+0")).toBe("Mod+0");
+    expect(canonicalize("Cmd+/")).toBe("Mod+/");
+    expect(canonicalize("Cmd+Enter")).toBe("Mod+Enter");
+  });
+});
+
+describe("checkConflict", () => {
+  const globals = { capture: "Alt+Cmd+C", toggle: "Alt+Cmd+N", popup: "Alt+Cmd+P" };
+  const all = () => ({ ...WINDOW_SHORTCUT_DEFAULTS });
+
+  it("保留键：Mod+A 与全选冲突", () => {
+    const r = checkConflict({ combo: "Cmd+A", id: "assistant", all: all(), globals });
+    expect(r?.kind).toBe("reserved");
+    expect(r?.message).toContain("全选");
+  });
+  it("保留键：Mod+W 系统关窗", () => {
+    const r = checkConflict({ combo: "Cmd+W", id: "assistant", all: all(), globals });
+    expect(r?.kind).toBe("reserved");
+    expect(r?.message).toContain("关闭窗口");
+  });
+  it("保留键：Mod+= 字号", () => {
+    const r = checkConflict({ combo: "Cmd+=", id: "assistant", all: all(), globals });
+    expect(r?.kind).toBe("reserved");
+    expect(r?.message).toContain("字号");
+  });
+  it("保留键：Shift+Mod+K（CM 占用）", () => {
+    const r = checkConflict({ combo: "Cmd+Shift+K", id: "assistant", all: all(), globals });
+    expect(r?.kind).toBe("reserved");
+  });
+  it("窗内重复：与另一项相同", () => {
+    const a = all();
+    a.action_panel = "Cmd+J"; // 与 assistant 默认相同
+    const r = checkConflict({ combo: "Cmd+J", id: "action_panel", all: a, globals });
+    expect(r?.kind).toBe("window");
+    expect(r?.message).toContain("切换 AI 助手");
+  });
+  it("撞全局快捷键", () => {
+    const r = checkConflict({ combo: "Alt+Cmd+C", id: "assistant", all: all(), globals });
+    expect(r?.kind).toBe("global");
+    expect(r?.message).toContain("划线引用");
+  });
+  it("合法组合返回 null", () => {
+    expect(checkConflict({ combo: "Cmd+J", id: "assistant", all: all(), globals })).toBeNull();
+  });
+  it("不与自身重复", () => {
+    const r = checkConflict({ combo: "Cmd+J", id: "assistant", all: all(), globals });
+    expect(r).toBeNull();
+  });
+});
+
+describe("findAllConflicts", () => {
+  it("无冲突时返回空对象", () => {
+    expect(Object.keys(findAllConflicts({ ...WINDOW_SHORTCUT_DEFAULTS }, {
+      capture: "Alt+Cmd+C", toggle: "Alt+Cmd+N", popup: "Alt+Cmd+P",
+    }))).toHaveLength(0);
+  });
+  it("标记所有冲突项", () => {
+    const all = { ...WINDOW_SHORTCUT_DEFAULTS, action_panel: "Cmd+J" }; // 撞 assistant
+    const r = findAllConflicts(all, { capture: "Alt+Cmd+C", toggle: "Alt+Cmd+N", popup: "Alt+Cmd+P" });
+    expect(r.assistant?.kind).toBe("window");
+    expect(r.action_panel?.kind).toBe("window");
+  });
+});
+
+describe("defaults", () => {
+  it("8 项默认值齐备", () => {
+    expect(WINDOW_SHORTCUT_IDS).toHaveLength(8);
+    for (const id of WINDOW_SHORTCUT_IDS) {
+      expect(typeof WINDOW_SHORTCUT_DEFAULTS[id as WindowShortcutId]).toBe("string");
+    }
+  });
+});
