@@ -13,33 +13,39 @@ interface Active {
 let active: Active | null = null;
 let toolbarEl: HTMLElement | null = null;
 
-/** Find the Image node (plus trailing `{...}`) whose widget produced `figure`,
- *  returning its [from, to] source range. Matches by comparing the parsed
- *  caption to the figure's `<img>.alt` — intentionally simple; two images with
- *  the same caption could mismatch (v1 acceptable). First document-order match
- *  wins to keep the result deterministic. */
+/** Find the Image node (plus trailing `{...}`) whose widget produced `figure`.
+ *  Looks up the doc position of the figure DOM via `posAtDOM` (the widget's
+ *  `from`) and resolves the Image syntax node containing that position, then
+ *  extends `to` over a trailing `{...}` block scoped to the same line (mirrors
+ *  preview.ts). Robust regardless of caption content — caption matching was
+ *  dropped because most pasted images share an empty caption, so the first
+ *  document-order match silently rewrote the WRONG image. Returns null if the
+ *  position is not inside an Image node (e.g. widget torn down mid-drag). */
 function locateImageRange(
   view: EditorView,
   figure: HTMLElement,
 ): { from: number; to: number; raw: string } | null {
+  const pos = view.posAtDOM(figure);
   let found: { from: number; to: number; raw: string } | null = null;
   syntaxTree(view.state).iterate({
     enter(node) {
-      if (found) return; // keep first match
+      if (found) return;
       if (node.name !== "Image") return;
+      // The widget's `from` equals the Image node's `from`; accept the node
+      // whose [from, to) contains `pos`.
+      if (pos < node.from || pos >= node.to) return;
       let to = node.to;
-      if (view.state.doc.sliceString(node.to, node.to + 1) === "{") {
-        const close = view.state.doc.sliceString(node.to).indexOf("}");
+      const after = view.state.doc.sliceString(node.to, node.to + 1);
+      if (after === "{") {
+        const line = view.state.doc.lineAt(node.to);
+        const close = view.state.doc.sliceString(node.to, line.to).indexOf("}");
         if (close >= 0) to = node.to + close + 1;
       }
-      const img = figure.querySelector("img");
-      if (!img) return;
-      const alt = img.alt;
-      const slice = view.state.doc.sliceString(node.from, to);
-      const parsed = parseImage(slice);
-      if (parsed && parsed.caption === alt) {
-        found = { from: node.from, to, raw: slice };
-      }
+      found = {
+        from: node.from,
+        to,
+        raw: view.state.doc.sliceString(node.from, to),
+      };
     },
   });
   return found;
@@ -160,24 +166,36 @@ function openToolbar(view: EditorView, figure: HTMLElement): void {
   bar.appendChild(input);
 
   // Resize handle: pointer-drag changes img.style.width live; on release the
-  // width is written back (rounded, min 40px).
+  // width is written back (rounded, min 40px). Re-query the img on every
+  // handler: after a writeSource + reattach (align click, or a prior resize's
+  // pointerup) the preview plugin rebuilds ImgWidget (its `eq` is keyed on
+  // `raw`, which changed), discarding the old figure DOM. `reattach` updates
+  // `active.figure` but a captured `img` const would still point at the
+  // detached old img (offsetWidth → 0, no live preview, width anchored to 0).
   const handle = document.createElement("div");
   handle.className = "cm-img-resize-handle";
   bar.appendChild(handle);
   let dragging = false;
   let startX = 0;
   let startW = 0;
-  const img = figure.querySelector("img")!;
   handle.onpointerdown = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!active) return;
+    const img = active.figure.querySelector("img");
+    if (!img) return; // figure torn down
     dragging = true;
     startX = e.clientX;
     startW = img.offsetWidth;
     handle.setPointerCapture(e.pointerId);
   };
   handle.onpointermove = (e) => {
-    if (!dragging) return;
+    if (!dragging || !active) return;
+    const img = active.figure.querySelector("img");
+    if (!img) {
+      dragging = false;
+      return;
+    }
     const w = Math.max(40, Math.round(startW + (e.clientX - startX)));
     img.style.width = `${w}px`;
   };
@@ -185,6 +203,9 @@ function openToolbar(view: EditorView, figure: HTMLElement): void {
     if (!dragging) return;
     dragging = false;
     handle.releasePointerCapture(e.pointerId);
+    if (!active) return;
+    const img = active.figure.querySelector("img");
+    if (!img) return; // figure torn down mid-drag — abort
     const w = Math.max(40, Math.round(startW + (e.clientX - startX)));
     const cur = currentAttrs();
     writeSource({ ...cur, width: w });
