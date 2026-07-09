@@ -38,6 +38,7 @@ import {
   loadNote,
   onConflict,
   openDocumentFromFile,
+  openExistingProject,
   renameNote,
   renameProject,
   resolveDocuments,
@@ -51,7 +52,7 @@ import {
   type NoteEntry,
   type ProjectEntry,
 } from "./notes-state";
-import { parentDir, pushRecent } from "./recent-projects";
+import { parentDir, pushRecent, removeFromRecent } from "./recent-projects";
 import { initScrollbar } from "./scrollbar";
 import { renderEmptyState } from "./empty-state";
 import {
@@ -141,9 +142,10 @@ function renderWindowState(state: WindowState) {
       cleanupBodyEmpty = renderEmptyState(bodyEmptyRoot, {
         icon: "✍️",
         title: "欢迎来到 FloatNote",
-        hint: "还没有项目空间。新建一个项目开始写作，或直接新建一篇独立文档。",
+        hint: "还没有项目空间。新建一个项目开始写作，打开已有文件夹，或直接新建一篇独立文档。",
         primary: { label: "新建项目", action: () => void createDefaultProject() },
         secondary: { label: "新建文档", action: () => void createStandaloneDocument() },
+        tertiary: { label: "打开现有项目", action: () => void openExistingProjectFlow() },
       });
       break;
     case "PATH_ERROR":
@@ -922,17 +924,33 @@ async function showProjectSwitcher(anchor: HTMLElement) {
             closeMenu();
             void openProject(project);
           },
-          onRename: (host) =>
-            void promptRename(host, project.name, async (name) => {
-              const newPath = await renameProject(project.path, name);
-              recent = recent.map((p) => (p === project.path ? newPath : p));
-              await setRecentProjects(recent);
-              if (mode === "project" && currentProject?.path === project.path) {
-                currentProject = { name, path: newPath };
-                setProjectLabel(name);
-              }
-            }),
-          onDelete: () => void deleteProjectFlow(project),
+          actions: [
+            {
+              label: "重命名",
+              icon: "ph-pencil-simple",
+              onClick: (host) =>
+                void promptRename(host, project.name, async (name) => {
+                  const newPath = await renameProject(project.path, name);
+                  recent = recent.map((p) => (p === project.path ? newPath : p));
+                  await setRecentProjects(recent);
+                  if (mode === "project" && currentProject?.path === project.path) {
+                    currentProject = { name, path: newPath };
+                    setProjectLabel(name);
+                  }
+                }),
+            },
+            {
+              label: "从最近列表移除",
+              icon: "ph-minus-circle",
+              onClick: () => void removeProjectFromRecent(project),
+            },
+            {
+              label: "删除（移到废纸篓）",
+              icon: "ph-trash",
+              danger: true,
+              onClick: () => void deleteProjectFlow(project),
+            },
+          ],
         }),
       );
     }
@@ -957,18 +975,34 @@ async function showProjectSwitcher(anchor: HTMLElement) {
             closeMenu();
             void openDocument(doc);
           },
-          onRename: (host) =>
-            void promptRename(host, doc.name, async (name) => {
-              const newPath = await renameNote(parentDir(doc.path), doc.name, name);
-              recentDocs = recentDocs.map((p) => (p === doc.path ? newPath : p));
-              await setRecentDocuments(recentDocs);
-              if (mode === "document" && currentDocument?.path === doc.path) {
-                currentDocument = { name, path: newPath };
-                setProjectLabel(name);
-                pieceHeader?.setLabel(name);
-              }
-            }),
-          onDelete: () => void deleteDocumentFlow(doc),
+          actions: [
+            {
+              label: "重命名",
+              icon: "ph-pencil-simple",
+              onClick: (host) =>
+                void promptRename(host, doc.name, async (name) => {
+                  const newPath = await renameNote(parentDir(doc.path), doc.name, name);
+                  recentDocs = recentDocs.map((p) => (p === doc.path ? newPath : p));
+                  await setRecentDocuments(recentDocs);
+                  if (mode === "document" && currentDocument?.path === doc.path) {
+                    currentDocument = { name, path: newPath };
+                    setProjectLabel(name);
+                    pieceHeader?.setLabel(name);
+                  }
+                }),
+            },
+            {
+              label: "从最近列表移除",
+              icon: "ph-minus-circle",
+              onClick: () => void removeDocumentFromRecent(doc),
+            },
+            {
+              label: "删除（移到废纸篓）",
+              icon: "ph-trash",
+              danger: true,
+              onClick: () => void deleteDocumentFlow(doc),
+            },
+          ],
         }),
       );
     }
@@ -1020,15 +1054,49 @@ function emptySectionHint(text: string): HTMLElement {
   return h;
 }
 
+interface RowAction {
+  label: string;
+  /** Phosphor icon class without the `ph ` prefix, e.g. `ph-pencil-simple`. */
+  icon: string;
+  /** Danger actions render red (e.g. delete). */
+  danger?: boolean;
+  /** Receives the row element so rename can replace it in-place. */
+  onClick: (row: HTMLElement) => void;
+}
+
 interface SwitcherRowOpts {
   label: string;
   active?: boolean;
   onOpen: () => void;
-  onRename: (host: HTMLElement) => void;
-  onDelete: () => void;
+  actions: RowAction[];
 }
 
-/** 切换菜单的一行：左侧标签（点击打开），右侧悬停露出重命名 / 删除。
+/** Build the kebab submenu items for a row. Each item closes the submenu then
+ * runs its action, passing the row element (rename replaces it in-place).
+ * Reuses `makeSubmenuItem` so styling/keyboard behavior match the section `+`
+ * submenus. */
+function buildKebabItems(row: HTMLElement, actions: RowAction[]): HTMLElement[] {
+  return actions.map((a) => {
+    const item = makeSubmenuItem(`<i class="ph ${a.icon}"></i> ${a.label}`, {
+      onClick: () => {
+        closeSubmenu();
+        a.onClick(row);
+      },
+    });
+    if (a.danger) item.classList.add("danger");
+    return item;
+  });
+}
+
+/** Open the kebab submenu anchored to `trigger`. Reuses the section-header
+ * submenu infra: a single live submenu at a time, click-away and Esc handled by
+ * `openSubmenu`. */
+function openRowKebab(trigger: HTMLElement, row: HTMLElement, actions: RowAction[]) {
+  openSubmenu(trigger, buildKebabItems(row, actions));
+}
+
+/** 切换菜单的一行：左侧标签（点击打开），右侧悬停露出一个 `⋯` kebab 按钮，
+ * 点击展开二级菜单承载行操作（重命名 / 移除 / 删除…）。
  * 行体是 div（而非 button），避免 button-in-button 嵌套。
  * 不再为每行渲染图标——区块标题的图标已代表类别，行内只留名称。 */
 function makeSwitcherRow(opts: SwitcherRowOpts): HTMLElement {
@@ -1044,28 +1112,27 @@ function makeSwitcherRow(opts: SwitcherRowOpts): HTMLElement {
     opts.onOpen();
   };
 
-  const renameBtn = document.createElement("button");
-  renameBtn.className = "switch-row-action";
-  renameBtn.title = "重命名";
-  renameBtn.innerHTML = `<i class="ph ph-pencil-simple"></i>`;
-  renameBtn.onclick = (e) => {
+  const kebab = document.createElement("button");
+  kebab.type = "button";
+  kebab.className = "switch-row-action switch-row-kebab";
+  kebab.title = "更多";
+  kebab.setAttribute("aria-label", "更多操作");
+  kebab.setAttribute("aria-haspopup", "menu");
+  kebab.setAttribute("aria-expanded", "false");
+  kebab.innerHTML = `<i class="ph ph-dots-three-vertical"></i>`;
+  kebab.onclick = (e) => {
     e.stopPropagation();
-    opts.onRename(row);
-  };
-
-  const deleteBtn = document.createElement("button");
-  deleteBtn.className = "switch-row-action switch-row-delete";
-  deleteBtn.title = "删除";
-  deleteBtn.innerHTML = `<i class="ph ph-trash"></i>`;
-  deleteBtn.onclick = (e) => {
-    e.stopPropagation();
-    opts.onDelete();
+    // 再次点击同一个 kebab 收起子菜单。
+    if (submenuTrigger === kebab) {
+      closeSubmenu();
+      return;
+    }
+    openRowKebab(kebab, row, opts.actions);
   };
 
   const actions = document.createElement("div");
   actions.className = "switch-row-actions";
-  actions.appendChild(renameBtn);
-  actions.appendChild(deleteBtn);
+  actions.appendChild(kebab);
 
   row.appendChild(label);
   row.appendChild(actions);
@@ -1161,6 +1228,59 @@ async function deleteDocumentFlow(doc: NoteEntry) {
   }
 }
 
+/** 从最近列表移除项目（不删磁盘文件、不弹确认）。与 deleteProjectFlow 同构地处理
+ * "移除的是当前打开项"——清状态后回 bootstrap 重定位。被移除的文件夹仍在原地，
+ * 下次「打开现有项目」选同一文件夹即可找回。 */
+async function removeProjectFromRecent(project: ProjectEntry) {
+  recent = removeFromRecent(recent, project.path);
+  await setRecentProjects(recent);
+  const wasActive = mode === "project" && currentProject?.path === project.path;
+  closeMenu();
+  if (wasActive) {
+    currentProject = null;
+    current = null;
+    currentPiece = null;
+    await bootstrapProjects(await getConfig());
+  }
+}
+
+/** 从最近列表移除文档（不删磁盘文件、不弹确认）。镜像 removeProjectFromRecent。 */
+async function removeDocumentFromRecent(doc: NoteEntry) {
+  recentDocs = removeFromRecent(recentDocs, doc.path);
+  await setRecentDocuments(recentDocs);
+  const wasActive = mode === "document" && currentDocument?.path === doc.path;
+  closeMenu();
+  if (wasActive) {
+    currentDocument = null;
+    if (currentProject) {
+      try {
+        await openProject(currentProject);
+        return;
+      } catch (err) {
+        console.error("return to project failed", err);
+      }
+    }
+    await bootstrapProjects(await getConfig());
+  }
+}
+
+/** 「打开现有项目」：选一个已有文件夹；后端无 `_inbox.md` 则自动建空 Inbox，
+ * 再加入 MRU 并打开。working_dir 由后端落盘为该文件夹父目录，前端镜像到
+ * currentStartDir 使后续「在当前目录新建」指向新父目录。 */
+async function openExistingProjectFlow() {
+  const picked = await open({ directory: true, multiple: false });
+  if (typeof picked !== "string") return;
+  try {
+    const project = await openExistingProject(picked);
+    currentStartDir = parentDir(project.path);
+    await rememberProject(project.path);
+    await openProject(project);
+  } catch (err) {
+    console.error("open existing project failed", err);
+    showToast("无法打开该文件夹：" + String(err));
+  }
+}
+
 /** 在锚点（项目名按钮）下方重建一个空的最小浮层，用于承载命名输入框。
  * 用于「选择位置新建」等会弹原生对话框、可能令主菜单已被外点击关闭的场景。 */
 function rebuildMenuAtAnchor(): HTMLElement | null {
@@ -1203,6 +1323,13 @@ function openProjectAddSubmenu(trigger: HTMLButtonElement) {
           return;
         }
         beginNewProjectName(parent);
+      },
+    }),
+    makeSubmenuItem(`<i class="ph ph-folder-open"></i> 打开现有项目…`, {
+      onClick: async () => {
+        closeSubmenu();
+        closeMenu();
+        await openExistingProjectFlow();
       },
     }),
   ];

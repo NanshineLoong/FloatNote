@@ -111,6 +111,13 @@ export async function createProject(root: string, name: string): Promise<Project
   return invoke<ProjectEntry>("create_project", { root, name });
 }
 
+/** Open an existing folder as a project space. Ensures `_inbox.md` exists (the
+ * backend scaffolds an empty one if missing; the folder itself is never
+ * created). The backend also persists `working_dir` to the folder's parent. */
+export async function openExistingProject(dir: string): Promise<ProjectEntry> {
+  return invoke<ProjectEntry>("open_existing_project", { dir });
+}
+
 /** Resolve an MRU list of standalone-document paths to the ones still on disk,
  * preserving order. Mirrors `resolveProjects` for loose `.md` files. */
 export async function resolveDocuments(paths: string[]): Promise<NoteEntry[]> {

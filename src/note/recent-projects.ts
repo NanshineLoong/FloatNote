@@ -11,6 +11,14 @@ export function pushRecent(list: string[], path: string, limit = RECENT_LIMIT): 
   return next.slice(0, limit);
 }
 
+/** Return a new list with `path` removed, preserving order. No-op (returns a
+ * shallow copy) when the path is absent. The input is not mutated. Used by
+ * "remove from recent" — drops the path from the MRU without touching the file
+ * on disk, so the project can be re-added by opening it again. */
+export function removeFromRecent(list: string[], path: string): string[] {
+  return list.filter((entry) => entry !== path);
+}
+
 /** Parent directory of a project folder path, separator-correct for both
  * POSIX (`/`) and Windows (`\\`). Used to create a sibling project. */
 export function parentDir(projectPath: string): string {
