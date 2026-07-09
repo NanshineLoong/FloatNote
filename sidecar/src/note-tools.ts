@@ -2,7 +2,7 @@ import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent
 import { Type } from "typebox";
 import {
   replaceOnce, findBlockByAnchor, setBlockTagChange, addTagDefChange,
-  deleteTagChanges, parseDefs, stripTagMarker, blockTagId, type BlockRange,
+  deleteTagChanges, parseDefs,
 } from "@floatnote/note-logic";
 import type { NoteTarget, EditPreview } from "./protocol.js";
 
@@ -169,7 +169,7 @@ function applyChange(doc: string, c: { from: number; to: number; insert: string 
 }
 function applyChanges(doc: string, cs: { from: number; to: number; insert: string }[]): string {
   let out = doc;
-  for (const c of [...cs].sort((a, b) => a.from - b.from)) out = applyChange(out, c);
+  for (const c of [...cs].sort((a, b) => b.from - a.from)) out = applyChange(out, c);
   return out;
 }
 function countMarkers(doc: string, id: string): number {

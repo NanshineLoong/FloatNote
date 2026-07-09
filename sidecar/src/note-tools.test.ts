@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import { createNoteTools, type NoteToolDeps } from "./note-tools.js";
-import type { NoteTarget, EditPreview } from "./protocol.js";
 
 function makeDups(noteText: string): { deps: NoteToolDeps; writes: any[] } {
   const writes: any[] = [];
@@ -13,8 +12,6 @@ function makeDups(noteText: string): { deps: NoteToolDeps; writes: any[] } {
   };
   return { deps, writes };
 }
-
-const inbox: NoteTarget = { kind: "inbox" };
 
 describe("edit_note", () => {
   it("replaces unique substring", async () => {
@@ -64,5 +61,24 @@ describe("list_tags", () => {
     const lt = tools.find((t) => t.name === "list_tags")!;
     const r = await (lt as any).execute("id", {});
     expect(r.content[0].text).toContain("review");
+  });
+});
+
+describe("tag_delete", () => {
+  it("removes defs entry and all block markers (multi-marker)", async () => {
+    const note =
+      "<!-- floatnote-tags: review=\"复习\"|c=#e5484d -->\n\n" +
+      "<!-- floatnote:tag=review -->\n第一块\n\n" +
+      "<!-- floatnote:tag=review -->\n第二块\n";
+    const { deps, writes } = makeDups(note);
+    const tools = createNoteTools(deps);
+    const del = tools.find((t) => t.name === "tag_delete")!;
+    await (del as any).execute("id", { tagId: "review" });
+    expect(writes[0].newContent).not.toContain("floatnote:tag=review");
+    expect(writes[0].newContent).not.toContain("floatnote-tags: review");
+    expect(writes[0].newContent).toContain("第一块");
+    expect(writes[0].newContent).toContain("第二块");
+    expect(writes[0].preview.detail.kind).toBe("tag_delete");
+    expect(writes[0].preview.detail.markerCount).toBe(2);
   });
 });
