@@ -1,0 +1,146 @@
+import { canonicalize, eventToCombo, type WindowShortcutId } from "../shared/shortcuts";
+
+/**
+ * 笔记窗中央快捷键分派：唯一一个 document keydown 监听，
+ * 分派可绑定组合（助手/气泡/行动/视图/新对话）+ Esc 优先级链 + 字号固定项。
+ * 纯函数（resolveEsc/resolveBoundCombo/viewTargetFor）可单测；installShortcuts 是薄 DOM 包装。
+ */
+
+export interface Bindings {
+  /** canonical combo → action id */
+  map: Map<string, WindowShortcutId>;
+}
+
+export function buildBindings(values: Record<WindowShortcutId, string>): Bindings {
+  const map = new Map<string, WindowShortcutId>();
+  for (const id of Object.keys(values) as WindowShortcutId[]) {
+    map.set(canonicalize(values[id]), id);
+  }
+  return { map };
+}
+
+export function resolveBoundCombo(combo: string | null, bindings: Bindings): WindowShortcutId | null {
+  if (!combo) return null;
+  return bindings.map.get(canonicalize(combo)) ?? null;
+}
+
+export function viewTargetFor(
+  id: WindowShortcutId,
+  canSplit: boolean,
+): "inbox" | "piece" | "split" | null {
+  if (id === "view_inbox") return "inbox";
+  if (id === "view_piece") return "piece";
+  if (id === "view_split") return canSplit ? "split" : "piece";
+  return null;
+}
+
+export interface EscContext {
+  historyPopoverOpen: boolean;
+  focusInAssistant: boolean;
+  streaming: boolean;
+  actionPanelOpen: boolean;
+  bubbleOpen: boolean;
+}
+
+export type EscAction =
+  | "closeHistoryPopover"
+  | "cancelAssistant"
+  | "closeActionPanel"
+  | "collapseBubble";
+
+export function resolveEsc(ctx: EscContext): EscAction | null {
+  if (ctx.historyPopoverOpen) return "closeHistoryPopover";
+  if (ctx.focusInAssistant && ctx.streaming) return "cancelAssistant";
+  if (ctx.actionPanelOpen) return "closeActionPanel";
+  if (ctx.bubbleOpen) return "collapseBubble";
+  return null;
+}
+
+export interface ShortcutActions {
+  toggleAssistant(): void;
+  toggleAssistantBubble(): void;
+  toggleActionPanel(): void;
+  quickAddAction(): void;
+  selectView(v: "inbox" | "piece" | "split"): void;
+  startNewConversation(): void;
+  isAssistantStreaming(): boolean;
+  cancelAssistant(): void;
+  isActionPanelOpen(): boolean;
+  closeActionPanel(): void;
+  isAssistantBubbleOpen(): boolean;
+  collapseAssistantBubble(): void;
+  isHistoryPopoverOpen(): boolean;
+  closeHistoryPopover(): void;
+  canSplit(): boolean;
+  bumpFont(delta: number): void; // +1 / -1 / 0 复位
+}
+
+function isFocusInAssistant(): boolean {
+  const el = document.activeElement;
+  return el instanceof Element && !!el.closest("#assistant-region");
+}
+
+function runBound(id: WindowShortcutId, a: ShortcutActions): void {
+  switch (id) {
+    case "assistant": a.toggleAssistant(); break;
+    case "assistant_bubble": a.toggleAssistantBubble(); break;
+    case "action_panel": a.toggleActionPanel(); break;
+    case "add_action": a.quickAddAction(); break;
+    case "new_conversation": a.startNewConversation(); break;
+    case "view_inbox": a.selectView("inbox"); break;
+    case "view_piece": a.selectView("piece"); break;
+    case "view_split": a.selectView(viewTargetFor("view_split", a.canSplit()) ?? "piece"); break;
+  }
+}
+
+function runEsc(act: EscAction, a: ShortcutActions): void {
+  switch (act) {
+    case "closeHistoryPopover": a.closeHistoryPopover(); break;
+    case "cancelAssistant": a.cancelAssistant(); break;
+    case "closeActionPanel": a.closeActionPanel(); break;
+    case "collapseBubble": a.collapseAssistantBubble(); break;
+  }
+}
+
+export function installShortcuts(actions: ShortcutActions, bindings: Bindings): () => void {
+  const handler = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      const act = resolveEsc({
+        historyPopoverOpen: actions.isHistoryPopoverOpen(),
+        focusInAssistant: isFocusInAssistant(),
+        streaming: actions.isAssistantStreaming(),
+        actionPanelOpen: actions.isActionPanelOpen(),
+        bubbleOpen: actions.isAssistantBubbleOpen(),
+      });
+      if (act) {
+        e.preventDefault();
+        runEsc(act, actions);
+      }
+      return;
+    }
+    const mod = e.metaKey || e.ctrlKey;
+    if (!mod) return;
+    if (e.key === "=" || e.key === "+") {
+      e.preventDefault();
+      actions.bumpFont(1);
+      return;
+    }
+    if (e.key === "-") {
+      e.preventDefault();
+      actions.bumpFont(-1);
+      return;
+    }
+    if (e.key === "0") {
+      e.preventDefault();
+      actions.bumpFont(0);
+      return;
+    }
+    const id = resolveBoundCombo(eventToCombo(e), bindings);
+    if (id) {
+      e.preventDefault();
+      runBound(id, actions);
+    }
+  };
+  document.addEventListener("keydown", handler);
+  return () => document.removeEventListener("keydown", handler);
+}

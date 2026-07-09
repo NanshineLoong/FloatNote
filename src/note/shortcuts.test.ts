@@ -1,0 +1,71 @@
+import { describe, it, expect } from "vitest";
+import {
+  buildBindings,
+  resolveEsc,
+  resolveBoundCombo,
+  viewTargetFor,
+} from "./shortcuts";
+import { WINDOW_SHORTCUT_DEFAULTS } from "../shared/shortcuts";
+
+describe("buildBindings + resolveBoundCombo", () => {
+  const bindings = buildBindings({ ...WINDOW_SHORTCUT_DEFAULTS });
+  it("命中默认键", () => {
+    expect(resolveBoundCombo("Cmd+J", bindings)).toBe("assistant");
+    expect(resolveBoundCombo("Ctrl+J", bindings)).toBe("assistant"); // Ctrl≡Cmd
+    expect(resolveBoundCombo("Cmd+1", bindings)).toBe("view_inbox");
+  });
+  it("未命中返回 null", () => {
+    expect(resolveBoundCombo("Cmd+Z", bindings)).toBeNull();
+    expect(resolveBoundCombo(null, bindings)).toBeNull();
+  });
+});
+
+describe("viewTargetFor", () => {
+  it("双栏在窄窗回落写作", () => {
+    expect(viewTargetFor("view_split", true)).toBe("split");
+    expect(viewTargetFor("view_split", false)).toBe("piece");
+  });
+  it("采集/写作直达", () => {
+    expect(viewTargetFor("view_inbox", false)).toBe("inbox");
+    expect(viewTargetFor("view_piece", false)).toBe("piece");
+  });
+  it("非视图项返回 null", () => {
+    expect(viewTargetFor("assistant", true)).toBeNull();
+  });
+});
+
+describe("resolveEsc 优先级链", () => {
+  const base = {
+    historyPopoverOpen: false,
+    focusInAssistant: false,
+    streaming: false,
+    actionPanelOpen: false,
+    bubbleOpen: false,
+  };
+  it("1. 历史浮层最优先", () => {
+    expect(
+      resolveEsc({ ...base, historyPopoverOpen: true, actionPanelOpen: true, bubbleOpen: true }),
+    ).toBe("closeHistoryPopover");
+  });
+  it("2. 焦点在助手+流式 → 取消回复（优先于行动面板）", () => {
+    expect(
+      resolveEsc({ ...base, focusInAssistant: true, streaming: true, actionPanelOpen: true }),
+    ).toBe("cancelAssistant");
+  });
+  it("流式但焦点不在助手 → 不取消，落到行动面板", () => {
+    expect(
+      resolveEsc({ ...base, focusInAssistant: false, streaming: true, actionPanelOpen: true }),
+    ).toBe("closeActionPanel");
+  });
+  it("3. 行动面板开 → 关面板（优先于气泡）", () => {
+    expect(
+      resolveEsc({ ...base, actionPanelOpen: true, bubbleOpen: true }),
+    ).toBe("closeActionPanel");
+  });
+  it("4. 气泡展开 → 收起", () => {
+    expect(resolveEsc({ ...base, bubbleOpen: true })).toBe("collapseBubble");
+  });
+  it("5. 全关 → null", () => {
+    expect(resolveEsc(base)).toBeNull();
+  });
+});
