@@ -457,8 +457,9 @@ pub fn resolve_permission(
         });
         return Ok(());
     }
-    // 先落盘（含并发校验与可选拍快照）；can_snapshot 由 handle_apply_edit 据
+    // 先标记自身写入，再落盘（含并发校验与可选拍快照）；can_snapshot 由 handle_apply_edit 据
     // 解析后的 kind 预先算好存于 PendingEdit，resolve_permission 不再重算。
+    crate::watcher::mark_self_write(&state.write_suppress, &p.path);
     let outcome = crate::agent::handle_apply_edit_at(
         &p.dir,
         &p.note_id,
@@ -468,9 +469,8 @@ pub fn resolve_permission(
         &write_mode,
         p.can_snapshot,
     );
-    // 仅在成功时抑制 watcher + 广播 note://updated。失败时不动前端。
+    // 仅在成功时广播 note://updated。失败时不动前端。
     if outcome.ok {
-        crate::watcher::mark_self_write(&state.write_suppress, &p.path);
         let _ = app.emit(
             "note://updated",
             &NoteUpdated {

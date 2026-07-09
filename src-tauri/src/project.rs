@@ -131,7 +131,7 @@ pub fn create_project(root: &Path, name: &str) -> std::io::Result<ProjectEntry> 
     let base = sanitize_folder_name(name);
     let dir = unique_dir(root, &base);
     std::fs::create_dir_all(&dir)?;
-    std::fs::write(dir.join(INBOX_FILE), "")?;
+    crate::notes::write_atomic(&dir.join(INBOX_FILE), "")?;
     Ok(ProjectEntry {
         name: dir.file_name().unwrap().to_string_lossy().to_string(),
         path: dir.to_string_lossy().to_string(),

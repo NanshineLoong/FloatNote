@@ -154,7 +154,7 @@ export async function createDocument(): Promise<NoteEntry | null> {
   // `save` does not auto-append the extension when the user omits it; force .md
   // so the file is recognized as a standalone document later.
   const path = /\.md$/i.test(target) ? target : `${target}.md`;
-  await invoke("write_note", { path, content: "" });
+  await invoke("write_note", { path, content: "", expectedMtime: null });
   const name = path.split(/[\\/]/).pop()!.replace(/\.md$/i, "");
   return { name, path };
 }
@@ -327,4 +327,3 @@ export function __resetSaveStateForTests(): void {
   lastKnown.clear();
   conflictHandler = null;
 }
-

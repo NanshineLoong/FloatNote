@@ -348,9 +348,7 @@ function mountPieceHeader() {
         pieceEditor.state.doc.toString(),
         v,
       );
-      applyingRemote = true;
-      setDoc(pieceEditor, restored);
-      applyingRemote = false;
+      applyRemoteTo(pieceEditor, restored);
     },
     onEmptied: () => {
       // 当前 piece 被删且项目已无 piece：清掉引用，切到 NO_PIECE 空态。
@@ -374,9 +372,7 @@ function mountPieceHeader() {
 async function openPiece(entry: NoteEntry) {
   currentPiece = entry;
   pieceHeader?.setLabel(entry.name);
-  applyingRemote = true;
-  setDoc(pieceEditor, await loadNote(entry.path));
-  applyingRemote = false;
+  applyRemoteTo(pieceEditor, await loadNote(entry.path));
 }
 
 /** 打开一个独立文档：切到文档模式，复用 pieceEditor 渲染该文件。 */
@@ -397,9 +393,7 @@ async function openDocument(doc: NoteEntry) {
   await setRecentDocuments(recentDocs);
   setProjectLabel(doc.name);
   clearEmptyState();
-  applyingRemote = true;
-  setDoc(pieceEditor, await loadNote(doc.path));
-  applyingRemote = false;
+  applyRemoteTo(pieceEditor, await loadNote(doc.path));
   pieceHeader?.setLabel(doc.name);
   applyView();
   void invoke("set_active_note", { dir: parentDir(doc.path), noteId: doc.name, path: doc.path, kind: "doc" });
@@ -470,10 +464,17 @@ const tasksPanel = createTasksPanel(noteBody, {
 });
 
 /** 用 AI/外部写入的新内容覆盖编辑器，不触发本地 autosave。 */
-function applyRemoteDoc(content: string) {
+function applyRemoteTo(view: EditorView, content: string) {
   applyingRemote = true;
-  setDoc(editor, content);
-  applyingRemote = false;
+  try {
+    setDoc(view, content);
+  } finally {
+    applyingRemote = false;
+  }
+}
+
+function applyRemoteDoc(content: string) {
+  applyRemoteTo(editor, content);
 }
 
 const assistantHandle: AssistantHandle = mountAssistant(assistantRegion, {
@@ -504,6 +505,13 @@ const assistantHandle: AssistantHandle = mountAssistant(assistantRegion, {
   subscribe: (cb) => onAgentEvent(cb),
   cancel: (requestId) => { void agentCancel(requestId); },
 });
+
+async function toggleAssistantFromChrome() {
+  const next = await invoke<{ open: boolean }>("toggle_assistant");
+  layoutController?.setAssistantOpen(next.open);
+  tasksPanel.syncLayout();
+  assistantHandle.setInputOpen(next.open);
+}
 
 void listen<ChatConversation>("chat://open", (event) => {
   void openConversationFromHistory(event.payload);
@@ -569,9 +577,7 @@ void onNoteUpdated(async (payload) => {
   // 成品 / 独立文档被 AI 改写（文档模式无文件监听，靠这条热刷新）。
   const f = activePieceFile();
   if (f && payload.path === f.path) {
-    applyingRemote = true;
-    setDoc(pieceEditor, await loadNote(f.path));
-    applyingRemote = false;
+    applyRemoteTo(pieceEditor, await loadNote(f.path));
   }
 });
 
@@ -605,9 +611,7 @@ void onFileChanged(async (changedPath) => {
   // 成品（piece）或独立文档被外部修改 / 删除。
   if (activeFile && changedPath === activeFile.path) {
     try {
-      applyingRemote = true;
-      setDoc(pieceEditor, await loadNote(activeFile.path));
-      applyingRemote = false;
+      applyRemoteTo(pieceEditor, await loadNote(activeFile.path));
     } catch {
       // 文件已不存在（外部删除）→ 列剩余 pieces，切下一片或 NO_PIECE。
       await handleActivePieceGone();
@@ -639,9 +643,7 @@ onConflict(async (path, localContent) => {
   if (current && path === current.entry.path) {
     applyRemoteDoc(await loadNote(path));
   } else if (activeFile && path === activeFile.path) {
-    applyingRemote = true;
-    setDoc(pieceEditor, await loadNote(path));
-    applyingRemote = false;
+    applyRemoteTo(pieceEditor, await loadNote(path));
   } else if (currentProject && path === tasksPath(currentProject.path)) {
     tasksPanel.reload();
   } else {
@@ -795,7 +797,7 @@ async function openProject(project: ProjectEntry) {
   const entry = inboxEntry(project);
   current = { dir: project.path, entry };
   setProjectLabel(project.name);
-  setDoc(editor, await loadNote(entry.path));
+  applyRemoteDoc(await loadNote(entry.path));
   // 加载第一篇 piece — 不再兜底建时间戳文件；空列表 → NO_PIECE 空态。
   let pieces: NoteEntry[];
   try {
@@ -1445,9 +1447,7 @@ mountPieceHeader();
 renderTitlebar(document.querySelector("#titlebar-root")!, {
   // 单击：开/关整个助手。
   onAssistantToggle: async () => {
-    const next = await invoke<{ open: boolean }>("toggle_assistant");
-    layoutController?.setAssistantOpen(next.open);
-    tasksPanel.syncLayout();
+    await toggleAssistantFromChrome();
   },
 });
 
@@ -1511,9 +1511,7 @@ async function init() {
 
   const actions: ShortcutActions = {
     toggleAssistant: async () => {
-      const next = await invoke<{ open: boolean }>("toggle_assistant");
-      layoutController?.setAssistantOpen(next.open);
-      tasksPanel.syncLayout();
+      await toggleAssistantFromChrome();
     },
     toggleAssistantBubble: async () => {
       const cur = await invoke<{ open: boolean }>("get_assistant_state");

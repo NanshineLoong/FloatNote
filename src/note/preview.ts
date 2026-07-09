@@ -1,12 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import { syntaxTree } from "@codemirror/language";
-import { StateEffect, type Extension, RangeSetBuilder } from "@codemirror/state";
+import {
+  StateEffect,
+  StateField,
+  type EditorState,
+  type Extension,
+  RangeSetBuilder,
+} from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
   EditorView,
-  ViewPlugin,
-  type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
 import { parseChips, readBidMarker, stripBidMarker, type Source } from "./quote";
@@ -17,11 +21,11 @@ import hljs from "highlight.js/lib/common";
 import { parseImage, type ImageAlign } from "./image-attrs";
 import { imageSrc } from "./image-fs";
 
-function getCursorLines(view: EditorView): Set<number> {
+function getCursorLines(state: EditorState): Set<number> {
   const lines = new Set<number>();
-  for (const r of view.state.selection.ranges) {
-    const a = view.state.doc.lineAt(r.from).number;
-    const b = view.state.doc.lineAt(r.to).number;
+  for (const r of state.selection.ranges) {
+    const a = state.doc.lineAt(r.from).number;
+    const b = state.doc.lineAt(r.to).number;
     for (let i = a; i <= b; i++) lines.add(i);
   }
   return lines;
@@ -79,9 +83,9 @@ function noteDirOf(view: EditorView): string {
 }
 
 class ImgWidget extends WidgetType {
-  constructor(readonly raw: string, readonly view: EditorView) { super(); }
+  constructor(readonly raw: string) { super(); }
   eq(o: ImgWidget): boolean { return o.raw === this.raw; }
-  toDOM(): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
     const a = parseImage(this.raw);
     const figure = document.createElement("figure");
     const align: ImageAlign = a?.align ?? "left";
@@ -90,7 +94,7 @@ class ImgWidget extends WidgetType {
     img.className = "cm-preview-img";
     img.alt = a?.caption ?? "";
     const url = a?.url ?? "";
-    img.src = imageSrc(url, noteDirOf(this.view));
+    img.src = imageSrc(url, noteDirOf(view));
     img.style.width = a?.width ? `${a.width}px` : "";
     figure.appendChild(img);
     if (a && a.caption) {
@@ -402,12 +406,19 @@ class QuoteCardWidget extends WidgetType {
   }
 }
 
-function buildDecorations(view: EditorView): DecorationSet {
-  const cursorLines = getCursorLines(view);
-  const selRanges = view.state.selection.ranges;
+function buildDecorations(state: EditorState): DecorationSet {
+  const cursorLines = getCursorLines(state);
+  const selRanges = state.selection.ranges;
   const entries: Array<{ from: number; to: number; deco: Decoration }> = [];
   const hide = Decoration.replace({});
-  const doc = view.state.doc;
+  const doc = state.doc;
+  // Live-preview decorations include block widgets (tables, code blocks) and
+  // line-break-spanning replacements, which CodeMirror only permits from a
+  // StateField — never a ViewPlugin. StateFields have no viewport, so we walk
+  // the whole document; note-sized files make this cheap and it keeps block
+  // widgets stable across scrolling instead of flickering at viewport edges.
+  const vpFrom = 0;
+  const vpTo = doc.length;
 
   const onCursorLine = (pos: number) => cursorLines.has(doc.lineAt(pos).number);
   /** Inline-mark gate: hide/replace unless the cursor touches [from,to]. */
@@ -437,7 +448,7 @@ function buildDecorations(view: EditorView): DecorationSet {
   const cardLines = new Set<number>();
   const cardFirstLine = new Set<number>();
   const cardLastLine = new Map<number, number>(); // firstLine -> lastLine
-  for (let pos = view.viewport.from; pos <= view.viewport.to && pos <= doc.length; ) {
+  for (let pos = vpFrom; pos <= vpTo && pos <= doc.length; ) {
     const line = doc.lineAt(pos);
     const startMatch = /^(>\s*)\[!quote\]/.exec(line.text);
     if (startMatch) {
@@ -456,9 +467,9 @@ function buildDecorations(view: EditorView): DecorationSet {
     }
   }
 
-  syntaxTree(view.state).iterate({
-    from: view.viewport.from,
-    to: view.viewport.to,
+  syntaxTree(state).iterate({
+    from: vpFrom,
+    to: vpTo,
     enter(node) {
       switch (node.name) {
         case "ATXHeading1":
@@ -562,7 +573,7 @@ function buildDecorations(view: EditorView): DecorationSet {
           const fromLine = doc.lineAt(node.from).number;
           const toLine = doc.lineAt(node.to).number;
           for (let l = fromLine; l <= toLine; l++) {
-            if (l < view.viewport.from || l > view.viewport.to) continue;
+            if (l < vpFrom || l > vpTo) continue;
             const prev = listLineDepth.get(l);
             if (prev === undefined || depth > prev) listLineDepth.set(l, depth);
           }
@@ -597,7 +608,7 @@ function buildDecorations(view: EditorView): DecorationSet {
             entries.push({
               from: node.from,
               to,
-              deco: Decoration.replace({ widget: new ImgWidget(doc.sliceString(node.from, to), view) }),
+              deco: Decoration.replace({ widget: new ImgWidget(doc.sliceString(node.from, to)) }),
             });
           }
           return false;
@@ -684,7 +695,7 @@ function buildDecorations(view: EditorView): DecorationSet {
   // amplifies nesting — giving lists a visibly rendered rather than raw feel.
   for (const [lineNo, depth] of listLineDepth) {
     const cl = doc.line(lineNo);
-    if (lineNo < view.viewport.from || lineNo > view.viewport.to) continue;
+    if (lineNo < vpFrom || lineNo > vpTo) continue;
     entries.push({
       from: cl.from,
       to: cl.from,
@@ -700,7 +711,7 @@ function buildDecorations(view: EditorView): DecorationSet {
   // already removed by QuoteMark above, here we drop the `[!type] ` token so only
   // the body reads through (minimal rendering, no boxes). Skip the cursor line so
   // editing the marker stays possible.
-  for (let pos = view.viewport.from; pos <= view.viewport.to; ) {
+  for (let pos = vpFrom; pos <= vpTo; ) {
     const line = doc.lineAt(pos);
     const m = /^(>\s*)(\[!\w+\]\s?)/.exec(line.text);
     if (m && !cursorLines.has(line.number)) {
@@ -720,7 +731,7 @@ function buildDecorations(view: EditorView): DecorationSet {
     const lastLine = cardLastLine.get(firstLine) ?? firstLine;
     for (let l = firstLine; l <= lastLine; l++) {
       const cl = doc.line(l);
-      if (l < view.viewport.from || l > view.viewport.to) continue;
+      if (l < vpFrom || l > vpTo) continue;
       entries.push({
         from: cl.from,
         to: cl.from,
@@ -750,7 +761,7 @@ function buildDecorations(view: EditorView): DecorationSet {
     // hidden by the tag decoration plugin). The widget range ends at the chips'
     // length so it does not overlap the markers' own hide decorations.
     const titleLine = doc.line(firstLine);
-    if (titleLine.from >= view.viewport.from && titleLine.to <= view.viewport.to &&
+    if (titleLine.from >= vpFrom && titleLine.to <= vpTo &&
         !cursorLines.has(firstLine)) {
       const m = /^(>\s*\[!quote\]\s?)(.*)$/.exec(titleLine.text);
       if (m) {
@@ -786,22 +797,19 @@ function buildDecorations(view: EditorView): DecorationSet {
   return builder.finish();
 }
 
-const previewPlugin = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-    constructor(view: EditorView) {
-      this.decorations = buildDecorations(view);
-    }
-    update(u: ViewUpdate) {
-      const iconReady = u.transactions.some((tr) =>
-        tr.effects.some((e) => e.is(IconReadyEffect)));
-      if (u.docChanged || u.viewportChanged || u.selectionSet || iconReady) {
-        this.decorations = buildDecorations(u.view);
-      }
-    }
+const previewField = StateField.define<DecorationSet>({
+  create(state) {
+    return buildDecorations(state);
   },
-  { decorations: (v) => v.decorations },
-);
+  update(deco, tr) {
+    const iconReady = tr.effects.some((e) => e.is(IconReadyEffect));
+    if (tr.docChanged || tr.selection || iconReady) {
+      return buildDecorations(tr.state);
+    }
+    return deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 const previewTheme = EditorView.theme({
   ".cm-preview-h1": { fontSize: "2em", fontWeight: "700", lineHeight: "1.3" },
@@ -931,7 +939,7 @@ const previewTheme = EditorView.theme({
 });
 
 export function livePreview(): Extension[] {
-  return [previewPlugin, previewTheme];
+  return [previewField, previewTheme];
 }
 
 export { attachImageToolbar } from "./image-toolbar";

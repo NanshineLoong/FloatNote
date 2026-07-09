@@ -49,7 +49,7 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
           <button class="seg-btn active" data-view="inbox" data-idx="0">采集</button>
           <button class="seg-btn"        data-view="piece" data-idx="1">写作</button>
           <button class="seg-btn"        data-view="split" data-idx="2" title="双栏（采集 ｜ 写作）">双栏</button>
-          <div class="seg-knob" id="seg-knob" role="presentation" aria-hidden="true"></div>
+          <div class="seg-knob" id="seg-knob" role="presentation" aria-hidden="true">采集</div>
         </div>
       </div>
       <div class="topbar-right">
