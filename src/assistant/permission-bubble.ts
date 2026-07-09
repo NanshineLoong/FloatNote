@@ -19,7 +19,8 @@ export interface EditPreview {
 interface PermissionRequest {
   request_id: string;
   conversation_id: string;
-  target: { kind: string; name?: string };
+  /** 目标笔记；缺省（target 省略）= 当前活动笔记。仅当 Rust 解析出显式 target 时存在。 */
+  target?: { kind: string; name?: string };
   tool_name: string;
   old_content: string;
   new_content: string;

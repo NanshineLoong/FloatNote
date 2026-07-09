@@ -189,16 +189,17 @@ describe("AgentRunner", () => {
     await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "整理一下" });
 
     const applyEdit = sent.find((m) => m.type === "apply_edit");
+    // write_note 未带 target → apply_edit 应省略 target 字段（由 Rust 解析为活动笔记）。
     expect(applyEdit).toEqual({
       type: "apply_edit",
       callId: expect.any(String),
       conversationId: "c1",
-      target: { kind: "inbox" },
       toolName: "write_note",
       oldContent: "old doc",
       newContent: "tidied note",
       preview: expect.objectContaining({ tool: "write_note", summary: "整篇覆写" }),
     });
+    expect(applyEdit).not.toHaveProperty("target");
     expect(capturedWriteText).toBe("已更新，版本 v4");
     expect(capturedWriteText).not.toBeUndefined();
   });

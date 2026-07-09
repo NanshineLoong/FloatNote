@@ -268,7 +268,12 @@ pieceEditor.contentDOM.addEventListener("focus", () => {
   if (!f) return;
   const dir = mode === "document" ? parentDir(f.path) : currentProject?.path;
   if (!dir) return;
-  void invoke("set_active_note", { dir, noteId: f.name, path: f.path });
+  void invoke("set_active_note", {
+    dir,
+    noteId: f.name,
+    path: f.path,
+    kind: mode === "document" ? "doc" : "piece",
+  });
 });
 
 // 文档头（标题 + 切换箭头）挂在「写作」栏内容区顶部，随正文一起滚。
@@ -366,7 +371,7 @@ async function openDocument(doc: NoteEntry) {
   applyingRemote = false;
   pieceHeader?.setLabel(doc.name);
   applyView();
-  void invoke("set_active_note", { dir: parentDir(doc.path), noteId: doc.name, path: doc.path });
+  void invoke("set_active_note", { dir: parentDir(doc.path), noteId: doc.name, path: doc.path, kind: "doc" });
   assistantHandle.setScope(currentChatScope());
   // 独立文档不在项目目录内，停掉文件监听以免误刷新（返回项目时再 watch_dir）。
   void invoke("unwatch_dir");
@@ -384,6 +389,7 @@ function publishInboxActive() {
     dir: currentProject.path,
     noteId: current.entry.name,
     path: current.entry.path,
+    kind: "inbox",
   });
 }
 
@@ -727,7 +733,7 @@ async function openProject(project: ProjectEntry) {
   tasksPanel.reload();
   applyView();
   // 发布活动笔记（= 当前项目的 _inbox.md），供独立助手窗 / apply_write 定位。
-  void invoke("set_active_note", { dir: project.path, noteId: entry.name, path: entry.path });
+  void invoke("set_active_note", { dir: project.path, noteId: entry.name, path: entry.path, kind: "inbox" });
   assistantHandle.setScope(currentChatScope());
   // 切换文件监听到新项目目录。
   void invoke("watch_dir", { dir: project.path });

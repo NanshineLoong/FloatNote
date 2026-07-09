@@ -260,9 +260,16 @@ export class AgentRunner {
 
   private getNoteText(conversationId: string, target?: NoteTarget): Promise<string> {
     const callId = `g${++this.textSeq}`;
+    const msg: SidecarToHost = {
+      type: "get_note_text",
+      callId,
+      conversationId,
+      // target 缺省=当前活动笔记；仅当调用方给出时携带，由 Rust 解析。
+      ...(target ? { target } : {}),
+    };
     return new Promise<string>((resolve) => {
       this.pendingTexts.set(callId, (r) => resolve(r.content));
-      this.send({ type: "get_note_text", callId, conversationId, target: target ?? { kind: "inbox" } });
+      this.send(msg);
     });
   }
 
@@ -271,18 +278,20 @@ export class AgentRunner {
     args: { target?: NoteTarget; toolName: string; oldContent: string; newContent: string; preview: EditPreview },
   ): Promise<WriteResult> {
     const callId = `w${++this.writeSeq}`;
+    const msg: SidecarToHost = {
+      type: "apply_edit",
+      callId,
+      conversationId,
+      // target 缺省=当前活动笔记；仅当调用方给出时携带，由 Rust 解析。
+      ...(args.target ? { target: args.target } : {}),
+      toolName: args.toolName,
+      oldContent: args.oldContent,
+      newContent: args.newContent,
+      preview: args.preview,
+    };
     return new Promise<WriteResult>((resolve) => {
       this.pendingEdits.set(callId, resolve);
-      this.send({
-        type: "apply_edit",
-        callId,
-        conversationId,
-        target: args.target ?? { kind: "inbox" },
-        toolName: args.toolName,
-        oldContent: args.oldContent,
-        newContent: args.newContent,
-        preview: args.preview,
-      });
+      this.send(msg);
     });
   }
 }

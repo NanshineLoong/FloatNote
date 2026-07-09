@@ -81,13 +81,14 @@ export type SidecarToHost =
       type: "apply_edit";
       callId: string;
       conversationId: string;
-      target: NoteTarget;
+      /** 目标笔记；缺省=当前活动笔记（由 Rust 解析）。仅当调用方显式指定时携带。 */
+      target?: NoteTarget;
       toolName: string;
       oldContent: string;
       newContent: string;
       preview: EditPreview;
     }
-  | { type: "get_note_text"; callId: string; conversationId: string; target: NoteTarget }
+  | { type: "get_note_text"; callId: string; conversationId: string; target?: NoteTarget }
   | { type: "done"; requestId: string; conversationId: string }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string };
