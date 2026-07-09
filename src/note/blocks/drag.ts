@@ -1,5 +1,5 @@
 import { EditorView } from "@codemirror/view";
-import { blockRanges, moveBlockChanges, type BlockRange } from "./ranges";
+import { blockRanges, moveBlockChanges, type BlockRange } from "@floatnote/note-logic";
 import { buildCaretInsert } from "../append";
 import { insertAtPos } from "../editor";
 

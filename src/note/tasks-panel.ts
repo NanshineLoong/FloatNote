@@ -7,7 +7,7 @@ import {
   serializeTasks,
   toggleTask,
   type TaskLine,
-} from "./tasks";
+} from "@floatnote/note-logic";
 
 export interface TasksPanelHost {
   /** 当前项目的 _tasks.md 路径，无项目时 null。 */

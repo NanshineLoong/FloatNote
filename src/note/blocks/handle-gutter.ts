@@ -1,6 +1,6 @@
 import { type Extension, RangeSetBuilder } from "@codemirror/state";
 import { type BlockInfo, EditorView, gutter, GutterMarker } from "@codemirror/view";
-import { blockRanges, removeBlockChanges, type BlockRange } from "./ranges";
+import { blockRanges, removeBlockChanges, type BlockRange } from "@floatnote/note-logic";
 import { startBlockDrag, type DragContext } from "./drag";
 
 /**

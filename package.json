@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": ["shared/note-logic"],
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -23,7 +24,8 @@
     "@tauri-apps/plugin-dialog": "^2",
     "codemirror": "^6.0.1",
     "turndown": "^7.2.4",
-    "turndown-plugin-gfm": "^1.0.2"
+    "turndown-plugin-gfm": "^1.0.2",
+    "@floatnote/note-logic": "*"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

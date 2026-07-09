@@ -10,7 +10,7 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { parseChips, readBidMarker, stripBidMarker, type Source } from "./quote";
-import { stripTagMarker } from "./tags/model";
+import { stripTagMarker } from "@floatnote/note-logic";
 
 function getCursorLines(view: EditorView): Set<number> {
   const lines = new Set<number>();

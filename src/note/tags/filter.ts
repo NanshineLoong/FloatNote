@@ -7,8 +7,7 @@
  */
 import { EditorState, StateEffect, StateField, RangeSetBuilder, type Extension, type Text } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
-import { type BlockRange } from "../blocks/ranges";
-import { blockTagIds } from "./model";
+import { blockTagIds, type BlockRange } from "@floatnote/note-logic";
 
 export const setTagFilter = StateEffect.define<string | null>();
 
