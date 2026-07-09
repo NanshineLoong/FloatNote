@@ -45,7 +45,15 @@ describe("assistant session UI", () => {
 
   it("lets floating-mode users click the new conversation action", () => {
     expect(appCss).toMatch(
-      /#app\.mode-floating\s+#assistant-region\s+\.assistant-bot,[\s\S]*#app\.mode-floating\s+#assistant-region\s+\.assistant-new,[\s\S]*#app\.mode-floating\s+#assistant-region\s+\.assistant-scroll,[\s\S]*#app\.mode-floating\s+#assistant-region\s+\.assistant-input-wrap\s*{/,
+      /#app\.mode-floating\s+#assistant-region\s+\.assistant-bot,[\s\S]*#app\.mode-floating\s+#assistant-region\s+\.assistant-new,[\s\S]*#app\.mode-floating\s+#assistant-region\s+\.assistant-scroll,[\s\S]*#app\.mode-floating\s+#assistant-region\s+\.assistant-input-wrap,[\s\S]*#app\.mode-floating\s+#assistant-region\s+\.assistant-perm-region\s*{/,
+    );
+  });
+
+  it("lets floating-mode users click the permission bubble buttons", () => {
+    // #assistant-region 整块 pointer-events:none（点穿到正文），只有白名单子元素 auto。
+    // 权限气泡挂在 .assistant-perm-region，必须也在白名单里，否则按钮在 floating 态不可点。
+    expect(appCss).toMatch(
+      /#app\.mode-floating\s+#assistant-region\s+\.assistant-perm-region\s*{[^}]*pointer-events:\s*auto;/s,
     );
   });
 

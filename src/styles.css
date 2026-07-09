@@ -188,12 +188,13 @@ input {
   left: var(--bot-x-open);
 }
 
-/* floating 里只有实心元素（小人 / 浮层卡片 / 输入框）接收鼠标，其余区域可点穿到正文。 */
+/* floating 里只有实心元素（小人 / 浮层卡片 / 输入框 / 权限气泡）接收鼠标，其余区域可点穿到正文。 */
 #app.mode-floating #assistant-region .assistant-bot,
 #app.mode-floating #assistant-region .assistant-new,
 #app.mode-floating #assistant-region .assistant-scroll,
 #app.mode-floating #assistant-region .assistant-history-popover,
-#app.mode-floating #assistant-region .assistant-input-wrap {
+#app.mode-floating #assistant-region .assistant-input-wrap,
+#app.mode-floating #assistant-region .assistant-perm-region {
   pointer-events: auto;
 }
 
