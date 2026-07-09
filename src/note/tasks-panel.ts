@@ -1,5 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import { readNote } from "./notes-state";
+import { loadNote, saveImmediate } from "./notes-state";
 import {
   addTask,
   deleteTask,
@@ -97,7 +96,7 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
   async function persist() {
     const path = host.tasksPath();
     if (!path) return;
-    await invoke("write_note", { path, content: serializeTasks(items) });
+    await saveImmediate(path, serializeTasks(items));
   }
 
   /** 当前是否应该渲染某条 todo：filter 开时隐藏已完成项。 */
@@ -479,7 +478,7 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
       return;
     }
     try {
-      items = parseTasks(await readNote(path));
+      items = parseTasks(await loadNote(path));
     } catch {
       // _tasks.md 尚未落盘（新建项目只 scaffold inbox，任务文件懒创建）→ 当作空。
       items = [];

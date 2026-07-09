@@ -46,15 +46,35 @@ pub fn list_notes(dir: String) -> Result<Vec<notes::NoteEntry>, String> {
 }
 
 #[tauri::command]
-pub fn read_note(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|error| error.to_string())
+pub fn read_note(path: String) -> Result<notes::NoteContent, String> {
+    let content = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
+    let mtime = notes::mtime_millis(std::path::Path::new(&path));
+    Ok(notes::NoteContent { content, mtime })
 }
 
 #[tauri::command]
-pub fn write_note(state: State<AppState>, path: String, content: String) -> Result<(), String> {
+pub fn write_note(
+    state: State<AppState>,
+    path: String,
+    content: String,
+    expected_mtime: Option<u64>,
+) -> Result<notes::WriteOutcome, String> {
+    let p = std::path::Path::new(&path);
+    if let Some(expected) = expected_mtime {
+        if notes::mtime_millis(p) != Some(expected) {
+            return Ok(notes::WriteOutcome {
+                conflict: true,
+                mtime: None,
+            });
+        }
+    }
     crate::watcher::mark_self_write(&state.write_suppress, &path);
-    std::fs::write(&path, &content).map_err(|error| error.to_string())?;
-    Ok(())
+    notes::write_atomic(p, &content).map_err(|error| error.to_string())?;
+    let mtime = notes::mtime_millis(p);
+    Ok(notes::WriteOutcome {
+        conflict: false,
+        mtime,
+    })
 }
 
 #[tauri::command]
@@ -76,7 +96,7 @@ pub fn create_note(
     let path = dir_path.join(&filename);
     let path_str = path.to_string_lossy().to_string();
     crate::watcher::mark_self_write(&state.write_suppress, &path_str);
-    std::fs::write(&path, "").map_err(|error| error.to_string())?;
+    notes::write_atomic(&path, "").map_err(|error| error.to_string())?;
     Ok(notes::NoteEntry {
         name: filename.trim_end_matches(".md").to_string(),
         path: path_str,
@@ -125,7 +145,7 @@ pub fn restore_version(
     let restored =
         versions::read_version(dir_path, &note_id, v).map_err(|error| error.to_string())?;
     crate::watcher::mark_self_write(&state.write_suppress, &path);
-    std::fs::write(&path, &restored).map_err(|error| error.to_string())?;
+    notes::write_atomic(std::path::Path::new(&path), &restored).map_err(|error| error.to_string())?;
     Ok(restored)
 }
 
