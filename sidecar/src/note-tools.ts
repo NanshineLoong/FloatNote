@@ -1,71 +1,193 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import {
+  replaceOnce, findBlockByAnchor, setBlockTagChange, addTagDefChange,
+  deleteTagChanges, parseDefs, stripTagMarker, blockTagId, type BlockRange,
+} from "@floatnote/note-logic";
+import type { NoteTarget, EditPreview } from "./protocol.js";
 
-/** Result of asking the host to apply a note write. */
-export interface WriteResult {
-  ok: boolean;
-  version?: number;
-  error?: string;
-}
+export interface WriteResult { ok: boolean; version?: number; denied?: boolean; error?: string; }
 
 export interface NoteToolDeps {
-  /** Returns the full text of the note currently in context. */
-  getNoteText: () => string;
-  /** Ask the host to snapshot + overwrite the note; resolves with the outcome. */
-  requestWrite: (content: string) => Promise<WriteResult>;
+  getNoteText: (target?: NoteTarget) => Promise<string>;
+  requestWrite: (args: { target?: NoteTarget; toolName: string; oldContent: string; newContent: string; preview: EditPreview }) => Promise<WriteResult>;
 }
 
-/**
- * Build the two custom tools exposed to the tutor agent.
- *
- * Writes are *delegated*: `write_note` never touches the filesystem — it asks
- * the host (via `requestWrite`) to snapshot the old version and persist the new
- * content, keeping Rust as the single source of truth.
- */
+const PALETTE = ["#e5484d", "#f5a524", "#15b395", "#4c9eeb", "#a78bfa", "#ec4899"];
+
+function freeColors(used: Set<string>): string[] {
+  return PALETTE.filter((c) => !used.has(c.toLowerCase()));
+}
+
 export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
   const readNote = defineTool({
     name: "read_note",
     label: "Read note",
-    description: "读取用户当前这篇笔记的全文。",
-    parameters: Type.Object({}),
-    promptSnippet: "read_note — 读取当前笔记全文",
-    async execute() {
-      return {
-        content: [{ type: "text", text: deps.getNoteText() }],
-        details: {},
-      };
+    description: "读取目标笔记的全文。target 缺省=当前活动笔记。",
+    parameters: Type.Object({ target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })) }),
+    promptSnippet: "read_note — 读笔记全文",
+    async execute(_id, params: { target?: NoteTarget }) {
+      const content = await deps.getNoteText(params.target);
+      return { content: [{ type: "text", text: content }], details: {} };
+    },
+  });
+
+  const listTags = defineTool({
+    name: "list_tags",
+    label: "List tags",
+    description: "列出采集区（_inbox）已定义的标签与可用颜色。仅在 target=inbox 时有意义。",
+    parameters: Type.Object({ target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })) }),
+    promptSnippet: "list_tags — 列标签与可用颜色",
+    async execute(_id, params: { target?: NoteTarget }) {
+      const doc = await deps.getNoteText({ kind: "inbox", ...(params.target?.name ? { name: params.target.name } : {}) });
+      const map = parseDefs(doc);
+      const used = new Set([...map.values()].map((d) => d.color.toLowerCase()));
+      const tags = [...map.values()].map((d) => ({ id: d.id, name: d.name, color: d.color }));
+      const free = freeColors(used);
+      return { content: [{ type: "text", text: JSON.stringify({ tags, freeColors: free }) }], details: {} };
+    },
+  });
+
+  const editNote = defineTool({
+    name: "edit_note",
+    label: "Edit note",
+    description: "精确替换目标笔记中唯一出现的 old_string 为 new_string。用于改块/插块/删块/改任务。old_string 必须唯一，否则报错。",
+    parameters: Type.Object({
+      old_string: Type.String({ description: "要替换的原文，必须在全文中唯一" }),
+      new_string: Type.String({ description: "替换后的新文本" }),
+      target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })),
+    }),
+    promptSnippet: "edit_note — 唯一 str_replace",
+    async execute(_id, params: { old_string: string; new_string: string; target?: NoteTarget }) {
+      const old = await deps.getNoteText(params.target);
+      const r = replaceOnce(old, params.old_string, params.new_string);
+      if (!r.ok) return { content: [{ type: "text", text: `替换失败：${r.error}` }], details: {} };
+      const preview: EditPreview = { tool: "edit_note", summary: "编辑文本", detail: { kind: "diff", hunks: unifiedDiff(old, r.newContent) } };
+      const res = await deps.requestWrite({ target: params.target, toolName: "edit_note", oldContent: old, newContent: r.newContent, preview });
+      return writeResultText(res);
     },
   });
 
   const writeNote = defineTool({
     name: "write_note",
     label: "Write note",
-    description:
-      "用新的全文整篇覆盖用户当前笔记。系统会在覆盖前自动留存旧版本快照，用户可回退。",
+    description: "整篇覆写目标笔记。仅在大重构/跨多块改写时用。每次写入前用户可选择保存旧版本快照。",
     parameters: Type.Object({
-      content: Type.String({ description: "笔记的新全文（整篇覆盖）。" }),
+      content: Type.String({ description: "新全文" }),
+      target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })),
     }),
-    promptSnippet: "write_note — 用新全文覆盖当前笔记（自动留版本）",
-    async execute(_toolCallId, params) {
-      const result = await deps.requestWrite(params.content);
-      if (result.ok) {
-        const version = result.version ?? "?";
-        return {
-          content: [{ type: "text", text: `已更新笔记，版本 v${version}` }],
-          details: {},
-        };
-      }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `写入笔记失败：${result.error ?? "未知错误"}`,
-          },
-        ],
-        details: {},
-      };
+    promptSnippet: "write_note — 整篇覆写",
+    async execute(_id, params: { content: string; target?: NoteTarget }) {
+      const old = await deps.getNoteText(params.target);
+      const preview: EditPreview = { tool: "write_note", summary: "整篇覆写", detail: { kind: "diff", hunks: unifiedDiff(old, params.content) } };
+      const res = await deps.requestWrite({ target: params.target, toolName: "write_note", oldContent: old, newContent: params.content, preview });
+      return writeResultText(res);
     },
   });
 
-  return [readNote, writeNote];
+  const setTag = defineTool({
+    name: "set_tag",
+    label: "Set tag",
+    description: "给采集区某块打/清标签。anchor=块首行前缀（唯一）。tagId=null 清除。target 必须 inbox。",
+    parameters: Type.Object({
+      anchor: Type.String({ description: "块首行前缀，须唯一匹配一个块" }),
+      tagId: Type.Optional(Type.String({ description: "标签 id；省略或空串=清除该块标签" })),
+      target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })),
+    }),
+    promptSnippet: "set_tag — 给块打标签",
+    async execute(_id, params: { anchor: string; tagId?: string; target?: NoteTarget }) {
+      const target: NoteTarget = { kind: "inbox", ...(params.target?.name ? { name: params.target.name } : {}) };
+      const old = await deps.getNoteText(target);
+      const r = findBlockByAnchor(old, params.anchor);
+      if (!r.ok) return { content: [{ type: "text", text: `定位块失败：${r.error}` }], details: {} };
+      const change = setBlockTagChange(old, r.range, params.tagId || null);
+      const newContent = change ? applyChange(old, change) : old;
+      const tagName = params.tagId ? (parseDefs(old).get(params.tagId)?.name ?? params.tagId) : "(清除)";
+      const tagColor = params.tagId ? (parseDefs(old).get(params.tagId)?.color ?? "#888") : "#888";
+      const blockPreview = old.slice(r.range.from, r.range.to).split("\n")[0].slice(0, 20);
+      const preview: EditPreview = { tool: "set_tag", summary: `给块「${blockPreview}」${params.tagId ? "打上" : "清除"}标签`, detail: { kind: "tag_assign", blockPreview, tagName, tagColor } };
+      const res = await deps.requestWrite({ target, toolName: "set_tag", oldContent: old, newContent, preview });
+      return writeResultText(res);
+    },
+  });
+
+  const tagCreate = defineTool({
+    name: "tag_create",
+    label: "Create tag",
+    description: "在采集区新建标签定义。color 必须从 list_tags 返回的 freeColors 中选一个。target 必须 inbox。",
+    parameters: Type.Object({
+      name: Type.String({ description: "标签名" }),
+      color: Type.String({ description: "颜色 hex，须为可用色" }),
+      target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })),
+    }),
+    promptSnippet: "tag_create — 新建标签",
+    async execute(_id, params: { name: string; color: string; target?: NoteTarget }) {
+      const target: NoteTarget = { kind: "inbox", ...(params.target?.name ? { name: params.target.name } : {}) };
+      const old = await deps.getNoteText(target);
+      const r = addTagDefChange(old, params.name, params.color);
+      if (!r.id) return { content: [{ type: "text", text: `建标签失败：颜色 ${params.color} 已被占用；可用：${JSON.stringify(freeColors(new Set([...parseDefs(old).values()].map((d) => d.color.toLowerCase()))))}` }], details: {} };
+      const newContent = r.change ? applyChange(old, r.change) : old;
+      const preview: EditPreview = { tool: "tag_create", summary: `新建标签「${params.name}」`, detail: { kind: "tag_create", tagName: params.name, tagColor: params.color } };
+      const res = await deps.requestWrite({ target, toolName: "tag_create", oldContent: old, newContent, preview });
+      return writeResultText(res);
+    },
+  });
+
+  const tagDelete = defineTool({
+    name: "tag_delete",
+    label: "Delete tag",
+    description: "删除采集区某标签定义及其所有块标记。target 必须 inbox。",
+    parameters: Type.Object({
+      tagId: Type.String({ description: "要删除的标签 id" }),
+      target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })),
+    }),
+    promptSnippet: "tag_delete — 删标签",
+    async execute(_id, params: { tagId: string; target?: NoteTarget }) {
+      const target: NoteTarget = { kind: "inbox", ...(params.target?.name ? { name: params.target.name } : {}) };
+      const old = await deps.getNoteText(target);
+      const changes = deleteTagChanges(old, params.tagId);
+      const newContent = applyChanges(old, changes);
+      const def = parseDefs(old).get(params.tagId);
+      const markerCount = countMarkers(old, params.tagId);
+      const preview: EditPreview = { tool: "tag_delete", summary: `删除标签「${def?.name ?? params.tagId}」`, detail: { kind: "tag_delete", tagName: def?.name ?? params.tagId, markerCount } };
+      const res = await deps.requestWrite({ target, toolName: "tag_delete", oldContent: old, newContent, preview });
+      return writeResultText(res);
+    },
+  });
+
+  return [readNote, listTags, editNote, writeNote, setTag, tagCreate, tagDelete];
+}
+
+function writeResultText(res: WriteResult) {
+  if (res.denied) return { content: [{ type: "text", text: "用户拒绝了此操作" }], details: {} };
+  if (res.ok) return { content: [{ type: "text", text: res.version ? `已更新，版本 v${res.version}` : "已更新" }], details: {} };
+  return { content: [{ type: "text", text: `写入失败：${res.error ?? "未知错误"}` }], details: {} };
+}
+
+function applyChange(doc: string, c: { from: number; to: number; insert: string }): string {
+  return doc.slice(0, c.from) + c.insert + doc.slice(c.to);
+}
+function applyChanges(doc: string, cs: { from: number; to: number; insert: string }[]): string {
+  let out = doc;
+  for (const c of [...cs].sort((a, b) => a.from - b.from)) out = applyChange(out, c);
+  return out;
+}
+function countMarkers(doc: string, id: string): number {
+  const re = new RegExp(`<!-- floatnote:tag=${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} -->`, "g");
+  return (doc.match(re) || []).length;
+}
+function unifiedDiff(a: string, b: string): string {
+  // 轻量 diff：按行比对，足够气泡展示。首版用简单逐行 unified 形式。
+  const la = a.split("\n"), lb = b.split("\n");
+  const lines: string[] = [];
+  const n = Math.max(la.length, lb.length);
+  for (let i = 0; i < n; i++) {
+    if (la[i] !== lb[i]) {
+      if (la[i] !== undefined) lines.push(`- ${la[i]}`);
+      if (lb[i] !== undefined) lines.push(`+ ${lb[i]}`);
+    } else if (la[i] !== undefined) {
+      lines.push(`  ${la[i]}`);
+    }
+  }
+  return lines.join("\n");
 }
