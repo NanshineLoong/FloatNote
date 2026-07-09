@@ -126,7 +126,10 @@ function validateOpenAICompatibleBaseUrl(baseUrl: string): void {
 
 /**
  * Translate a Pi agent-session event into a single protocol line, or null when
- * the event is not relevant to the host (thinking deltas, tool updates, etc.).
+ * the event is not relevant to the host. We forward text + thinking blocks
+ * (streamed into the chat bubble) and tool execution start/end; toolcall_*
+ * (the model emitting a tool-call block) is dropped — the action card's
+ * structured detail arrives via the permission://request flow instead.
  */
 export function translateEvent(
   requestId: string,
@@ -138,6 +141,15 @@ export function translateEvent(
       const inner = event.assistantMessageEvent;
       if (inner.type === "text_delta") {
         return { type: "delta", requestId, conversationId, text: inner.delta };
+      }
+      if (inner.type === "thinking_start") {
+        return { type: "thinking_start", requestId, conversationId, blockId: `${requestId}-t${inner.contentIndex}` };
+      }
+      if (inner.type === "thinking_delta") {
+        return { type: "thinking_delta", requestId, conversationId, text: inner.delta };
+      }
+      if (inner.type === "thinking_end") {
+        return { type: "thinking_end", requestId, conversationId };
       }
       return null;
     }
@@ -204,7 +216,7 @@ export class AgentRunner {
     const unsubscribe = session.subscribe((event) => {
       const msg = translateEvent(req.requestId, req.conversationId, event);
       if (!msg) return;
-      if (msg.type === "delta" || msg.type === "tool") {
+      if (msg.type === "delta" || msg.type === "tool" || msg.type === "thinking_start") {
         sawVisibleOutput = true;
       }
       if (msg.type === "done" && !sawVisibleOutput) {

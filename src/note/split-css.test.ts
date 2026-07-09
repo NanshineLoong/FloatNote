@@ -8,7 +8,7 @@ const editorSource = readFileSync(resolve(process.cwd(), "src/note/editor.ts"), 
 const tagDecorationSource = readFileSync(resolve(process.cwd(), "src/note/tags/decoration.ts"), "utf8");
 const pieceSwitcherSource = readFileSync(resolve(process.cwd(), "src/note/piece-switcher.ts"), "utf8");
 const assistantCss = readFileSync(resolve(process.cwd(), "src/assistant/styles.css"), "utf8");
-const assistantBubbleColor = assistantCss.match(/\.chat-assistant\s*{[^}]*background:\s*(#[0-9a-fA-F]{6});/s)?.[1];
+const assistantBubbleColor = assistantCss.match(/\.chat-block-text\s*{[^}]*background:\s*(#[0-9a-fA-F]{6});/s)?.[1];
 
 describe("split view CSS placement", () => {
   it("pins both editor columns below the tag bar row in split mode", () => {
@@ -118,9 +118,9 @@ describe("split view CSS placement", () => {
       /#app\.mode-floating\s+#assistant-region\s+\.assistant-card::before\s*{/,
     );
     expect(assistantCss).toMatch(
-      /#app\.mode-floating\s+\.chat-assistant\s*{[^}]*background:\s*#[0-9a-fA-F]{6};[^}]*border:\s*none;/s,
+      /#app\.mode-floating\s+\.chat-block-text\s*{[^}]*background:\s*#[0-9a-fA-F]{6};/s,
     );
-    expect(assistantCss.match(/#app\.mode-floating\s+\.chat-assistant\s*{[^}]*background:\s*(#[0-9a-fA-F]{6});/s)?.[1]).toBe(
+    expect(assistantCss.match(/#app\.mode-floating\s+\.chat-block-text\s*{[^}]*background:\s*(#[0-9a-fA-F]{6});/s)?.[1]).toBe(
       assistantBubbleColor,
     );
     expect(css).toMatch(
@@ -128,10 +128,11 @@ describe("split view CSS placement", () => {
     );
   });
 
-  it("does not rerun message entrance animation while assistant text streams", () => {
-    expect(assistantCss).toMatch(
-      /\.chat-streaming\s*{[^}]*animation:\s*none;/s,
-    );
+  it("renders streaming with a caret (::after) instead of cancelling entrance animation", () => {
+    // 新机制：增量渲染复用块节点（见 blocks.test.ts），不再用 `animation: none`
+    // 抑制流式气泡的进场动画；流式指示改为 caret ::after。
+    expect(assistantCss).toMatch(/\.chat-block-text\.chat-streaming::after\s*{[^}]*content:/s);
+    expect(assistantCss).not.toMatch(/\.chat-streaming\s*\{[^}]*animation:\s*none/s);
   });
 });
 

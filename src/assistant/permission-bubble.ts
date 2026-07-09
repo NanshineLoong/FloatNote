@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 // Local mirror of the permission://request payload emitted by Rust (agent.rs).
 // Kept in sync manually with sidecar/src/protocol.ts EditPreview + the
@@ -16,7 +15,10 @@ export interface EditPreview {
   detail: EditPreviewDetail;
 }
 
-interface PermissionRequest {
+/** 写入模式：直接写入 / 保存快照后写入。与 sidecar `resolve_permission` 的 writeMode 对齐。 */
+export type WriteMode = "direct" | "snapshot";
+
+export interface PermissionRequest {
   request_id: string;
   conversation_id: string;
   /** 目标笔记；缺省（target 省略）= 当前活动笔记。仅当 Rust 解析出显式 target 时存在。 */
@@ -29,7 +31,7 @@ interface PermissionRequest {
 }
 
 /** 工具名 → 卡片标题（语义化中文标签，不暴露内部 tool 名）。 */
-const TOOL_LABEL: Record<string, string> = {
+export const TOOL_LABEL: Record<string, string> = {
   edit_note: "编辑文本",
   write_note: "编辑文本",
   set_tag: "设置标签",
@@ -100,19 +102,33 @@ export function renderPreviewCard(preview: EditPreview, canSnapshot: boolean): H
   return card;
 }
 
-export function mountPermissionBubble(root: HTMLElement): {
+export function mountPermissionBubble(
+  root: HTMLElement,
+  onResolve?: (req: PermissionRequest, decision: "allow" | "deny", writeMode: WriteMode) => void,
+): {
   destroy: () => void;
   isOpen: () => boolean;
   reject: () => void;
+  show: (req: PermissionRequest) => void;
+  clear: () => void;
 } {
   root.classList.add("perm-bubble-root");
-  let unlisten: UnlistenFn | null = null;
-  let destroyed = false;
   let currentReq: PermissionRequest | null = null;
 
   function clearBubble() {
     root.replaceChildren();
     currentReq = null;
+  }
+
+  function resolve(decision: "allow" | "deny", writeMode: WriteMode) {
+    if (!currentReq) return;
+    const req = currentReq;
+    if (onResolve) {
+      onResolve(req, decision, writeMode);
+    } else {
+      void invoke("resolve_permission", { requestId: req.request_id, decision, writeMode });
+    }
+    clearBubble();
   }
 
   function show(req: PermissionRequest) {
@@ -124,25 +140,13 @@ export function mountPermissionBubble(root: HTMLElement): {
     const deny = document.createElement("button");
     deny.textContent = "拒绝";
     const select = card.querySelector<HTMLSelectElement>(".perm-mode")!;
-    allow.addEventListener("click", () => {
-      void invoke("resolve_permission", { requestId: req.request_id, decision: "allow", writeMode: select.value });
-      clearBubble();
-    });
-    deny.addEventListener("click", () => {
-      void invoke("resolve_permission", { requestId: req.request_id, decision: "deny", writeMode: "direct" });
-      clearBubble();
-    });
+    allow.addEventListener("click", () => resolve("allow", select.value as WriteMode));
+    deny.addEventListener("click", () => resolve("deny", "direct"));
     root.append(card, allow, deny);
   }
 
-  listen<PermissionRequest>("permission://request", (e) => show(e.payload)).then((un) => {
-    if (destroyed) un(); else unlisten = un;
-  });
-
   return {
     destroy() {
-      destroyed = true;
-      unlisten?.();
       root.classList.remove("perm-bubble-root");
       root.replaceChildren();
       currentReq = null;
@@ -151,9 +155,9 @@ export function mountPermissionBubble(root: HTMLElement): {
       return root.childNodes.length > 0;
     },
     reject() {
-      if (!currentReq) return;
-      void invoke("resolve_permission", { requestId: currentReq.request_id, decision: "deny", writeMode: "direct" });
-      clearBubble();
+      resolve("deny", "direct");
     },
+    show,
+    clear: clearBubble,
   };
 }

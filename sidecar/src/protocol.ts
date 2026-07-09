@@ -81,6 +81,14 @@ export type SidecarToHost =
     }
   | { type: "delta"; requestId: string; conversationId: string; text: string }
   | {
+      type: "thinking_start";
+      requestId: string;
+      conversationId: string;
+      blockId: string;
+    }
+  | { type: "thinking_delta"; requestId: string; conversationId: string; text: string }
+  | { type: "thinking_end"; requestId: string; conversationId: string }
+  | {
       type: "tool";
       requestId: string;
       conversationId: string;

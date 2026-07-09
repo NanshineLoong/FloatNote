@@ -1,9 +1,11 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { AgentEvent } from "../note/agent";
 import type { ChatConversation, ChatScope } from "../note/chat-history";
 import { deriveTitleFromFirstMessage, formatHistoryTime } from "../note/chat-history-format";
 import socratesSvg from "../assets/socrates.svg?raw";
-import { mountPermissionBubble } from "./permission-bubble.js";
+import { mountPermissionBubble, type PermissionRequest } from "./permission-bubble.js";
 import { mountSkillPicker, type SkillSummary } from "./skill-picker.js";
 import {
   type ChatEvent,
@@ -11,8 +13,8 @@ import {
   emptyChat,
   isChatStreaming,
   reduceEvents,
-  renderMessages,
 } from "./render";
+import { reconcileMessages } from "./blocks";
 
 /**
  * 与挂载点无关的助手组件。挂在笔记窗内的 `#assistant-region`，inline/floating 共用同一份。
@@ -100,11 +102,12 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   let currentScope: ChatScope | null = null;
   let activeConversation: ChatConversation | null = null;
   let scopeToken = 0;
+  // 消息节点复用表（增量渲染，消灭闪烁）。会话切换时由 reconcile 的 stale 清理自动清空。
+  const msgMap = new Map<string, HTMLElement>();
 
   function rerender() {
-    // 新对话按钮在 .assistant-card 内、滚动容器之外，锚定卡片右上角，不随消息滚动。
-    scroll.replaceChildren(renderMessages(state));
-    scroll.scrollTop = scroll.scrollHeight;
+    // 定向增量更新：已完成消息/块节点复用，不重放进场动画 → 消灭闪烁。
+    reconcileMessages(scroll, state.messages, msgMap);
     // 无消息时不渲染聊天历史容器，避免 floating 态出现空的卡片/气泡（inline 态无副作用）。
     root.classList.toggle("has-messages", state.messages.length > 0);
   }
@@ -296,11 +299,70 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   rerender();
   updateSendMode();
 
-  const permBubble = mountPermissionBubble(permRegion);
+  let destroyed = false;
+  let unlisten: UnlistenFn | null = null;
+
+  const permBubble = mountPermissionBubble(permRegion, (req, decision, writeMode) => {
+    resolvePermission(req.request_id, decision, writeMode);
+  });
   const skillPicker = mountSkillPicker({ bot, input, inputWrap, listSkills: deps.listSkills });
 
-  let unlisten: UnlistenFn | null = null;
-  let destroyed = false;
+  /** 统一的 permission resolve 入口：派发 reducer 状态 + 调 Rust + 清 dock 兜底气泡。
+   *  流内 action 卡与 dock 兜底气泡共用，以 requestId 为幂等键。 */
+  function resolvePermission(
+    requestId: string,
+    decision: "allow" | "deny",
+    writeMode: "direct" | "snapshot",
+  ) {
+    dispatch({ type: "permission_resolve", requestId, decision });
+    void invoke("resolve_permission", { requestId, decision, writeMode });
+    permBubble.clear();
+  }
+
+  // 流内 action 卡的允许/拒绝按钮派发 chat:resolve（bubbles），在此统一处理。
+  scroll.addEventListener("chat:resolve", (e) => {
+    const detail = (e as CustomEvent).detail as {
+      requestId: string;
+      decision: "allow" | "deny";
+      writeMode: "direct" | "snapshot";
+    };
+    resolvePermission(detail.requestId, detail.decision, detail.writeMode);
+  });
+
+  // thinking 块折叠/展开切换。
+  scroll.addEventListener("chat:toggle-thinking", (e) => {
+    const detail = (e as CustomEvent).detail as { blockId: string };
+    dispatch({ type: "thinking_toggle", blockId: detail.blockId });
+  });
+
+  // permission://request：优先填充流内 action 卡；若无匹配卡（非流式即时请求），
+  // 回退到 dock 固定气泡。
+  let permUnlisten: UnlistenFn | null = null;
+  listen<PermissionRequest>("permission://request", (e) => {
+    const req = e.payload;
+    dispatch({
+      type: "permission_request",
+      requestId: req.request_id,
+      conversationId: req.conversation_id,
+      toolName: req.tool_name,
+      detail: req.preview.detail,
+      summary: req.preview.summary,
+      oldContent: req.old_content,
+      newContent: req.new_content,
+      canSnapshot: req.can_snapshot,
+    });
+    // 若 reducer 填充了对应 action 块（requestId 匹配），由流内卡处理；否则 dock 兜底。
+    const handled = state.messages.some(
+      (m) =>
+        m.role === "assistant" &&
+        m.blocks.some((b) => b.kind === "action" && b.requestId === req.request_id),
+    );
+    if (!handled) permBubble.show(req);
+  }).then((un) => {
+    if (destroyed) un();
+    else permUnlisten = un;
+  });
+
   Promise.resolve(deps.subscribe((event) => {
     if (event.type === "session_opened") {
       state = reduceEvents(state, event);
@@ -325,6 +387,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     destroy() {
       destroyed = true;
       unlisten?.();
+      permUnlisten?.();
       permBubble.destroy();
       skillPicker.destroy();
       document.removeEventListener("pointerdown", onDocumentPointerDown);

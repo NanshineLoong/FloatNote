@@ -22,11 +22,35 @@ describe("translateEvent", () => {
     expect(out).toEqual({ type: "delta", requestId: "r1", conversationId: "c1", text: "hi" });
   });
 
-  it("ignores non-text assistant message events", () => {
+  it("maps thinking_start/delta/end to thinking block lines", () => {
+    expect(
+      translateEvent("r1", "c1", ev({
+        type: "message_update",
+        message: {},
+        assistantMessageEvent: { type: "thinking_start", contentIndex: 0, partial: {} },
+      })),
+    ).toEqual({ type: "thinking_start", requestId: "r1", conversationId: "c1", blockId: "r1-t0" });
+    expect(
+      translateEvent("r1", "c1", ev({
+        type: "message_update",
+        message: {},
+        assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "...", partial: {} },
+      })),
+    ).toEqual({ type: "thinking_delta", requestId: "r1", conversationId: "c1", text: "..." });
+    expect(
+      translateEvent("r1", "c1", ev({
+        type: "message_update",
+        message: {},
+        assistantMessageEvent: { type: "thinking_end", contentIndex: 0, partial: {} },
+      })),
+    ).toEqual({ type: "thinking_end", requestId: "r1", conversationId: "c1" });
+  });
+
+  it("still ignores toolcall/text boundary assistant message events", () => {
     const out = translateEvent("r1", "c1", ev({
       type: "message_update",
       message: {},
-      assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "...", partial: {} },
+      assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, partial: {} },
     }));
     expect(out).toBeNull();
   });

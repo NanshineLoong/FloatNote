@@ -21,7 +21,11 @@ export type AgentEvent =
   | { type: "tool"; requestId: string; conversationId: string; name: string; phase: "start" | "end" }
   | { type: "done"; requestId: string; conversationId: string }
   | { type: "title"; conversationId: string; title: string }
-  | { type: "error"; requestId: string | null; conversationId?: string; message: string };
+  | { type: "error"; requestId: string | null; conversationId?: string; message: string }
+  // thinking 块事件（sidecar 转发 Pi SDK 的 thinking_start/delta/end）。
+  | { type: "thinking_start"; requestId: string; conversationId: string; blockId: string }
+  | { type: "thinking_delta"; requestId: string; conversationId: string; text: string }
+  | { type: "thinking_end"; requestId: string; conversationId: string };
 
 export type ChatDisplayMessage =
   | { role: "user"; text: string; timestamp: number }

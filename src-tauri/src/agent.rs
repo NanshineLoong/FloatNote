@@ -90,6 +90,20 @@ pub enum SidecarToHost {
         conversation_id: String,
         text: String,
     },
+    ThinkingStart {
+        request_id: String,
+        conversation_id: String,
+        block_id: String,
+    },
+    ThinkingDelta {
+        request_id: String,
+        conversation_id: String,
+        text: String,
+    },
+    ThinkingEnd {
+        request_id: String,
+        conversation_id: String,
+    },
     Tool {
         request_id: String,
         conversation_id: String,

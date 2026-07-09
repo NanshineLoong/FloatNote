@@ -1,0 +1,263 @@
+import { TOOL_LABEL, type EditPreviewDetail } from "./permission-bubble";
+import { fillMarkdown } from "./markdown";
+import type { Block } from "./render";
+
+/**
+ * 流内动作卡（只读，Phase 1）。
+ *
+ * 数据来源：`permission://request` 流（Rust pending-edit）填充 action block 的
+ * detail/oldContent/newContent/canSnapshot/requestId。允许/拒绝走
+ * `resolve_permission`（与 dock 固定弹窗共用 requestId 幂等键）。
+ *
+ * 节点稳定性：`buildActionCard` 产出骨架（header/body 容器/footer），
+ * `updateActionCard` 只更新内容与 class——不重建节点，避免动画重放。
+ */
+
+/** 工具名 → 卡片标题（沿用 permission-bubble 的语义化中文标签）。 */
+function titleFor(tool: string): string {
+  return TOOL_LABEL[tool] ?? tool;
+}
+
+/** SVG 图标（线性、stroke 1.5、与项目调性一致；aria-hidden）。 */
+function toolIcon(tool: string): string {
+  // 统一用一支笔的图标代表"编辑/写入/标签"类动作，简洁不分散。
+  const path =
+    tool.startsWith("tag") ? tagPath() : editPath();
+  return `<span class="chat-action-icon" aria-hidden="true">${path}</span>`;
+}
+function editPath(): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+}
+function tagPath(): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L3 13V3h10l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>`;
+}
+
+/** 构建动作卡骨架（header + body 容器 + footer）。 */
+export function buildActionCard(block: Extract<Block, { kind: "action" }>): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "chat-action";
+  el.dataset.blockId = block.id;
+
+  const header = document.createElement("div");
+  header.className = "chat-action-header";
+  header.innerHTML = `${toolIcon(block.tool)}<span class="chat-action-title">${escapeText(titleFor(block.tool))}</span>`;
+  el.appendChild(header);
+
+  const summary = document.createElement("div");
+  summary.className = "chat-action-summary";
+  el.appendChild(summary);
+
+  const body = document.createElement("div");
+  body.className = "chat-action-body";
+  el.appendChild(body);
+
+  const footer = document.createElement("div");
+  footer.className = "chat-action-footer";
+  const modeSelect = document.createElement("select");
+  modeSelect.className = "chat-action-mode";
+  const direct = document.createElement("option");
+  direct.value = "direct";
+  direct.textContent = "直接写入";
+  modeSelect.appendChild(direct);
+  const snap = document.createElement("option");
+  snap.value = "snapshot";
+  snap.textContent = "保存快照后写入";
+  modeSelect.appendChild(snap);
+  const allow = document.createElement("button");
+  allow.type = "button";
+  allow.className = "chat-action-allow";
+  allow.textContent = "允许";
+  const deny = document.createElement("button");
+  deny.type = "button";
+  deny.className = "chat-action-deny";
+  deny.textContent = "拒绝";
+  allow.addEventListener("click", () => {
+    if (!block.requestId) return;
+    el.dispatchEvent(
+      new CustomEvent("chat:resolve", {
+        bubbles: true,
+        detail: { requestId: block.requestId, decision: "allow", writeMode: modeSelect.value },
+      }),
+    );
+  });
+  deny.addEventListener("click", () => {
+    if (!block.requestId) return;
+    el.dispatchEvent(
+      new CustomEvent("chat:resolve", {
+        bubbles: true,
+        detail: { requestId: block.requestId, decision: "deny", writeMode: "direct" },
+      }),
+    );
+  });
+  footer.append(modeSelect, allow, deny);
+  el.appendChild(footer);
+
+  updateActionCard(el, block);
+  return el;
+}
+
+/** 增量更新动作卡（状态 class + body + footer 可见性），不重建节点。 */
+export function updateActionCard(el: HTMLElement, block: Extract<Block, { kind: "action" }>): void {
+  el.classList.toggle("chat-action-pending", block.status === "pending");
+  el.classList.toggle("chat-action-approved", block.status === "approved");
+  el.classList.toggle("chat-action-rejected", block.status === "rejected");
+  el.classList.toggle("chat-action-done", block.status === "done");
+
+  const titleEl = el.querySelector<HTMLElement>(".chat-action-title");
+  if (titleEl) titleEl.textContent = titleFor(block.tool);
+
+  const summaryEl = el.querySelector<HTMLElement>(".chat-action-summary");
+  if (summaryEl) {
+    summaryEl.textContent = block.summary ?? "";
+    summaryEl.classList.toggle("is-empty", !block.summary);
+  }
+
+  const body = el.querySelector<HTMLElement>(".chat-action-body");
+  if (body && block.detail && el.dataset.detailFilled !== "1") {
+    body.replaceChildren(renderActionBody(block));
+    el.dataset.detailFilled = "1";
+  }
+
+  // footer 仅在 pending 且已收到 requestId（可交互）时可见。
+  const interactive = block.status === "pending" && Boolean(block.requestId);
+  const footer = el.querySelector<HTMLElement>(".chat-action-footer");
+  if (footer) footer.classList.toggle("is-hidden", !interactive);
+
+  // 写入模式选项仅在 canSnapshot 时可选 snapshot。
+  const snap = el.querySelector<HTMLOptionElement>('option[value="snapshot"]');
+  if (snap) snap.hidden = !block.canSnapshot;
+}
+
+/** 按 detail.kind + tool 渲染 body（只读）。 */
+function renderActionBody(block: Extract<Block, { kind: "action" }>): HTMLElement {
+  if (!block.detail) {
+    const empty = document.createElement("div");
+    empty.className = "chat-action-empty";
+    empty.textContent = "AI 正在准备…";
+    return empty;
+  }
+  const detail = block.detail;
+  switch (detail.kind) {
+    case "diff":
+      return block.tool === "write_note"
+        ? renderWriteNotePreview(block.newContent ?? "")
+        : renderEditDiff(block.oldContent ?? "", block.newContent ?? "", detail);
+    case "tag_assign":
+      return renderTagAssign(detail);
+    case "tag_create":
+      return renderTagCreate(detail);
+    case "tag_delete":
+      return renderTagDelete(detail);
+  }
+}
+
+/** write_note：直接展示新版本全文（markdown 渲染，非代码样式）。 */
+function renderWriteNotePreview(newContent: string): HTMLElement {
+  const panel = document.createElement("div");
+  panel.className = "chat-diff chat-diff-newonly";
+  fillMarkdown(panel, newContent);
+  return panel;
+}
+
+/**
+ * edit_note：左右并排旧/新，行级对齐标注差异。
+ * diff 配色不用红绿：新增行淡蓝底，删除行中性灰 + 删除线。
+ */
+function renderEditDiff(
+  oldContent: string,
+  newContent: string,
+  detail: Extract<EditPreviewDetail, { kind: "diff" }>,
+): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "chat-diff chat-diff-sbs";
+
+  // 用 detail.hunks（unifiedDiff 产物：`+ /- /  ` 前缀）重建对齐行。
+  const rows = alignDiffHunks(detail.hunks);
+  // 兜底：若 hunks 为空，直接左右展示原始内容。
+  const useRows = rows.length > 0 ? rows : splitFallback(oldContent, newContent);
+
+  const leftCol = document.createElement("div");
+  leftCol.className = "chat-diff-col chat-diff-old";
+  const rightCol = document.createElement("div");
+  rightCol.className = "chat-diff-col chat-diff-new";
+  for (const r of useRows) {
+    leftCol.appendChild(diffRow(r.left, r.kind === "del"));
+    rightCol.appendChild(diffRow(r.right, r.kind === "add"));
+  }
+  const labels = document.createElement("div");
+  labels.className = "chat-diff-labels";
+  labels.innerHTML = `<span>原版本</span><span>新版本</span>`;
+  wrap.append(labels, leftCol, rightCol);
+  return wrap;
+}
+
+type AlignedRow = { left: string; right: string; kind: "ctx" | "add" | "del" };
+
+function alignDiffHunks(hunks: string): AlignedRow[] {
+  const rows: AlignedRow[] = [];
+  for (const raw of hunks.split("\n")) {
+    if (raw === "") continue;
+    const prefix = raw.slice(0, 1);
+    const rest = raw.slice(2);
+    if (prefix === "+") rows.push({ left: "", right: rest, kind: "add" });
+    else if (prefix === "-") rows.push({ left: rest, right: "", kind: "del" });
+    else rows.push({ left: rest, right: rest, kind: "ctx" });
+  }
+  return rows;
+}
+
+function splitFallback(oldContent: string, newContent: string): AlignedRow[] {
+  const la = oldContent.split("\n");
+  const lb = newContent.split("\n");
+  const n = Math.max(la.length, lb.length);
+  const rows: AlignedRow[] = [];
+  for (let i = 0; i < n; i++) {
+    rows.push({ left: la[i] ?? "", right: lb[i] ?? "", kind: la[i] === lb[i] ? "ctx" : "ctx" });
+  }
+  return rows;
+}
+
+function diffRow(text: string, highlight: boolean): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "chat-diff-row";
+  if (highlight) row.classList.add(text === "" ? "chat-diff-empty" : "chat-diff-mark");
+  if (text === "") {
+    row.innerHTML = "&nbsp;";
+  } else {
+    row.textContent = text;
+  }
+  return row;
+}
+
+function renderTagAssign(d: Extract<EditPreviewDetail, { kind: "tag_assign" }>): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "chat-tag-row";
+  const chip = document.createElement("span");
+  chip.className = "tag-chip";
+  chip.style.background = d.tagColor;
+  chip.textContent = d.tagName;
+  row.append("块「" + d.blockPreview + "」→ ", chip);
+  return row;
+}
+
+function renderTagCreate(d: Extract<EditPreviewDetail, { kind: "tag_create" }>): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "chat-tag-row";
+  const chip = document.createElement("span");
+  chip.className = "tag-chip";
+  chip.style.background = d.tagColor;
+  chip.textContent = d.tagName;
+  row.append("新建标签 ", chip);
+  return row;
+}
+
+function renderTagDelete(d: Extract<EditPreviewDetail, { kind: "tag_delete" }>): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "chat-tag-row";
+  row.textContent = `删除标签「${d.tagName}」，${d.markerCount} 处标记将清除`;
+  return row;
+}
+
+function escapeText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
