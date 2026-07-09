@@ -8,6 +8,7 @@ import {
   type ChatEvent,
   type ChatState,
   emptyChat,
+  isChatStreaming,
   reduceEvents,
   renderMessages,
 } from "./render";
@@ -19,8 +20,8 @@ import {
  * 状态用 render.ts 的纯 reducer 维护；DOM 只是状态的薄投影。
  */
 export interface AssistantDeps {
-  /** 发送一条用户消息给 tutor。 */
-  send: (text: string, conversationId: string) => unknown;
+  /** 发送一条用户消息给 tutor，返回 requestId（用于取消）。 */
+  send: (text: string, conversationId: string) => Promise<string>;
   createConversation: (scope: ChatScope) => Promise<ChatConversation>;
   openConversation: (conversation: ChatConversation) => Promise<ChatConversation | null | void>;
   listConversations: (scope: ChatScope) => Promise<ChatConversation[]>;
@@ -30,16 +31,31 @@ export interface AssistantDeps {
     title: string,
     titleState: ChatConversation["titleState"],
   ) => Promise<ChatConversation | null>;
-  /** 订阅 agent 流式事件；返回取消订阅句柄（同步或 Promise）。 */
+  /** 订阅 agent 流式事件；返回取消订阅句柄。 */
   subscribe: (cb: (event: AgentEvent) => void) => UnlistenFn | Promise<UnlistenFn>;
+  /** 取消进行中的请求（经 stdin 发 Cancel）。无活动请求时 no-op。 */
+  cancel?: (requestId: string) => void;
 }
 
 export interface AssistantHandle {
   destroy: () => void;
   setScope: (scope: ChatScope | null) => void;
   openConversation: (conversation: ChatConversation) => Promise<void>;
-  /** 外部注入一条错误消息（如 sidecar 启动失败），显示在聊天区域。 */
   showError: (message: string) => void;
+  /** 展开/收起输入气泡。 */
+  setInputOpen: (open: boolean) => void;
+  /** 输入气泡是否展开。 */
+  isInputOpen: () => boolean;
+  /** AI 是否正在流式输出。 */
+  isStreaming: () => boolean;
+  /** 取消进行中的 AI 回复（焦点在助手区且流式时由 Esc 调用）。 */
+  cancel: () => void;
+  /** 开始新对话（连带展开气泡）。 */
+  startNewConversation: () => void;
+  /** 历史浮层是否打开。 */
+  isHistoryPopoverOpen: () => boolean;
+  /** 关闭历史浮层。 */
+  closeHistoryPopover: () => void;
 }
 
 export function mountAssistant(root: HTMLElement, deps: AssistantDeps): AssistantHandle {
@@ -109,6 +125,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   }
 
   let inputOpen = false;
+  let activeRequestId: string | null = null;
   function setInputOpen(open: boolean) {
     inputOpen = open;
     inputWrap.classList.toggle("open", open);
@@ -163,7 +180,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     dispatch({ type: "user", conversationId: conversation.id, text });
     dispatch({ type: "pending", conversationId: conversation.id });
     try {
-      await deps.send(text, conversation.id);
+      activeRequestId = await deps.send(text, conversation.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       dispatch({ type: "error", requestId: null, conversationId: conversation.id, message });
@@ -263,12 +280,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     closeHistoryPopover();
   }
 
-  function onDocumentKeyDown(e: KeyboardEvent) {
-    if (e.key === "Escape") closeHistoryPopover();
-  }
-
   document.addEventListener("pointerdown", onDocumentPointerDown);
-  document.addEventListener("keydown", onDocumentKeyDown);
 
   rerender();
   updateSendMode();
@@ -286,6 +298,11 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     if (event.type === "title" && activeConversation?.id === event.conversationId) {
       activeConversation = { ...activeConversation, title: event.title, titleState: "final" };
     }
+    if (event.type === "delta" || event.type === "tool") {
+      activeRequestId = event.requestId;
+    } else if (event.type === "done" || event.type === "error") {
+      activeRequestId = null;
+    }
     dispatch(event);
   })).then((un) => {
     if (destroyed) un();
@@ -298,7 +315,6 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       unlisten?.();
       permBubble.destroy();
       document.removeEventListener("pointerdown", onDocumentPointerDown);
-      document.removeEventListener("keydown", onDocumentKeyDown);
       root.classList.remove("assistant");
       root.innerHTML = "";
     },
@@ -327,5 +343,22 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     showError(message: string) {
       dispatch({ type: "error", requestId: null, message });
     },
+    setInputOpen,
+    isInputOpen() {
+      return inputOpen;
+    },
+    isStreaming() {
+      return isChatStreaming(state);
+    },
+    cancel() {
+      if (activeRequestId) deps.cancel?.(activeRequestId);
+    },
+    startNewConversation() {
+      void startNewConversation();
+    },
+    isHistoryPopoverOpen() {
+      return !historyPopover.hidden;
+    },
+    closeHistoryPopover,
   };
 }

@@ -25,10 +25,17 @@ describe("assistant session UI", () => {
     expect(assistantSource).toContain("deriveTitleFromFirstMessage");
   });
 
-  it("closes the history popover from outside clicks and Escape", () => {
+  it("closes the history popover from outside clicks", () => {
     expect(assistantSource).toContain('document.addEventListener("pointerdown"');
-    expect(assistantSource).toContain('document.addEventListener("keydown"');
-    expect(assistantSource).toContain('e.key === "Escape"');
+  });
+
+  it("exposes handle methods for the central shortcut dispatcher", () => {
+    expect(assistantSource).toContain("setInputOpen");
+    expect(assistantSource).toContain("isInputOpen");
+    expect(assistantSource).toContain("isStreaming");
+    expect(assistantSource).toContain("isHistoryPopoverOpen");
+    expect(assistantSource).toContain("closeHistoryPopover");
+    expect(assistantSource).toContain("startNewConversation");
   });
 
   it("shows the new conversation action only when the assistant is expanded with messages", () => {
