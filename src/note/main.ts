@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { mountAssistant, type AssistantHandle } from "../assistant/assistant";
-import { agentNewSession, agentOpenSession, agentSend, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
+import { agentNewSession, agentOpenSession, agentSend, agentCancel, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
 import { buildCaretInsert } from "./append";
 import { buildQuoteBlock, mergeQuoteBlock, resolveMergeTarget, type Source } from "./quote";
 import { htmlToMarkdown } from "./paste";
@@ -69,6 +69,8 @@ import {
   setViewSeg,
 } from "./topbar";
 import { canSplit } from "./split";
+import { buildBindings, installShortcuts, type ShortcutActions } from "./shortcuts";
+import { WINDOW_SHORTCUT_DEFAULTS, type WindowShortcutId } from "../shared/shortcuts";
 import { listVersions, restoreVersion, snapshotNote } from "./versions";
 import {
   chatCreate,
@@ -438,6 +440,17 @@ function applyView() {
   requestEditorLayout(pieceEditor);
 }
 
+function selectView(view: "inbox" | "piece" | "split") {
+  if (view === "split") {
+    layoutController?.setSplit(true);
+  } else {
+    surface = view;
+    layoutController?.setSplit(false);
+  }
+  applyView();
+  tasksPanel.syncLayout();
+}
+
 const tasksPanel = createTasksPanel(noteBody, {
   tasksPath: () => (currentProject ? tasksPath(currentProject.path) : null),
   // 行动开关与助手开关同等地驱动右栏几何：打开即预留右栏、正文左推。
@@ -480,6 +493,7 @@ const assistantHandle: AssistantHandle = mountAssistant(assistantRegion, {
   getLastConversation: (scope) => chatGetForScope(scope),
   updateTitle: (conversationId, title, titleState) => chatUpdateTitle(conversationId, title, titleState),
   subscribe: (cb) => onAgentEvent(cb),
+  cancel: (requestId) => { void agentCancel(requestId); },
 });
 
 void listen<ChatConversation>("chat://open", (event) => {
@@ -1410,15 +1424,7 @@ renderTopbar(document.querySelector("#topbar-root")!, {
     void showProjectSwitcher(anchor);
   },
   onSelectView: (view) => {
-    if (view === "split") {
-      layoutController?.setSplit(true);
-    } else {
-      // 选中采集/写作即退出双栏，并记住这一面作为回落目标。
-      surface = view;
-      layoutController?.setSplit(false);
-    }
-    applyView();
-    tasksPanel.syncLayout();
+    selectView(view);
   },
   onToggleTasks: () => tasksPanel.toggle(),
 });
@@ -1454,6 +1460,7 @@ window.addEventListener("resize", () => {
 
 const FONT_MIN = 10;
 const FONT_MAX = 28;
+const DEFAULT_FONT = 15;
 let currentFontSize = 15;
 
 function applyFontSize(size: number) {
@@ -1466,19 +1473,11 @@ async function saveFontSize() {
   await invoke("set_config", { newConfig: { ...config, font_size: currentFontSize } });
 }
 
-document.addEventListener("keydown", (e) => {
-  const mod = e.metaKey || e.ctrlKey;
-  if (!mod) return;
-  if (e.key === "=" || e.key === "+") {
-    e.preventDefault();
-    applyFontSize(currentFontSize + 1);
-    void saveFontSize();
-  } else if (e.key === "-") {
-    e.preventDefault();
-    applyFontSize(currentFontSize - 1);
-    void saveFontSize();
-  }
-});
+/** 字号快捷键入口：+1/-1 调整，0 复位默认。 */
+function bumpFont(delta: number) {
+  applyFontSize(delta === 0 ? DEFAULT_FONT : currentFontSize + delta);
+  void saveFontSize();
+}
 
 async function init() {
   const config = await getConfig();
@@ -1489,6 +1488,61 @@ async function init() {
   layoutController = createLayoutController(app, { assistantOpen: assistant.open });
   layoutController.apply();
   applyView();
+
+  // ── 窗内快捷键 ──
+  let uninstallShortcuts: (() => void) | null = null;
+
+  async function loadShortcuts() {
+    const ws = await invoke<Record<WindowShortcutId, string>>("get_window_shortcuts");
+    const values: Record<WindowShortcutId, string> = { ...WINDOW_SHORTCUT_DEFAULTS, ...ws };
+    const bindings = buildBindings(values);
+    if (uninstallShortcuts) uninstallShortcuts();
+    uninstallShortcuts = installShortcuts(actions, bindings);
+  }
+
+  const actions: ShortcutActions = {
+    toggleAssistant: async () => {
+      const next = await invoke<{ open: boolean }>("toggle_assistant");
+      layoutController?.setAssistantOpen(next.open);
+      tasksPanel.syncLayout();
+    },
+    toggleAssistantBubble: async () => {
+      const cur = await invoke<{ open: boolean }>("get_assistant_state");
+      if (!cur.open) {
+        const next = await invoke<{ open: boolean }>("toggle_assistant");
+        layoutController?.setAssistantOpen(next.open);
+        tasksPanel.syncLayout();
+        assistantHandle.setInputOpen(true);
+      } else {
+        assistantHandle.setInputOpen(!assistantHandle.isInputOpen());
+      }
+    },
+    toggleActionPanel: () => tasksPanel.toggle(),
+    quickAddAction: () => tasksPanel.quickAdd(),
+    selectView: (v) => selectView(v),
+    startNewConversation: async () => {
+      const cur = await invoke<{ open: boolean }>("get_assistant_state");
+      if (!cur.open) {
+        const next = await invoke<{ open: boolean }>("toggle_assistant");
+        layoutController?.setAssistantOpen(next.open);
+        tasksPanel.syncLayout();
+      }
+      assistantHandle.startNewConversation();
+    },
+    isAssistantStreaming: () => assistantHandle.isStreaming(),
+    cancelAssistant: () => assistantHandle.cancel(),
+    isActionPanelOpen: () => tasksPanel.isOpen(),
+    closeActionPanel: () => tasksPanel.setOpen(false),
+    isAssistantBubbleOpen: () => assistantHandle.isInputOpen(),
+    collapseAssistantBubble: () => assistantHandle.setInputOpen(false),
+    isHistoryPopoverOpen: () => assistantHandle.isHistoryPopoverOpen(),
+    closeHistoryPopover: () => assistantHandle.closeHistoryPopover(),
+    canSplit: () => canSplit(window.innerWidth),
+    bumpFont,
+  };
+
+  await loadShortcuts();
+  await listen("window-shortcuts-changed", () => { void loadShortcuts(); });
 
   // 检查 sidecar 启动状态：若有错误，在助手面板显示提示。
   const agentStatus = await invoke<{ ready: boolean; error: string | null }>("get_agent_status");

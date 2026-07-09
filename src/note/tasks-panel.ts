@@ -509,5 +509,11 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
     return open;
   }
 
-  return { toggle, setOpen, isOpen, reload, syncLayout };
+  /** 连带打开面板并聚焦添加表单（快捷键入口）。 */
+  function quickAdd() {
+    if (!open) setOpen(true);
+    setAdding(true);
+  }
+
+  return { toggle, setOpen, isOpen, reload, syncLayout, quickAdd };
 }
