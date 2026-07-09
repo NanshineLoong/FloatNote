@@ -350,10 +350,17 @@ pub fn get_agent_status(state: State<AppState>) -> AgentStatus {
     AgentStatus { ready, error }
 }
 
-/// 笔记窗发布当前活动笔记，供 apply_write 定位文件。
+/// 笔记窗发布当前活动笔记，供 apply_write 定位文件。`kind` 与 `NoteTarget.kind`
+/// 同语义（inbox/tasks/piece/doc），用于缺省 target 时判定 `can_snapshot`。
 #[tauri::command]
-pub fn set_active_note(state: State<AppState>, dir: String, note_id: String, path: String) {
-    *state.active_note.lock().unwrap() = Some(ActiveNote { dir, note_id, path });
+pub fn set_active_note(
+    state: State<AppState>,
+    dir: String,
+    note_id: String,
+    path: String,
+    kind: String,
+) {
+    *state.active_note.lock().unwrap() = Some(ActiveNote { dir, note_id, path, kind });
 }
 
 /// 查询当前活动笔记（独立助手窗发消息前用来定位 dir / noteId / path）。
@@ -376,9 +383,11 @@ pub fn agent_cancel(state: State<AppState>, request_id: String) -> Result<(), St
 /// 按决策完成落盘/拒绝，并回 sidecar `ApplyEditResult`。
 ///
 /// - `decision != "allow"` → 回 denied，不动文件。
-/// - allow → `handle_apply_edit_at` 落盘、`mark_self_write` 抑制 watcher、
-///   emit `note://updated`，再回结果（含 version/error）。
-/// 总是回一条结果（pending 缺失时静默返回，避免重复裁决）。
+/// - allow → `handle_apply_edit_at` 落盘；仅当 `outcome.ok` 时才
+///   `mark_self_write` 抑制 watcher、emit `note://updated`。
+/// - 无论成功失败都回一条 `ApplyEditResult`（ok→version，error→error）；
+///   `note://updated` 仅在成功时 emit（失败时前端不应重载）。
+/// pending 缺失时静默返回，避免重复裁决。
 #[tauri::command]
 pub fn resolve_permission(
     app: tauri::AppHandle,
@@ -401,8 +410,8 @@ pub fn resolve_permission(
         });
         return Ok(());
     }
-    let can_snapshot = p.target.kind == "piece";
-    crate::watcher::mark_self_write(&state.write_suppress, &p.path);
+    // 先落盘（含并发校验与可选拍快照）；can_snapshot 由 handle_apply_edit 据
+    // 解析后的 kind 预先算好存于 PendingEdit，resolve_permission 不再重算。
     let outcome = crate::agent::handle_apply_edit_at(
         &p.dir,
         &p.note_id,
@@ -410,16 +419,20 @@ pub fn resolve_permission(
         &p.old_content,
         &p.new_content,
         &write_mode,
-        can_snapshot,
+        p.can_snapshot,
     );
-    let _ = app.emit(
-        "note://updated",
-        &NoteUpdated {
-            note_id: p.note_id.clone(),
-            path: p.path.clone(),
-            version: outcome.version.unwrap_or(0),
-        },
-    );
+    // 仅在成功时抑制 watcher + 广播 note://updated。失败时不动前端。
+    if outcome.ok {
+        crate::watcher::mark_self_write(&state.write_suppress, &p.path);
+        let _ = app.emit(
+            "note://updated",
+            &NoteUpdated {
+                note_id: p.note_id.clone(),
+                path: p.path.clone(),
+                version: outcome.version.unwrap_or(0),
+            },
+        );
+    }
     let _ = state.agent.lock().unwrap().as_mut().map(|a| {
         a.send(&HostToSidecar::ApplyEditResult {
             call_id: p.call_id,

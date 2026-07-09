@@ -81,7 +81,8 @@ pub enum SidecarToHost {
     ApplyEdit {
         call_id: String,
         conversation_id: String,
-        target: NoteTarget,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        target: Option<NoteTarget>,
         tool_name: String,
         old_content: String,
         new_content: String,
@@ -90,7 +91,8 @@ pub enum SidecarToHost {
     GetNoteText {
         call_id: String,
         conversation_id: String,
-        target: NoteTarget,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        target: Option<NoteTarget>,
     },
     Done {
         request_id: String,
@@ -119,12 +121,15 @@ pub enum ChatDisplayMessage {
 
 /// 当前活动笔记：由笔记窗 `set_active_note` 发布、`agent_send` 也会更新，
 /// 供 apply_edit / get_note_text 定位 dir / path，并供独立助手窗 `get_active_note` 查询。
+/// `kind` 与 `NoteTarget.kind` 同语义（inbox/tasks/piece/doc），用于缺省 target 时
+/// 决定 `can_snapshot`（仅 piece 可快照）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActiveNote {
     pub dir: String,
     pub note_id: String,
     pub path: String,
+    pub kind: String,
 }
 
 /// 活的 sidecar 子进程句柄：持有子进程与其 stdin。
@@ -188,15 +193,15 @@ pub struct EditOutcome {
 /// `handle_apply_edit` 暂存的待裁决编辑：用户在 `permission://request` 气泡上
 /// 点击 allow/deny 后，`resolve_permission` 取出此项完成落盘并回 sidecar。
 ///
-/// `dir`/`note_id`/`path` 是 `handle_apply_edit` 已解析好的目标（来自
-/// `resolve_target`），`resolve_permission` 直接复用、不再重算。
+/// `dir`/`note_id`/`path`/`can_snapshot` 是 `handle_apply_edit` 已解析好的目标
+/// （来自 `resolve_target`），`resolve_permission` 直接复用、不再重算。
+/// `can_snapshot` = 解析后的 kind == "piece"，决定是否允许 snapshot 写入模式。
 #[derive(Debug, Clone)]
 pub struct PendingEdit {
     pub call_id: String,
     /// 暂存以备日志/调试，当前 resolve_permission 不读取。
     #[allow(dead_code)]
     pub conversation_id: String,
-    pub target: NoteTarget,
     pub old_content: String,
     pub new_content: String,
     /// 默认写入模式（暂存时的初值 "direct"）；实际生效的 write_mode 由
@@ -206,6 +211,7 @@ pub struct PendingEdit {
     pub dir: PathBuf,
     pub note_id: String,
     pub path: String,
+    pub can_snapshot: bool,
 }
 
 impl AgentHandle {
@@ -397,37 +403,40 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
 /// `PendingEdit`。**不落盘、不回结果**——落盘与回 `ApplyEditResult` 发生在
 /// 用户裁决后调用的 `resolve_permission` 命令里。
 ///
-/// target 无法解析（无活动笔记）时直接回 deny，避免 sidecar 在 call_id 上悬挂。
+/// target 无法解析（无活动笔记）时**不**弹气泡、**不**暂存 pending，直接回
+/// deny，避免 sidecar 在 call_id 上悬挂。
 fn handle_apply_edit(
     app: &AppHandle,
     call_id: String,
     conversation_id: String,
-    target: NoteTarget,
+    target: Option<NoteTarget>,
     tool_name: String,
     old_content: String,
     new_content: String,
     preview: EditPreview,
 ) {
     let Some(state) = app.try_state::<AppState>() else { return; };
-    let can_snapshot = target.kind == "piece";
-    let resolved = resolve_target(&state, &target);
-    let request_id = call_id.clone();
-    let payload = serde_json::json!({
-        "request_id": request_id,
-        "conversation_id": conversation_id,
-        "target": target,
-        "tool_name": tool_name,
-        "old_content": old_content,
-        "new_content": new_content,
-        "preview": preview,
-        "can_snapshot": can_snapshot,
-        "resolved_dir": resolved.as_ref().map(|(d, _, _)| d.to_string_lossy().to_string()),
-        "resolved_note_id": resolved.as_ref().map(|(_, n, _)| n.clone()),
-        "resolved_path": resolved.as_ref().map(|(_, _, p)| p.to_string_lossy().to_string()),
-    });
-    let _ = app.emit("permission://request", &payload);
+    let resolved = resolve_target(&state, target.as_ref());
     match resolved {
-        Some((dir, note_id, path)) => {
+        Some((dir, note_id, path, kind)) => {
+            let can_snapshot = kind == "piece";
+            let request_id = call_id.clone();
+            let mut payload = serde_json::json!({
+                "request_id": request_id,
+                "conversation_id": conversation_id,
+                "tool_name": tool_name,
+                "old_content": old_content,
+                "new_content": new_content,
+                "preview": preview,
+                "can_snapshot": can_snapshot,
+                "resolved_dir": dir.to_string_lossy(),
+                "resolved_note_id": note_id,
+                "resolved_path": path.to_string_lossy(),
+            });
+            if let Some(t) = &target {
+                payload["target"] = serde_json::to_value(t).unwrap_or(serde_json::Value::Null);
+            }
+            let _ = app.emit("permission://request", &payload);
             state
                 .pending_edits
                 .lock()
@@ -435,17 +444,18 @@ fn handle_apply_edit(
                 .insert(request_id, PendingEdit {
                     call_id,
                     conversation_id,
-                    target,
                     old_content,
                     new_content,
                     write_mode: "direct".into(),
                     dir,
                     note_id,
                     path: path.to_string_lossy().to_string(),
+                    can_snapshot,
                 });
         }
         None => {
             // 无法定位目标笔记：无 pending 可待裁决，直接回 deny 解除 sidecar 等待。
+            // 不 emit permission://request，前端不弹气泡。
             let _ = state.agent.lock().unwrap().as_mut().map(|a| {
                 a.send(&HostToSidecar::ApplyEditResult {
                     call_id,
@@ -467,11 +477,11 @@ fn handle_get_note_text(
     app: &AppHandle,
     call_id: String,
     _conversation_id: String,
-    target: NoteTarget,
+    target: Option<NoteTarget>,
 ) {
     let Some(state) = app.try_state::<AppState>() else { return; };
-    let (content, found) = match resolve_target(&state, &target) {
-        Some((_, _, path)) => match std::fs::read_to_string(&path) {
+    let (content, found) = match resolve_target(&state, target.as_ref()) {
+        Some((_, _, path, _)) => match std::fs::read_to_string(&path) {
             Ok(c) => (c, true),
             Err(_) => (String::new(), false),
         },
@@ -510,36 +520,48 @@ pub struct NoteUpdated {
     pub version: u32,
 }
 
-/// 解析 `NoteTarget` → `(dir, note_id, path)`。
+/// 解析 `NoteTarget` → `(dir, note_id, path, kind)`。
 ///
 /// 依据 `AppState.active_note`（当前活动笔记，携带其所在项目空间 dir、
-/// note_id 与文件 path）：
-/// - `inbox`/`tasks` → 项目空间根下固定文件名 `_inbox.md`/`_tasks.md`；
-/// - `piece`/`doc`/其它 → `target.name` 缺省回退到活动笔记；显式给出且与
+/// note_id、文件 path 与 kind）：
+/// - `None`（target 缺省）→ 当前活动笔记，沿用 active.kind。
+/// - `Some(t)` 且 `inbox`/`tasks` → 项目空间根下固定文件名 `_inbox.md`/`_tasks.md`，
+///   kind 取 t.kind。
+/// - `Some(t)` 且 `piece`/`doc`/其它 → `t.name` 缺省回退到活动笔记；显式给出且与
 ///   活动 note_id 不同时，按 `<dir>/<name>.md` 解析（v1 简化：pieces 即以
-///   文件名直存在项目空间根下）。
+///   文件名直存在项目空间根下）。kind 取 t.kind。
 ///
-/// 无活动笔记时返回 None（调用方据此决定是否回 deny）。
-fn resolve_target(state: &AppState, target: &NoteTarget) -> Option<(PathBuf, String, PathBuf)> {
+/// 返回的 `kind` 用于 `can_snapshot` 判定（仅 piece 可快照）。无活动笔记时返回 None。
+fn resolve_target(
+    state: &AppState,
+    target: Option<&NoteTarget>,
+) -> Option<(PathBuf, String, PathBuf, String)> {
     let active = state.active_note.lock().unwrap().clone()?;
     let dir = PathBuf::from(&active.dir);
-    let (note_id, path) = match target.kind.as_str() {
-        "inbox" => ("_inbox".to_string(), dir.join("_inbox.md")),
-        "tasks" => ("_tasks".to_string(), dir.join("_tasks.md")),
-        // piece / doc / 未知 kind 一律按 piece 语义处理（v1 简化）。
-        _ => match &target.name {
-            Some(name) if name == &active.note_id => {
-                (active.note_id.clone(), PathBuf::from(&active.path))
-            }
-            Some(name) => {
-                // 兼容传入带 `.md` 后缀的 name：取 stem 作为 note_id。
-                let stem = name.trim_end_matches(".md");
-                (stem.to_string(), dir.join(format!("{stem}.md")))
-            }
-            None => (active.note_id.clone(), PathBuf::from(&active.path)),
-        },
+    let (note_id, path, kind) = match target {
+        None => (active.note_id.clone(), PathBuf::from(&active.path), active.kind.clone()),
+        Some(t) => {
+            let kind = t.kind.clone();
+            let (note_id, path) = match t.kind.as_str() {
+                "inbox" => ("_inbox".to_string(), dir.join("_inbox.md")),
+                "tasks" => ("_tasks".to_string(), dir.join("_tasks.md")),
+                // piece / doc / 未知 kind 一律按 piece 语义处理（v1 简化）。
+                _ => match &t.name {
+                    Some(name) if name == &active.note_id => {
+                        (active.note_id.clone(), PathBuf::from(&active.path))
+                    }
+                    Some(name) => {
+                        // 兼容传入带 `.md` 后缀的 name：取 stem 作为 note_id。
+                        let stem = name.trim_end_matches(".md");
+                        (stem.to_string(), dir.join(format!("{stem}.md")))
+                    }
+                    None => (active.note_id.clone(), PathBuf::from(&active.path)),
+                },
+            };
+            (note_id, path, kind)
+        }
     };
-    Some((dir, note_id, path))
+    Some((dir, note_id, path, kind))
 }
 
 /// 纯函数：并发校验 → （可选拍快照）→ 落盘，返回 `EditOutcome`。
@@ -682,8 +704,9 @@ mod tests {
         match msg {
             SidecarToHost::ApplyEdit { ref tool_name, ref target, .. } => {
                 assert_eq!(tool_name, "set_tag");
-                assert_eq!(target.kind, "inbox");
-                assert!(target.name.is_none());
+                let t = target.as_ref().expect("target present");
+                assert_eq!(t.kind, "inbox");
+                assert!(t.name.is_none());
             }
             _ => panic!("not ApplyEdit"),
         }
@@ -699,6 +722,29 @@ mod tests {
         assert!(json.contains("\"blockPreview\":\"块\""), "{json}");
         assert!(json.contains("\"tagName\":\"review\""), "{json}");
         assert!(json.contains("\"tagColor\":\"#e5484d\""), "{json}");
+    }
+
+    #[test]
+    fn apply_edit_omits_absent_target() {
+        // target 缺省时序列化结果不应包含 target 字段。
+        let msg = SidecarToHost::ApplyEdit {
+            call_id: "w1".into(),
+            conversation_id: "c1".into(),
+            target: None,
+            tool_name: "write_note".into(),
+            old_content: "a".into(),
+            new_content: "b".into(),
+            preview: EditPreview {
+                tool: "write_note".into(),
+                summary: "s".into(),
+                detail: EditPreviewDetail::Diff { hunks: "@@".into() },
+            },
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(!json.contains("\"target\""), "absent target should be skipped: {json}");
+        // 反序列化回来仍是 None。
+        let back: SidecarToHost = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, msg);
     }
 
     #[test]
@@ -763,7 +809,7 @@ mod tests {
         let req = SidecarToHost::GetNoteText {
             call_id: "g1".into(),
             conversation_id: "c1".into(),
-            target: NoteTarget { kind: "piece".into(), name: Some("piece.md".into()) },
+            target: Some(NoteTarget { kind: "piece".into(), name: Some("piece.md".into()) }),
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"type\":\"get_note_text\""), "{json}");
@@ -772,6 +818,85 @@ mod tests {
         assert!(json.contains("\"target\":{\"kind\":\"piece\",\"name\":\"piece.md\"}"), "{json}");
         let back: SidecarToHost = serde_json::from_str(&json).unwrap();
         assert_eq!(back, req);
+
+        // target 缺省时序列化应省略 target 字段，反序列化回 None。
+        let req_no_target = SidecarToHost::GetNoteText {
+            call_id: "g2".into(),
+            conversation_id: "c1".into(),
+            target: None,
+        };
+        let json2 = serde_json::to_string(&req_no_target).unwrap();
+        assert!(!json2.contains("\"target\""), "absent target should be skipped: {json2}");
+        let back2: SidecarToHost = serde_json::from_str(&json2).unwrap();
+        assert_eq!(back2, req_no_target);
+    }
+
+    #[test]
+    fn resolve_target_none_falls_back_to_active_note_kind() {
+        // 直接构造 AppState 验证 resolve_target 的 None 分支与 kind 回传。
+        use crate::commands::AppState;
+        use std::sync::Mutex;
+
+        fn make_state(active: Option<ActiveNote>) -> AppState {
+            AppState {
+                config: Mutex::new(Config::default()),
+                config_path: PathBuf::new(),
+                agent: Mutex::new(None),
+                agent_ready: Mutex::new(false),
+                agent_spawn_error: Mutex::new(None),
+                active_note: Mutex::new(active),
+                agent_seq: AtomicU64::new(0),
+                watcher: Mutex::new(None),
+                write_suppress: crate::watcher::new_suppress_list(),
+                popup_cache: crate::popup::PopupCache::default(),
+                pending_edits: Mutex::new(HashMap::new()),
+            }
+        }
+
+        use crate::config::Config;
+        use std::collections::HashMap;
+        use std::sync::atomic::AtomicU64;
+
+        // 无活动笔记 → None
+        let state = make_state(None);
+        assert!(resolve_target(&state, None).is_none());
+
+        // 活动笔记为 piece → None target 回退到 active，kind="piece" → can_snapshot 语义
+        let state = make_state(Some(ActiveNote {
+            dir: "/tmp/proj".into(),
+            note_id: "piece".into(),
+            path: "/tmp/proj/piece.md".into(),
+            kind: "piece".into(),
+        }));
+        let (dir, note_id, path, kind) = resolve_target(&state, None).unwrap();
+        assert_eq!(dir, PathBuf::from("/tmp/proj"));
+        assert_eq!(note_id, "piece");
+        assert_eq!(path, PathBuf::from("/tmp/proj/piece.md"));
+        assert_eq!(kind, "piece");
+        assert!(kind == "piece"); // can_snapshot would be true
+
+        // 活动笔记为 inbox → kind="inbox" → can_snapshot 语义为 false
+        let state = make_state(Some(ActiveNote {
+            dir: "/tmp/proj".into(),
+            note_id: "_inbox".into(),
+            path: "/tmp/proj/_inbox.md".into(),
+            kind: "inbox".into(),
+        }));
+        let (_, _, _, kind) = resolve_target(&state, None).unwrap();
+        assert_eq!(kind, "inbox");
+        assert!(kind != "piece"); // can_snapshot would be false
+
+        // 显式 target=inbox 即使活动笔记是 piece，kind 也取 t.kind
+        let state = make_state(Some(ActiveNote {
+            dir: "/tmp/proj".into(),
+            note_id: "piece".into(),
+            path: "/tmp/proj/piece.md".into(),
+            kind: "piece".into(),
+        }));
+        let (_, note_id, _, kind) =
+            resolve_target(&state, Some(&NoteTarget { kind: "inbox".into(), name: None })).unwrap();
+        assert_eq!(note_id, "_inbox");
+        assert_eq!(kind, "inbox");
     }
 
     #[test]
