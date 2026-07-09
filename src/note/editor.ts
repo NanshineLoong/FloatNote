@@ -3,11 +3,12 @@ import { markdown } from "@codemirror/lang-markdown";
 import { Strikethrough, Table, TaskList } from "@lezer/markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { livePreview } from "./preview";
+import { livePreview, attachImageToolbar, setNoteDir } from "./preview";
 import { listKeymap } from "./list-keymap";
-import { htmlPasteHandler } from "./paste";
+import { htmlPasteHandler, imagePasteHandler } from "./paste";
+import { imageDropHandler } from "./image-drop";
 
 const highlight = HighlightStyle.define([
   { tag: tags.heading, fontWeight: "600" },
@@ -43,17 +44,33 @@ export function createEditor(
   parent: HTMLElement,
   onChange: (doc: string) => void,
   extras: Extension[] = [],
-  opts: { grow?: boolean } = {},
+  opts: { grow?: boolean; noteDirProvider?: () => string } = {},
 ): EditorView {
-  return new EditorView({
+  const noteDirProvider = opts.noteDirProvider ?? (() => "");
+  const view = new EditorView({
     parent,
     extensions: [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ extensions: [Table, Strikethrough, TaskList] }),
       syntaxHighlighting(highlight),
+      // Refresh the image-widget noteDir map BEFORE the preview plugin rebuilds
+      // decorations, so a setDoc (project/document switch) renders images with the
+      // new dir. updateListener runs after plugin updates, so it can't help here.
+      ViewPlugin.fromClass(
+        class {
+          update(u: ViewUpdate) {
+            if (u.docChanged || u.selectionSet || u.focusChanged) {
+              setNoteDir(view, noteDirProvider());
+            }
+          }
+        },
+      ),
       ...livePreview(),
       listKeymap(),
+      // imagePasteHandler must come BEFORE htmlPasteHandler so the image check
+      // runs first; it returns false (no image) and lets the html handler run.
+      imagePasteHandler(noteDirProvider),
       htmlPasteHandler(),
       buildTheme(opts.grow ?? false),
       EditorView.lineWrapping,
@@ -63,6 +80,14 @@ export function createEditor(
       }),
     ],
   });
+  // Seed the image-widget noteDir map immediately; the ViewPlugin above keeps
+  // it fresh on doc/selection/focus change before the preview plugin rebuilds.
+  setNoteDir(view, noteDirProvider());
+  // Editors are long-lived; best-effort wiring for drop + toolbar. Cleanup is
+  // not invoked (app lifetime), but we call the setup so the handlers attach.
+  void imageDropHandler(noteDirProvider, () => view);
+  attachImageToolbar(view);
+  return view;
 }
 
 export function setDoc(view: EditorView, content: string) {

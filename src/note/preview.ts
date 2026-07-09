@@ -1,4 +1,4 @@
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { syntaxTree } from "@codemirror/language";
 import { StateEffect, type Extension, RangeSetBuilder } from "@codemirror/state";
 import {
@@ -14,6 +14,8 @@ import { renderInline } from "./inline";
 import { parseGfmTable, type Align } from "./table";
 import { stripTagMarker } from "@floatnote/note-logic";
 import hljs from "highlight.js/lib/common";
+import { parseImage, type ImageAlign } from "./image-attrs";
+import { imageSrc } from "./image-fs";
 
 function getCursorLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
@@ -65,17 +67,50 @@ class HrWidget extends WidgetType {
   ignoreEvent() { return true; }
 }
 
+/** Per-editor note directory, set by editor.ts so ImgWidget can resolve
+ *  relative `./_assets/...` paths into floatnote-img:// URLs. Keyed by the
+ *  EditorView's DOM root so the inbox and piece editors don't collide. */
+const noteDirs = new WeakMap<HTMLElement, string>();
+export function setNoteDir(view: EditorView, dir: string): void {
+  noteDirs.set(view.dom, dir);
+}
+function noteDirOf(view: EditorView): string {
+  return noteDirs.get(view.dom) ?? "";
+}
+
 class ImgWidget extends WidgetType {
-  constructor(readonly url: string, readonly alt: string) { super(); }
-  eq(o: ImgWidget): boolean { return o.url === this.url && o.alt === this.alt; }
+  constructor(readonly raw: string, readonly view: EditorView) { super(); }
+  eq(o: ImgWidget): boolean { return o.raw === this.raw; }
   toDOM(): HTMLElement {
+    const a = parseImage(this.raw);
+    const figure = document.createElement("figure");
+    const align: ImageAlign = a?.align ?? "left";
+    figure.className = `cm-preview-figure img-${align}`;
     const img = document.createElement("img");
     img.className = "cm-preview-img";
-    img.alt = this.alt;
-    img.src = /^https?:\/\//.test(this.url) ? this.url : convertFileSrc(this.url);
-    return img;
+    img.alt = a?.caption ?? "";
+    const url = a?.url ?? "";
+    img.src = imageSrc(url, noteDirOf(this.view));
+    img.style.width = a?.width ? `${a.width}px` : "";
+    figure.appendChild(img);
+    if (a && a.caption) {
+      const fig = document.createElement("figcaption");
+      fig.className = "cm-preview-figcaption";
+      fig.textContent = a.caption;
+      figure.appendChild(fig);
+    }
+    // Mirror CheckboxWidget's mousedown + preventDefault so CodeMirror doesn't
+    // move the cursor onto this line (which would tear the widget down via the
+    // onCursorLine gate) before the subsequent click can open the toolbar.
+    // Toolbar interactions (buttons / caption input / resize handle) are left
+    // alone so they keep working.
+    figure.addEventListener("mousedown", (e) => {
+      if ((e.target as HTMLElement | null)?.closest?.(".cm-img-toolbar")) return;
+      e.preventDefault();
+    });
+    return figure;
   }
-  ignoreEvent() { return true; }
+  ignoreEvent() { return false; } // allow clicks for the toolbar (Task 7)
 }
 
 class LinkWidget extends WidgetType {
@@ -547,13 +582,22 @@ function buildDecorations(view: EditorView): DecorationSet {
         case "Image": {
           if (onCursorLine(node.from)) return false;
           const raw = doc.sliceString(node.from, node.to);
-          const alt = raw.match(/!\[([^\]]*)\]/)?.[1] ?? "";
+          // lang-markdown's Image node covers `![alt](url)` but NOT the trailing
+          // `{...}` attr block (it's plain text). Extend the replacement to
+          // include a `{...}` immediately following so it is hidden too.
+          let to = node.to;
+          const after = doc.sliceString(node.to, node.to + 1);
+          if (after === "{") {
+            const line = doc.lineAt(node.to);
+            const close = doc.sliceString(node.to, line.to).indexOf("}");
+            if (close >= 0) to = node.to + close + 1;
+          }
           const url = raw.match(/\(([^)]+)\)/)?.[1].trim() ?? "";
           if (url) {
             entries.push({
               from: node.from,
-              to: node.to,
-              deco: Decoration.replace({ widget: new ImgWidget(url, alt) }),
+              to,
+              deco: Decoration.replace({ widget: new ImgWidget(doc.sliceString(node.from, to), view) }),
             });
           }
           return false;
@@ -785,13 +829,11 @@ const previewTheme = EditorView.theme({
     borderTop: "1px solid rgba(0,0,0,0.18)",
     verticalAlign: "middle",
   },
-  ".cm-preview-img": {
-    maxWidth: "100%",
-    borderRadius: "4px",
-    display: "inline-block",
-    verticalAlign: "middle",
-    margin: "2px 0",
-  },
+  ".cm-preview-figure": { display: "flex", flexDirection: "column", alignItems: "flex-start", margin: "6px 0" },
+  ".cm-preview-figure.img-center": { alignItems: "center" },
+  ".cm-preview-figure.img-right": { alignItems: "flex-end" },
+  ".cm-preview-img": { maxWidth: "100%", borderRadius: "4px", display: "block" },
+  ".cm-preview-figcaption": { fontSize: "0.85em", color: "#6b7280", marginTop: "2px" },
   ".cm-preview-checkbox": {
     marginRight: "4px",
     cursor: "pointer",
@@ -852,8 +894,44 @@ const previewTheme = EditorView.theme({
     paddingLeft: "calc(var(--list-depth, 0) * 1em + 0.6em)",
     listStyleType: "none",
   },
+  ".cm-preview-figure.cm-img-active": { outline: "2px solid #3b82f6", borderRadius: "4px" },
+  ".cm-img-toolbar": {
+    display: "flex",
+    gap: "4px",
+    alignItems: "center",
+    background: "rgba(255,255,255,0.95)",
+    border: "1px solid rgba(0,0,0,0.15)",
+    borderRadius: "4px",
+    padding: "2px 4px",
+    marginTop: "2px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+  },
+  ".cm-img-toolbar button": {
+    border: "1px solid rgba(0,0,0,0.15)",
+    borderRadius: "3px",
+    background: "#fff",
+    padding: "0 6px",
+    cursor: "pointer",
+  },
+  ".cm-img-caption-input": {
+    border: "1px solid rgba(0,0,0,0.15)",
+    borderRadius: "3px",
+    padding: "0 4px",
+    fontSize: "0.8em",
+    minWidth: "120px",
+  },
+  ".cm-img-resize-handle": {
+    width: "12px",
+    height: "12px",
+    background: "#3b82f6",
+    borderRadius: "2px",
+    cursor: "nwse-resize",
+    alignSelf: "flex-end",
+  },
 });
 
 export function livePreview(): Extension[] {
   return [previewPlugin, previewTheme];
 }
+
+export { attachImageToolbar } from "./image-toolbar";

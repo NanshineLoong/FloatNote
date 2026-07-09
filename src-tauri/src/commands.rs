@@ -644,6 +644,51 @@ pub fn open_url(url: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveImageResult {
+    pub filename: String,
+    pub rel_path: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportImageResult {
+    pub source: String,
+    pub rel_path: String,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub fn save_pasted_image(
+    project_dir: String,
+    suggested_stem: String,
+    data_base64: String,
+    mime: String,
+) -> Result<SaveImageResult, String> {
+    let dir = std::path::Path::new(&project_dir);
+    let (filename, rel_path) =
+        notes::save_pasted_image(dir, &suggested_stem, &data_base64, &mime)
+            .map_err(|e| e.to_string())?;
+    Ok(SaveImageResult { filename, rel_path })
+}
+
+#[tauri::command]
+pub fn import_image_files(
+    source_paths: Vec<String>,
+    project_dir: String,
+) -> Vec<ImportImageResult> {
+    let dir = std::path::Path::new(&project_dir);
+    notes::import_image_files(&source_paths, dir)
+        .into_iter()
+        .map(|(source, rel_path, error)| ImportImageResult {
+            source,
+            rel_path,
+            error,
+        })
+        .collect()
+}
+
 pub fn config_path(app: &tauri::AppHandle) -> PathBuf {
     app.path()
         .app_config_dir()

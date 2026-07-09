@@ -26,6 +26,42 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .register_uri_scheme_protocol("floatnote-img", |_ctx, request| {
+            use std::path::PathBuf;
+            // URI path is like "/<percent-encoded absolute path>". Strip the
+            // leading "/", percent-decode, then validate + serve.
+            let raw = request.uri().path();
+            let encoded = raw.strip_prefix('/').unwrap_or(raw);
+            let decoded = percent_encoding::percent_decode_str(encoded)
+                .decode_utf8_lossy()
+                .into_owned();
+            let path = PathBuf::from(&decoded);
+            if !crate::notes::is_safe_image_path(&path) {
+                return tauri::http::Response::builder()
+                    .status(tauri::http::StatusCode::FORBIDDEN)
+                    .header(tauri::http::header::CONTENT_TYPE, "text/plain")
+                    .body("forbidden".as_bytes().to_vec())
+                    .unwrap();
+            }
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("");
+            match std::fs::read(&path) {
+                Ok(bytes) => tauri::http::Response::builder()
+                    .header(
+                        tauri::http::header::CONTENT_TYPE,
+                        crate::notes::image_content_type(ext),
+                    )
+                    .body(bytes)
+                    .unwrap(),
+                Err(_) => tauri::http::Response::builder()
+                    .status(tauri::http::StatusCode::NOT_FOUND)
+                    .header(tauri::http::header::CONTENT_TYPE, "text/plain")
+                    .body("not found".as_bytes().to_vec())
+                    .unwrap(),
+            }
+        })
         .setup(|app| {
             let path = commands::config_path(app.handle());
             let config = config::load(&path);
@@ -111,6 +147,8 @@ pub fn run() {
             commands::get_config,
             commands::set_config,
             commands::list_notes,
+            commands::save_pasted_image,
+            commands::import_image_files,
             commands::read_note,
             commands::write_note,
             commands::create_note,
