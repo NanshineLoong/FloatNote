@@ -52,7 +52,7 @@ markdown({ extensions: [Table, Strikethrough, TaskList] }),
 **`TableWidget` 升级**（`preview.ts`，当前 `toDOM` 用正则逐行切、不渲染内联）：
 
 - 改为：`TableWidget` 接收 `src`，交给纯函数 `parseGfmTable(src)` 解析为 `{ aligns: ("left"|"right"|"center"|"none")[], header: string[], rows: string[][] }`；首行=表头、次行=分隔（解析对齐 `:--`/`--:`/`:-:`/`--`）、其余=数据行。单元格按 `|` 切分、去首尾 `|`（转义 `\|` 暂不支持，列为已知限制）。
-- 单元格内联：每个单元格文本交给纯函数 `renderInline(text)` 产出 HTML（不再 `textContent`）。`renderInline` 用 `markdownLanguage.parser.parseInline`（`@codemirror/lang-markdown`）拿 Lezer 内联树，遍历 `Strong/Emphasis/InlineCode/Link/Strikethrough/Escape` 等节点产出对应 HTML，未识别节点回退 `textContent`。两个纯函数都配 Vitest。
+- 单元格内联：每个单元格文本交给纯函数 `renderInline(text)` 产出 HTML（不再 `textContent`）。`renderInline` 用 `markdownLanguage.parser.parse(text)`（`@codemirror/lang-markdown`，`parse` 接受字符串返回完整 `Tree`）拿语法树，遍历 `Paragraph` 下的 `Strong/Emphasis/InlineCode/Link/Strikethrough/Escape` 等节点递归产出对应 HTML，跳过各类 `*Mark` 节点，未识别节点回退 `textContent`。两个纯函数都配 Vitest。
 - 样式沿用 `.cm-preview-table`，按 `aligns` 给各列 `<th>/<td>` 设 `text-align`。
 - 光标在表格任意行仍回退源码（现状不变，保持可编辑）。
 
