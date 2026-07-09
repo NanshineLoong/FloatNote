@@ -3,6 +3,7 @@ import type { AgentEvent } from "../note/agent";
 import type { ChatConversation, ChatScope } from "../note/chat-history";
 import { deriveTitleFromFirstMessage, formatHistoryTime } from "../note/chat-history-format";
 import socratesSvg from "../assets/socrates.svg?raw";
+import { mountPermissionBubble } from "./permission-bubble.js";
 import {
   type ChatEvent,
   type ChatState,
@@ -52,6 +53,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     <div class="assistant-dock">
       <button class="assistant-bot" type="button" aria-label="展开输入框">${socratesSvg}</button>
       <div class="assistant-history-popover" hidden></div>
+      <div class="assistant-perm-region"></div>
       <div class="assistant-input-wrap">
         <textarea class="assistant-input" rows="1" placeholder="和助手说点什么…"></textarea>
         <button class="assistant-send" type="button" aria-label="查看项目对话历史" title="查看项目对话历史"><i class="ph ph-clock-counter-clockwise"></i></button>
@@ -66,6 +68,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   const input = root.querySelector<HTMLTextAreaElement>(".assistant-input")!;
   const sendBtn = root.querySelector<HTMLButtonElement>(".assistant-send")!;
   const historyPopover = root.querySelector<HTMLElement>(".assistant-history-popover")!;
+  const permRegion = root.querySelector<HTMLElement>(".assistant-perm-region")!;
   let currentScope: ChatScope | null = null;
   let activeConversation: ChatConversation | null = null;
   let scopeToken = 0;
@@ -268,6 +271,8 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   rerender();
   updateSendMode();
 
+  const permBubble = mountPermissionBubble(permRegion);
+
   let unlisten: UnlistenFn | null = null;
   let destroyed = false;
   Promise.resolve(deps.subscribe((event) => {
@@ -289,6 +294,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     destroy() {
       destroyed = true;
       unlisten?.();
+      permBubble.destroy();
       document.removeEventListener("pointerdown", onDocumentPointerDown);
       document.removeEventListener("keydown", onDocumentKeyDown);
       root.classList.remove("assistant");
