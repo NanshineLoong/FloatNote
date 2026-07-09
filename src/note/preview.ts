@@ -10,6 +10,8 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { parseChips, readBidMarker, stripBidMarker, type Source } from "./quote";
+import { renderInline } from "./inline";
+import { parseGfmTable, type Align } from "./table";
 import { stripTagMarker } from "./tags/model";
 
 function getCursorLines(view: EditorView): Set<number> {
@@ -133,20 +135,35 @@ class TableWidget extends WidgetType {
   toDOM(): HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "cm-preview-table-wrap";
+    const parsed = parseGfmTable(this.src);
+    if (!parsed) { wrap.textContent = this.src; return wrap; }
     const table = document.createElement("table");
     table.className = "cm-preview-table";
-    let isHeader = true;
-    for (const line of this.src.trim().split("\n")) {
-      if (/^\s*\|?[\s\-:]+\|/.test(line)) { isHeader = false; continue; }
-      const cells = line.replace(/^\||\|$/g, "").split("|");
+    const alignStyle = (a: Align): string => (a === "none" ? "" : a);
+
+    const thead = document.createElement("thead");
+    const htr = document.createElement("tr");
+    parsed.header.forEach((cell, i) => {
+      const th = document.createElement("th");
+      th.innerHTML = renderInline(cell);
+      th.style.textAlign = alignStyle(parsed.aligns[i] ?? "none");
+      htr.appendChild(th);
+    });
+    thead.appendChild(htr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    for (const row of parsed.rows) {
       const tr = document.createElement("tr");
-      for (const cell of cells) {
-        const el = isHeader ? document.createElement("th") : document.createElement("td");
-        el.textContent = cell.trim();
-        tr.appendChild(el);
-      }
-      table.appendChild(tr);
+      row.forEach((cell, i) => {
+        const td = document.createElement("td");
+        td.innerHTML = renderInline(cell);
+        td.style.textAlign = alignStyle(parsed.aligns[i] ?? "none");
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
     }
+    table.appendChild(tbody);
     wrap.appendChild(table);
     return wrap;
   }
