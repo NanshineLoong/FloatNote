@@ -402,21 +402,31 @@ input {
   justify-content: center;
   width: 14px;
   height: 1.6em; /* 对齐 .cm-content 的 line-height */
-  color: #c2c2c0;
+  color: #6b7280;
   cursor: grab;
   border-radius: 4px;
   opacity: 0;
+  /* 图标字形光学中心略偏上，整体下移 1px 与正文首行视觉对齐。 */
+  transform: translateY(1px);
   transition: opacity 120ms ease;
 }
 
-.cm-block-gutter:hover .cm-block-handle {
+.cm-block-handle .ph {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* 只点亮指针所在的那一个 block 的句柄。CodeMirror 把每个 block 的句柄
+   各自包在一个 div.cm-gutterElement 里（高度等于该 block 的行跨度），
+   所以 :hover 挂在 .cm-gutterElement 上——命中谁就只亮谁，而不是整条 gutter。 */
+.cm-gutterElement:hover .cm-block-handle {
   opacity: 1;
 }
 
 .cm-block-handle:hover {
   opacity: 1;
   background: rgba(0, 0, 0, 0.06);
-  color: #555;
+  color: #374151;
 }
 
 .cm-block-drop {
@@ -694,12 +704,12 @@ input {
 
 @media (prefers-color-scheme: dark) {
   .cm-block-handle {
-    color: #555;
+    color: #9ca3af;
   }
 
   .cm-block-handle:hover {
     background: rgba(255, 255, 255, 0.08);
-    color: #d1d5db;
+    color: #e5e7eb;
   }
 }
 
