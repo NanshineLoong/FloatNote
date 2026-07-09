@@ -4,6 +4,7 @@ import type { ChatConversation, ChatScope } from "../note/chat-history";
 import { deriveTitleFromFirstMessage, formatHistoryTime } from "../note/chat-history-format";
 import socratesSvg from "../assets/socrates.svg?raw";
 import { mountPermissionBubble } from "./permission-bubble.js";
+import { mountSkillPicker, type SkillSummary } from "./skill-picker.js";
 import {
   type ChatEvent,
   type ChatState,
@@ -35,6 +36,8 @@ export interface AssistantDeps {
   subscribe: (cb: (event: AgentEvent) => void) => UnlistenFn | Promise<UnlistenFn>;
   /** 取消进行中的请求（经 stdin 发 Cancel）。无活动请求时 no-op。 */
   cancel?: (requestId: string) => void;
+  /** 拉取已加载 skill 列表（供 picker 右键菜单与 `/` 自动补全）。 */
+  listSkills: () => Promise<SkillSummary[]>;
 }
 
 export interface AssistantHandle {
@@ -60,6 +63,10 @@ export interface AssistantHandle {
   isPermissionBubbleOpen: () => boolean;
   /** 拒绝当前权限请求并关闭气泡（Esc 最高优先级）。 */
   closePermissionBubble: () => void;
+  /** skill 菜单/下拉是否打开（右键小人或输入框 `/` 触发）。 */
+  isSkillMenuOpen: () => boolean;
+  /** 关闭 skill 菜单/下拉（Esc 链中优先于历史浮层）。 */
+  closeSkillMenu: () => void;
 }
 
 export function mountAssistant(root: HTMLElement, deps: AssistantDeps): AssistantHandle {
@@ -290,6 +297,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   updateSendMode();
 
   const permBubble = mountPermissionBubble(permRegion);
+  const skillPicker = mountSkillPicker({ bot, input, inputWrap, listSkills: deps.listSkills });
 
   let unlisten: UnlistenFn | null = null;
   let destroyed = false;
@@ -318,6 +326,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       destroyed = true;
       unlisten?.();
       permBubble.destroy();
+      skillPicker.destroy();
       document.removeEventListener("pointerdown", onDocumentPointerDown);
       root.classList.remove("assistant");
       root.innerHTML = "";
@@ -369,6 +378,12 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     },
     closePermissionBubble() {
       permBubble.reject();
+    },
+    isSkillMenuOpen() {
+      return skillPicker.isOpen();
+    },
+    closeSkillMenu() {
+      skillPicker.close();
     },
   };
 }

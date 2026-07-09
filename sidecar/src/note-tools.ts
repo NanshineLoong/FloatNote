@@ -11,6 +11,8 @@ export interface WriteResult { ok: boolean; version?: number; denied?: boolean; 
 export interface NoteToolDeps {
   getNoteText: (target?: NoteTarget) => Promise<string>;
   requestWrite: (args: { target?: NoteTarget; toolName: string; oldContent: string; newContent: string; preview: EditPreview }) => Promise<WriteResult>;
+  /** Return a loaded skill's full SKILL.md text by name, or null if unknown. */
+  readSkillBody: (name: string) => string | null;
 }
 
 const PALETTE = ["#e5484d", "#f5a524", "#15b395", "#4c9eeb", "#a78bfa", "#ec4899"];
@@ -162,7 +164,23 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     },
   });
 
-  return [readNote, listTags, editNote, writeNote, setTag, tagCreate, tagDelete];
+  const readSkill = defineTool({
+    name: "read_skill",
+    label: "Read skill",
+    description:
+      "按 name 加载某条 skill 的完整 SKILL.md 全文。这是加载 skill 指南的唯一途径（系统提示里的 available_skills 只是描述）。仅接受已加载 skill 的 name，不接受路径。",
+    parameters: Type.Object({ name: Type.String({ description: "要加载的 skill 名称（见 available_skills）" }) }),
+    promptSnippet: "read_skill — 读 skill 全文",
+    async execute(_id, params: { name: string }) {
+      const body = deps.readSkillBody(params.name);
+      if (body == null) {
+        throw new Error(`未知 skill: ${params.name}`);
+      }
+      return { content: [{ type: "text", text: body }], details: {} };
+    },
+  });
+
+  return [readNote, listTags, editNote, writeNote, setTag, tagCreate, tagDelete, readSkill];
 }
 
 function writeResultText(res: WriteResult) {

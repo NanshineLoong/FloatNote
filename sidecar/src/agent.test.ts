@@ -4,6 +4,11 @@ import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { AgentRunner, buildAgentModel, translateEvent } from "./agent.js";
 import type { SessionLike } from "./agent.js";
 import type { SidecarToHost } from "./protocol.js";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { formatSkillsForSystemPrompt } from "./skills.js";
 
 const ev = (e: unknown): AgentSessionEvent => e as AgentSessionEvent;
 
@@ -256,5 +261,67 @@ describe("AgentRunner getNoteText round-trip", () => {
     const last = sent.at(-1) as { callId: string };
     (runner as unknown as { onNoteText: (m: { type: "note_text"; callId: string; content: string; found: boolean }) => void }).onNoteText({ type: "note_text", callId: last.callId, content: "doc", found: true });
     await expect(p).resolves.toBe("doc");
+  });
+});
+
+describe("AgentRunner skills", () => {
+  function writeSkill(root: string, name: string, description: string): string {
+    const dir = join(root, name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: ${description}\n---\n正文`);
+    return dir;
+  }
+
+  it("listSkills reflects skills delivered via setSkillPaths", async () => {
+    const root = mkdtempSync(join(tmpdir(), "floatnote-agent-skills-"));
+    writeSkill(root, "socratic-review", "追问");
+    const { session } = fakeSession(async () => {});
+    const runner = new AgentRunner({ send: () => {}, createSession: async () => session });
+    await runner.setSkillPaths([root]);
+    expect(runner.listSkills()).toEqual([{ name: "socratic-review", description: "追问" }]);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("passes /skill:name args verbatim to session.prompt (native expansion)", async () => {
+    const sent: SidecarToHost[] = [];
+    let prompted: string | undefined;
+    const { session } = fakeSession(async () => {
+      // no events; just capture the prompt arg
+    });
+    // override prompt to capture the text
+    (session as { prompt: (t: string) => Promise<void> }).prompt = async (text: string) => {
+      prompted = text;
+    };
+    const runner = new AgentRunner({ send: (m) => sent.push(m), createSession: async () => session });
+    await runner.configure({ provider: "anthropic", model: "x" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+    await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "/skill:socratic-review 帮我审一下这篇" });
+    expect(prompted).toBe("/skill:socratic-review 帮我审一下这篇");
+  });
+});
+
+describe("defaultCreateSession wiring", () => {
+  const agentSource = readFileSync(join(__dirname, "agent.ts"), "utf8");
+
+  it("keeps noSkills: true (loader does not scan Pi default skill dirs)", () => {
+    expect(agentSource).toContain("noSkills: true");
+  });
+
+  it("composes the system prompt override from TUTOR + formatSkillsForSystemPrompt", () => {
+    expect(agentSource).toContain('TUTOR_SYSTEM_PROMPT + "\\n\\n" + formatSkillsForSystemPrompt()');
+  });
+
+  it("includes read_skill in the active tools allowlist", () => {
+    expect(agentSource).toMatch(/"read_skill"/);
+  });
+
+  it("formatSkillsForSystemPrompt surfaces a loaded skill's description", async () => {
+    const root = mkdtempSync(join(tmpdir(), "floatnote-agent-skills-"));
+    mkdirSync(join(root, "x"), { recursive: true });
+    writeFileSync(join(root, "x", "SKILL.md"), "---\nname: x\ndescription: 描述X\n---\n正文");
+    const runner = new AgentRunner({ send: () => {}, createSession: async () => fakeSession(async () => {}).session });
+    await runner.setSkillPaths([root]);
+    expect(formatSkillsForSystemPrompt()).toContain("描述X");
+    rmSync(root, { recursive: true, force: true });
   });
 });

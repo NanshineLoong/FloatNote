@@ -36,6 +36,7 @@ export function viewTargetFor(
 
 export interface EscContext {
   permissionBubbleOpen: boolean;
+  skillMenuOpen: boolean;
   historyPopoverOpen: boolean;
   focusInAssistant: boolean;
   streaming: boolean;
@@ -45,6 +46,7 @@ export interface EscContext {
 
 export type EscAction =
   | "closePermissionBubble"
+  | "closeSkillMenu"
   | "closeHistoryPopover"
   | "cancelAssistant"
   | "closeActionPanel"
@@ -52,6 +54,7 @@ export type EscAction =
 
 export function resolveEsc(ctx: EscContext): EscAction | null {
   if (ctx.permissionBubbleOpen) return "closePermissionBubble";
+  if (ctx.skillMenuOpen) return "closeSkillMenu";
   if (ctx.historyPopoverOpen) return "closeHistoryPopover";
   if (ctx.focusInAssistant && ctx.streaming) return "cancelAssistant";
   if (ctx.actionPanelOpen) return "closeActionPanel";
@@ -76,6 +79,8 @@ export interface ShortcutActions {
   closeHistoryPopover(): void;
   isPermissionBubbleOpen(): boolean;
   closePermissionBubble(): void;
+  isSkillMenuOpen(): boolean;
+  closeSkillMenu(): void;
   canSplit(): boolean;
   bumpFont(delta: number): void; // +1 / -1 / 0 复位
 }
@@ -101,6 +106,7 @@ function runBound(id: WindowShortcutId, a: ShortcutActions): void {
 function runEsc(act: EscAction, a: ShortcutActions): void {
   switch (act) {
     case "closePermissionBubble": a.closePermissionBubble(); break;
+    case "closeSkillMenu": a.closeSkillMenu(); break;
     case "closeHistoryPopover": a.closeHistoryPopover(); break;
     case "cancelAssistant": a.cancelAssistant(); break;
     case "closeActionPanel": a.closeActionPanel(); break;
@@ -113,6 +119,7 @@ export function installShortcuts(actions: ShortcutActions, bindings: Bindings): 
     if (e.key === "Escape") {
       const act = resolveEsc({
         permissionBubbleOpen: actions.isPermissionBubbleOpen(),
+        skillMenuOpen: actions.isSkillMenuOpen(),
         historyPopoverOpen: actions.isHistoryPopoverOpen(),
         focusInAssistant: isFocusInAssistant(),
         streaming: actions.isAssistantStreaming(),

@@ -37,17 +37,19 @@ describe("viewTargetFor", () => {
 describe("resolveEsc 优先级链", () => {
   const base = {
     permissionBubbleOpen: false,
+    skillMenuOpen: false,
     historyPopoverOpen: false,
     focusInAssistant: false,
     streaming: false,
     actionPanelOpen: false,
     bubbleOpen: false,
   };
-  it("0. 权限气泡最优先（高于历史浮层/行动面板/气泡/流式取消）", () => {
+  it("0. 权限气泡最优先（高于 skill 菜单/历史浮层/行动面板/气泡/流式取消）", () => {
     expect(
       resolveEsc({
         ...base,
         permissionBubbleOpen: true,
+        skillMenuOpen: true,
         historyPopoverOpen: true,
         focusInAssistant: true,
         streaming: true,
@@ -55,6 +57,11 @@ describe("resolveEsc 优先级链", () => {
         bubbleOpen: true,
       }),
     ).toBe("closePermissionBubble");
+  });
+  it("0b. skill 菜单优先于历史浮层/行动面板/气泡", () => {
+    expect(
+      resolveEsc({ ...base, skillMenuOpen: true, historyPopoverOpen: true, bubbleOpen: true }),
+    ).toBe("closeSkillMenu");
   });
   it("1. 历史浮层最优先", () => {
     expect(

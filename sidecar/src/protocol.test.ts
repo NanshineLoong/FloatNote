@@ -59,6 +59,41 @@ describe("apply_edit protocol", () => {
   });
 });
 
+describe("skills protocol", () => {
+  it("encodes list_skills / skills_list round-trip", () => {
+    const req: HostToSidecar = { type: "list_skills", callId: "sl1" };
+    const res: SidecarToHost = {
+      type: "skills_list",
+      callId: "sl1",
+      skills: [{ name: "socratic-review", description: "追问" }],
+    };
+    expect(encodeLine(req)).toContain('"type":"list_skills"');
+    expect(JSON.parse(encodeLine(req))).toEqual(req);
+    expect(JSON.parse(encodeLine(res))).toEqual(res);
+  });
+
+  it("encodes set_skill_paths", () => {
+    const msg: HostToSidecar = { type: "set_skill_paths", skillPaths: ["/a/skills", "/b/skills"] };
+    const line = encodeLine(msg);
+    expect(line).toContain('"type":"set_skill_paths"');
+    expect(JSON.parse(line)).toEqual(msg);
+  });
+
+  it("decodes list_skills and set_skill_paths via createLineDecoder", () => {
+    const decode = createLineDecoder();
+    const out = decode(
+      [
+        '{"type":"list_skills","callId":"sl1"}',
+        '{"type":"set_skill_paths","skillPaths":["/a","/b"]}',
+      ].join("\n") + "\n",
+    );
+    expect(out).toEqual([
+      { type: "list_skills", callId: "sl1" },
+      { type: "set_skill_paths", skillPaths: ["/a", "/b"] },
+    ]);
+  });
+});
+
 describe("createLineDecoder", () => {
   it("decodes a complete line in one chunk", () => {
     const decode = createLineDecoder();

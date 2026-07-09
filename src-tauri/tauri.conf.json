@@ -62,6 +62,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": ["resources/skills/**/*"],
     "macOS": {
       "signingIdentity": "FloatNote Self Signed"
     }

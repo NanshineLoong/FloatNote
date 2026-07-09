@@ -1090,6 +1090,7 @@ dependencies = [
  "tauri-plugin-autostart",
  "tauri-plugin-dialog",
  "tauri-plugin-global-shortcut",
+ "tokio",
  "trash",
 ]
 

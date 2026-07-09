@@ -12,6 +12,7 @@ import {
 import { getModel, type Api, type Model } from "@earendil-works/pi-ai";
 import { createNoteTools, type WriteResult } from "./note-tools.js";
 import { TUTOR_SYSTEM_PROMPT } from "./tutor-prompt.js";
+import { listSkills as listSkillsState, readSkillBody, loadSkillPaths, formatSkillsForSystemPrompt } from "./skills.js";
 import type { ChatDisplayMessage, EditPreview, HostToSidecar, NoteTarget, SidecarToHost } from "./protocol.js";
 
 export interface AgentConfig {
@@ -174,6 +175,16 @@ export class AgentRunner {
     this.cfg = cfg;
   }
 
+  /** Deliver skill directories from the host; loads them into memory once. */
+  async setSkillPaths(paths: string[]): Promise<void> {
+    loadSkillPaths(paths);
+  }
+
+  /** Synchronous enumeration of loaded skills (no host round-trip). */
+  listSkills(): { name: string; description: string }[] {
+    return listSkillsState();
+  }
+
   async newSession(req: NewSessionRequest): Promise<void> {
     const sessionManager = SessionManager.create(req.cwd, req.sessionDir, { id: req.conversationId });
     await this.installSession(req.conversationId, sessionManager);
@@ -243,6 +254,7 @@ export class AgentRunner {
     const tools = createNoteTools({
       getNoteText: (target) => this.getNoteText(conversationId, target),
       requestWrite: (args) => this.requestWrite(conversationId, args),
+      readSkillBody: (name) => readSkillBody(name),
     });
     const session = await this.factory(this.cfg, tools, sessionManager);
     this.sessions.set(conversationId, session);
@@ -313,7 +325,7 @@ const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager) 
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: true,
-    systemPromptOverride: () => TUTOR_SYSTEM_PROMPT,
+    systemPromptOverride: () => TUTOR_SYSTEM_PROMPT + "\n\n" + formatSkillsForSystemPrompt(),
   });
   await resourceLoader.reload();
 
@@ -322,7 +334,7 @@ const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager) 
   const { session } = await createAgentSession({
     model,
     customTools: tools,
-    tools: ["read_note", "list_tags", "edit_note", "write_note", "set_tag", "tag_create", "tag_delete"],
+    tools: ["read_note", "list_tags", "edit_note", "write_note", "set_tag", "tag_create", "tag_delete", "read_skill"],
     noTools: "builtin",
     resourceLoader,
     authStorage,

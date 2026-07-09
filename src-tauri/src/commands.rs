@@ -1,4 +1,4 @@
-use crate::agent::{ActiveNote, AgentHandle, HostToSidecar, NoteUpdated, PendingEdit};
+use crate::agent::{ActiveNote, AgentHandle, HostToSidecar, NoteUpdated, PendingEdit, SkillSummary};
 use crate::chat_history::{
     ChatConversationIndexEntry, ChatHistoryStore, ChatScopeType, ChatTitleState,
 };
@@ -35,6 +35,9 @@ pub struct AppState {
     /// apply_edit 待裁决表：request_id → PendingEdit。
     /// `handle_apply_edit` 暂存，`resolve_permission` 取出落盘并回 sidecar。
     pub pending_edits: Mutex<HashMap<String, PendingEdit>>,
+    /// `agent_list_skills` 的 host 侧一次性等待表：call_id → oneshot sender。
+    /// reader 线程收到 `SkillsList` 时取出 sender 解除等待。
+    pub pending_skill_lists: Mutex<HashMap<String, tokio::sync::oneshot::Sender<Vec<SkillSummary>>>>,
 }
 
 #[tauri::command]
@@ -422,6 +425,47 @@ pub fn agent_cancel(state: State<AppState>, request_id: String) -> Result<(), St
     agent
         .send(&HostToSidecar::Cancel { request_id })
         .map_err(|error| error.to_string())
+}
+
+/// 拉取 sidecar 的已加载 skill 列表（同步一次性请求-响应）。
+///
+/// 生成 call_id → 在 `pending_skill_lists` 装 oneshot sender → 发 `ListSkills`
+/// → 等待 reader 线程收到 `SkillsList` 时解除。5s 超时避免悬挂。
+#[tauri::command]
+pub async fn agent_list_skills(app: tauri::AppHandle) -> Result<Vec<SkillSummary>, String> {
+    let state = app.state::<AppState>();
+    let seq = state.agent_seq.fetch_add(1, Ordering::Relaxed) + 1;
+    let call_id = format!("sl{seq}");
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<Vec<SkillSummary>>();
+    state
+        .pending_skill_lists
+        .lock()
+        .unwrap()
+        .insert(call_id.clone(), tx);
+
+    {
+        let mut guard = state.agent.lock().unwrap();
+        let agent = guard.as_mut().ok_or("助手未连接")?;
+        agent
+            .send(&HostToSidecar::ListSkills {
+                call_id: call_id.clone(),
+            })
+            .map_err(|error| error.to_string())?;
+    }
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+        Ok(Ok(skills)) => Ok(skills),
+        Ok(Err(_)) => Err("skill 列表响应已丢弃".into()),
+        Err(_) => {
+            state
+                .pending_skill_lists
+                .lock()
+                .unwrap()
+                .remove(&call_id);
+            Err("skill 列表超时".into())
+        }
+    }
 }
 
 /// 用户在 `permission://request` 气泡上裁决后调用：取出 `PendingEdit`，

@@ -302,7 +302,7 @@ fn next_conversation_id(now: u64) -> String {
     )
 }
 
-fn user_home_dir() -> Option<PathBuf> {
+pub(crate) fn user_home_dir() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         std::env::var_os("USERPROFILE").map(PathBuf::from)

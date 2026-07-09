@@ -59,6 +59,16 @@ pub enum HostToSidecar {
     Cancel {
         request_id: String,
     },
+    /// 下发 skill 目录给 sidecar（启动时解析 bundled + 用户全局路径）。
+    /// sidecar 收到后调 `skills.reload()`，把描述与全文读入内存。
+    SetSkillPaths {
+        skill_paths: Vec<String>,
+    },
+    /// 请求 sidecar 的已加载 skill 列表（同步一次性请求-响应）。
+    /// sidecar 回 `SkillsList` 解除 host 侧 oneshot 等待。
+    ListSkills {
+        call_id: String,
+    },
 }
 
 /// Sidecar → host 消息。
@@ -116,6 +126,19 @@ pub enum SidecarToHost {
         conversation_id: Option<String>,
         message: String,
     },
+    /// 回复 `ListSkills`：已加载 skill 的 name + description。
+    SkillsList {
+        call_id: String,
+        skills: Vec<SkillSummary>,
+    },
+}
+
+/// skill 摘要：name + description。与 sidecar `skills_list` 的元素同形。
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillSummary {
+    pub name: String,
+    pub description: String,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
@@ -349,6 +372,16 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
         SidecarToHost::Ready => {
             if let Some(state) = app.try_state::<AppState>() {
                 *state.agent_ready.lock().unwrap() = true;
+                // 无条件下发 skill 目录（与 AI 凭据正交：picker 可在配置 AI 前拉取列表）。
+                let skill_paths = resolve_skill_paths(app);
+                {
+                    let mut guard = state.agent.lock().unwrap();
+                    if let Some(agent) = guard.as_mut() {
+                        if !skill_paths.is_empty() {
+                            let _ = agent.send(&HostToSidecar::SetSkillPaths { skill_paths });
+                        }
+                    }
+                }
                 // 从持久化配置自动恢复 AI 助手。
                 let config = state.config.lock().unwrap().clone();
                 if !config.ai_provider.is_empty() && !config.ai_model.is_empty() {
@@ -396,6 +429,14 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             conversation_id,
             target,
         } => handle_get_note_text(app, call_id, conversation_id, target),
+        SidecarToHost::SkillsList { call_id, skills } => {
+            // 同步一次性请求-响应：取出 host 侧 oneshot sender 解除等待。
+            if let Some(state) = app.try_state::<AppState>() {
+                if let Some(sender) = state.pending_skill_lists.lock().unwrap().remove(&call_id) {
+                    let _ = sender.send(skills);
+                }
+            }
+        }
         SidecarToHost::Title {
             conversation_id,
             title,
@@ -537,6 +578,43 @@ fn on_sidecar_exit(app: &AppHandle) {
             message: "助手已断开，请点击重连".to_string(),
         },
     );
+}
+
+/// 解析 skill 目录列表，下发给 sidecar。
+///
+/// - bundled：打包后走 Tauri 资源目录 `resource_dir()/skills`。
+/// - dev 回退：`tauri dev` 下资源目录不含源码 `resources/skills`，回退到
+///   `CARGO_MANIFEST_DIR/resources/skills`（编译期固化，仅 debug 构建有效）。
+/// - 用户全局：`~/.floatnote/skills`（用户自建，复用 chat_history 的 home 解析）。
+///
+/// 仅返回已存在的目录；全无则空 vec（降级，不崩）。
+fn resolve_skill_paths(app: &AppHandle) -> Vec<String> {
+    let mut paths: Vec<String> = Vec::new();
+
+    let bundled = app.path().resource_dir().ok().map(|d| d.join("skills"));
+    let bundled_exists = bundled.as_ref().is_some_and(|d| d.is_dir());
+    if bundled_exists {
+        paths.push(bundled.unwrap().to_string_lossy().into_owned());
+    }
+
+    #[cfg(debug_assertions)]
+    if !bundled_exists {
+        let dev = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("skills");
+        if dev.is_dir() {
+            paths.push(dev.to_string_lossy().into_owned());
+        }
+    }
+
+    if let Some(home) = crate::chat_history::user_home_dir() {
+        let user_skills = home.join(".floatnote").join("skills");
+        if user_skills.is_dir() {
+            paths.push(user_skills.to_string_lossy().into_owned());
+        }
+    }
+
+    paths
 }
 
 /// note://updated 事件载荷。
@@ -830,6 +908,63 @@ mod tests {
     }
 
     #[test]
+    fn set_skill_paths_serializes_camel_case() {
+        let msg = HostToSidecar::SetSkillPaths {
+            skill_paths: vec!["/a/skills".into(), "/b/skills".into()],
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"set_skill_paths\""), "{json}");
+        assert!(json.contains("\"skillPaths\""), "{json}");
+        let back: HostToSidecar = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, msg);
+    }
+
+    #[test]
+    fn list_skills_serializes_camel_case() {
+        let msg = HostToSidecar::ListSkills {
+            call_id: "sl1".into(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"list_skills\""), "{json}");
+        assert!(json.contains("\"callId\":\"sl1\""), "{json}");
+    }
+
+    #[test]
+    fn parses_skills_list_line() {
+        let line = r#"{"type":"skills_list","callId":"sl1","skills":[{"name":"socratic-review","description":"追问"}]}"#;
+        let msg: SidecarToHost = serde_json::from_str(line).unwrap();
+        match msg {
+            SidecarToHost::SkillsList { call_id, skills } => {
+                assert_eq!(call_id, "sl1");
+                assert_eq!(skills.len(), 1);
+                assert_eq!(skills[0].name, "socratic-review");
+                assert_eq!(skills[0].description, "追问");
+            }
+            _ => panic!("not SkillsList"),
+        }
+    }
+
+    #[test]
+    fn skills_list_round_trips() {
+        let msg = SidecarToHost::SkillsList {
+            call_id: "sl2".into(),
+            skills: vec![
+                SkillSummary {
+                    name: "a".into(),
+                    description: "desc a".into(),
+                },
+                SkillSummary {
+                    name: "b".into(),
+                    description: "desc b".into(),
+                },
+            ],
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let back: SidecarToHost = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, msg);
+    }
+
+    #[test]
     fn round_trips_edit_preview_detail_variants() {
         // diff
         let diff = EditPreviewDetail::Diff { hunks: "@@".into() };
@@ -919,6 +1054,7 @@ mod tests {
                 write_suppress: crate::watcher::new_suppress_list(),
                 popup_cache: crate::popup::PopupCache::default(),
                 pending_edits: Mutex::new(HashMap::new()),
+                pending_skill_lists: Mutex::new(HashMap::new()),
             }
         }
 

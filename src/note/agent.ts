@@ -73,6 +73,17 @@ export function agentCancel(requestId: string): Promise<void> {
   return invoke<void>("agent_cancel", { requestId });
 }
 
+/** skill 摘要：name + description（与 Rust `SkillSummary` 同形）。 */
+export interface Skill {
+  name: string;
+  description: string;
+}
+
+/** 拉取 sidecar 的已加载 skill 列表（供 picker 右键菜单与 `/` 自动补全）。 */
+export function agentListSkills(): Promise<Skill[]> {
+  return invoke<Skill[]>("agent_list_skills");
+}
+
 /** 订阅 agent 流式事件；返回取消订阅函数。 */
 export function onAgentEvent(cb: (event: AgentEvent) => void): Promise<UnlistenFn> {
   return listen<AgentEvent>("agent://event", (event) => cb(event.payload));

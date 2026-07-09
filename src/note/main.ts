@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { mountAssistant, type AssistantHandle } from "../assistant/assistant";
-import { agentNewSession, agentOpenSession, agentSend, agentCancel, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
+import { agentNewSession, agentOpenSession, agentSend, agentCancel, agentListSkills, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
 import { buildCaretInsert } from "./append";
 import { buildQuoteBlock, mergeQuoteBlock, resolveMergeTarget, type Source } from "./quote";
 import { htmlToMarkdown } from "./paste";
@@ -504,6 +504,7 @@ const assistantHandle: AssistantHandle = mountAssistant(assistantRegion, {
   updateTitle: (conversationId, title, titleState) => chatUpdateTitle(conversationId, title, titleState),
   subscribe: (cb) => onAgentEvent(cb),
   cancel: (requestId) => { void agentCancel(requestId); },
+  listSkills: () => agentListSkills(),
 });
 
 async function toggleAssistantFromChrome() {
@@ -1546,6 +1547,8 @@ async function init() {
     closeHistoryPopover: () => assistantHandle.closeHistoryPopover(),
     isPermissionBubbleOpen: () => assistantHandle.isPermissionBubbleOpen(),
     closePermissionBubble: () => assistantHandle.closePermissionBubble(),
+    isSkillMenuOpen: () => assistantHandle.isSkillMenuOpen(),
+    closeSkillMenu: () => assistantHandle.closeSkillMenu(),
     canSplit: () => canSplit(window.innerWidth),
     bumpFont,
   };

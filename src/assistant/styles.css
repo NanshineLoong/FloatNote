@@ -288,6 +288,70 @@
   transform: translateX(0);
 }
 
+/* `/` 触发的 skill 自动补全下拉：锚定在输入框上方，复用 history popover 的视觉。 */
+.assistant-skill-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 6;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.assistant-skill-dropdown[hidden] {
+  display: none;
+}
+
+/* 右键 skill 菜单复用 .switch-menu.tag-floating，仅微调宽度。 */
+.assistant-skill-menu {
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.assistant-skill-item {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant-skill-item:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.assistant-skill-name {
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 500;
+}
+
+.assistant-skill-desc {
+  color: rgba(32, 33, 36, 0.58);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-skill-empty {
+  padding: 8px 9px;
+  color: rgba(32, 33, 36, 0.54);
+  font-size: 12px;
+}
+
 .assistant-input {
   flex: 1;
   min-width: 0;

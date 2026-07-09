@@ -83,6 +83,7 @@ pub fn run() {
                 write_suppress,
                 popup_cache: crate::popup::PopupCache::new(),
                 pending_edits: Mutex::new(std::collections::HashMap::new()),
+                pending_skill_lists: Mutex::new(std::collections::HashMap::new()),
             });
 
             // 拉起 agent-sidecar；失败存入状态供前端查询，不阻断 app 启动。
@@ -178,6 +179,7 @@ pub fn run() {
             commands::agent_new_session,
             commands::agent_open_session,
             commands::agent_cancel,
+            commands::agent_list_skills,
             commands::resolve_permission,
             commands::set_active_note,
             commands::get_active_note,

@@ -38,6 +38,13 @@ describe("assistant session UI", () => {
     expect(assistantSource).toContain("startNewConversation");
   });
 
+  it("injects a listSkills dep and mounts the skill picker", () => {
+    expect(assistantSource).toContain("listSkills:");
+    expect(assistantSource).toContain("mountSkillPicker");
+    expect(assistantSource).toContain("isSkillMenuOpen");
+    expect(assistantSource).toContain("closeSkillMenu");
+  });
+
   it("shows the new conversation action only when the assistant is expanded with messages", () => {
     expect(assistantCss).toMatch(/\.assistant\.expanded\.has-messages\s+\.assistant-new\s*{/);
     expect(assistantCss).not.toMatch(/\.assistant\.expanded\s+\.assistant-new\s*{/);

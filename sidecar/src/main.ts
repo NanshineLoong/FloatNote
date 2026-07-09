@@ -56,6 +56,12 @@ async function main(): Promise<void> {
       case "note_text":
         runner.onNoteText(msg);
         break;
+      case "list_skills":
+        send({ type: "skills_list", callId: msg.callId, skills: runner.listSkills() });
+        break;
+      case "set_skill_paths":
+        await runner.setSkillPaths(msg.skillPaths);
+        break;
       case "cancel":
         await runner.cancel(msg.requestId);
         break;

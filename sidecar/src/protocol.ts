@@ -44,6 +44,16 @@ export type HostToSidecar =
   | {
       type: "cancel";
       requestId: string;
+    }
+  | {
+      /** Host requests the sidecar's loaded skill list (synchronous one-shot). */
+      type: "list_skills";
+      callId: string;
+    }
+  | {
+      /** Host delivers skill directories for the sidecar to load at startup. */
+      type: "set_skill_paths";
+      skillPaths: string[];
     };
 
 export type NoteTarget = { kind: "inbox" | "tasks" | "piece" | "doc"; name?: string };
@@ -91,7 +101,13 @@ export type SidecarToHost =
   | { type: "get_note_text"; callId: string; conversationId: string; target?: NoteTarget }
   | { type: "done"; requestId: string; conversationId: string }
   | { type: "title"; conversationId: string; title: string }
-  | { type: "error"; requestId: string | null; conversationId?: string; message: string };
+  | { type: "error"; requestId: string | null; conversationId?: string; message: string }
+  | {
+      /** Sidecar replies to `list_skills` with the loaded skill summaries. */
+      type: "skills_list";
+      callId: string;
+      skills: { name: string; description: string }[];
+    };
 
 export type ChatDisplayMessage =
   | { role: "user"; text: string; timestamp: number }

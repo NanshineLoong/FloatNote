@@ -9,6 +9,7 @@ function makeDups(noteText: string): { deps: NoteToolDeps; writes: any[] } {
       writes.push(args);
       return { ok: true, version: 1 };
     },
+    readSkillBody: () => null,
   };
   return { deps, writes };
 }
@@ -78,6 +79,31 @@ describe("list_tags", () => {
     const lt = tools.find((t) => t.name === "list_tags")!;
     const r = await (lt as any).execute("id", {});
     expect(r.content[0].text).toContain("review");
+  });
+});
+
+describe("read_skill", () => {
+  it("returns the skill body for a known name", async () => {
+    const { deps } = makeDups("");
+    deps.readSkillBody = () => "---\nname: x\ndescription: x\n---\n正文";
+    const tools = createNoteTools(deps);
+    const rs = tools.find((t) => t.name === "read_skill")!;
+    const r = await (rs as any).execute("id", { name: "x" });
+    expect(r.content[0].text).toContain("正文");
+  });
+
+  it("throws for an unknown skill name", async () => {
+    const { deps } = makeDups("");
+    const tools = createNoteTools(deps);
+    const rs = tools.find((t) => t.name === "read_skill")!;
+    await expect((rs as any).execute("id", { name: "missing" })).rejects.toThrow(/未知 skill/);
+  });
+
+  it("treats a path-like string as an unknown name (no traversal)", async () => {
+    const { deps } = makeDups("");
+    const tools = createNoteTools(deps);
+    const rs = tools.find((t) => t.name === "read_skill")!;
+    await expect((rs as any).execute("id", { name: "/etc/passwd" })).rejects.toThrow(/未知 skill/);
   });
 });
 
