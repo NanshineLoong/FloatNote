@@ -74,22 +74,22 @@ pub struct NoteContent {
 
 `read_note(path) -> Result<NoteContent, String>`：读内容 + 取 `modified()` 毫秒。
 
-`write_note` 增 `expected_mtime: Option<u64>`，返回 `WriteOutcome`：
+`write_note` 增 `expected_mtime: Option<u64>`，返回 `WriteOutcome`（结构体，前端判别更简洁）：
 
 ```rust
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum WriteOutcome {
-    Ok { mtime: Option<u64> },
-    Conflict,
+pub struct WriteOutcome {
+    pub conflict: bool,
+    pub mtime: Option<u64>, // 写入成功后的新 mtime；conflict 时为 None
 }
 ```
 
 逻辑：
 
-1. 若 `expected_mtime` 为 `Some(e)`：取磁盘 `modified()` 毫秒 `d`；若 `d != Some(e)` → 返回 `Conflict`，**不写**。
+1. 若 `expected_mtime` 为 `Some(e)`：取磁盘 `modified()` 毫秒 `d`；若 `d != Some(e)` → 返回 `WriteOutcome { conflict: true, mtime: None }`，**不写**。
 2. 否则（`None` = 强制写，用于用户选择"保留我的"后）：跳过守卫。
-3. `mark_self_write(final)` → `write_atomic` → 取新 mtime → `Ok { mtime }`。
+3. `mark_self_write(final)` → `write_atomic` → 取新 mtime → `WriteOutcome { conflict: false, mtime }`。
 
 `expected_mtime = None` 也覆盖"新文件/不在乎冲突"的旧调用方语义。
 
