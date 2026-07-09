@@ -17,8 +17,8 @@ FloatNote 的笔记编辑器是 **CodeMirror 6 + 自写 live-preview decoration 
 
 1. 列表 Tab 升降级：Tab 降一级、Shift-Tab 升一级；确认 Enter 续行与空项退出可用。
 2. 表格正常渲染：支持 GFM 管道表格、对齐方向、单元格内联 Markdown。
-3. 代码块语法高亮：未聚焦时按语言着色，聚焦时回退源码（保持行内可编辑）。
-4. 代码块视觉：圆角浅灰背景（常态在、hover 略加深）、右上角语言标签。
+3. 代码块语法高亮：未聚焦时用 highlight.js 按语言着色，聚焦时回退源码（整块 widget，与表格一致）。
+4. 代码块视觉：圆角浅灰背景（常态在、hover 略加深）、右上角语言标签、单块横向滚动。
 
 ## 3. 非目标
 
@@ -29,11 +29,11 @@ FloatNote 的笔记编辑器是 **CodeMirror 6 + 自写 live-preview decoration 
 
 四项改动都落在现有 CodeMirror 6 + live-preview 框架内，集中在三处：
 
-- `src/note/editor.ts`：`markdown()` 配置（GFM 表格、代码语言高亮）+ 列表 Tab keymap。
-- `src/note/preview.ts`：升级 `TableWidget`、重写 `FencedCode` 视觉层、列表渲染微调。
-- 依赖：新增 `@lezer/markdown`（直接依赖）、`@codemirror/language-data`。
+- `src/note/editor.ts`：`markdown()` 配置（GFM 表格）+ 列表 Tab keymap。
+- `src/note/preview.ts`：升级 `TableWidget`、把 `FencedCode` 从行级样式改为整块 `CodeBlockWidget`（highlight.js 着色 + 圆角 + 语言标签 + 横向滚动）、列表渲染微调。
+- 依赖：新增 `@lezer/markdown`（直接依赖，GFM 扩展）、`highlight.js`（代码块着色）。
 
-编辑模型经确认采用 **行内可编辑 + CodeMirror 原生高亮**（不整块 widget、不引入 highlight.js）。
+编辑模型经确认采用 **整块 block widget + highlight.js**（与 `TableWidget` 同型：光标进入块回退源码，失去行内可编辑，换取单块横向滚动与精致容器观感）。曾考虑"行内可编辑 + CM 原生 codeLanguages 高亮"，但与"单块横向滚动"在 CM 架构下互斥（CM 无法把若干行包进独立滚动容器），故改用本模型。
 
 ## 5. 详细设计
 
@@ -44,7 +44,7 @@ FloatNote 的笔记编辑器是 **CodeMirror 6 + 自写 live-preview decoration 
 ```ts
 import { Table, Strikethrough, TaskList } from "@lezer/markdown";
 // ...
-markdown({ extensions: [Table, Strikethrough, TaskList], codeLanguages }),
+markdown({ extensions: [Table, Strikethrough, TaskList] }),
 ```
 
 `@lezer/markdown` 加为直接依赖（目前是传递依赖，直接导入不规范）。启用 `Table` 后 Lezer 识别管道表格，`preview.ts` 的 `case "Table"` 开始触发。顺带启用 `Strikethrough`（`~~`）与 `TaskList` 语法节点。
@@ -71,23 +71,28 @@ markdown({ extensions: [Table, Strikethrough, TaskList], codeLanguages }),
 - 列表行判定、深度计算、升降级的文本变换、相邻项深度比较抽成纯函数 `src/note/list-indent.ts`（如 `isListItemLine`、`lineDepth`、`indentLine`、`outdentLine`、`canDemote(prevDepth, curDepth)`），配 Vitest。
 - "提示"机制：复用项目现有 toast/通知组件（实现期确认是否存在）；无则新增一个极简瞬时 toast，作用于编辑器容器内。
 
-### 5.3 代码块语法高亮
+### 5.3 代码块语法高亮（整块 widget + highlight.js）
 
-- `editor.ts`：`markdown({ extensions: [Table, Strikethrough, TaskList], codeLanguages })`，`codeLanguages` 取自 `@codemirror/language-data` 的 `languages`（懒加载，覆盖 js/ts/python/rust/json/css/html/sql/bash/markdown/yaml/go 等常用语言）。新增 `@codemirror/language-data` 依赖。
-- 新增一个**代码 HighlightStyle**（覆盖 `@lezer/highlight` 的 `tags.keyword/comment/string/number/variable/property/...`），与现有 markdown `highlight` 并存为两个 `HighlightStyle`，都用 `syntaxHighlighting()` 挂载。
-- 效果：未聚焦时代码行由 CM 嵌套语言解析器着色；聚焦时回退源码（现状不变）。info string（` ```python `）由 CM 自动匹配语言。
+- `preview.ts` 新增 `CodeBlockWidget extends WidgetType`，构造参数 `(code: string, lang: string)`。
+- `toDOM`：建 `<div class="cm-codeblock">`，内含 `<pre><code class="hljs">…</code></pre>`；用 highlight.js 着色：
+  - `lang` 非空且已注册 → `hljs.highlight(code, { language: lang })`；
+  - 否则 → `hljs.highlightAuto(code)`；
+  - 把返回的 `.value`（已转义高亮 HTML）设为 `<code>` 的 `innerHTML`。
+  - 语言未知/着色抛错时回退 `highlightAuto`，再不行则 `textContent = code`。
+- highlight.js 引入 `highlight.js/lib/common`（同步、约 37 种常用语言，含 js/ts/python/rust/json/css/html/sql/bash/markdown 等），新增 `highlight.js` 依赖。配一个浅色主题 CSS（`highlight.js/styles/github.css`），并覆盖 `.cm-codeblock .hljs { background: transparent }` 以让圆角浅灰背景生效。
+- `FencedCode` 分支改为：光标在块内任意行 → `return false`（回退源码，现状不变）；否则 `Decoration.replace({ widget: new CodeBlockWidget(code, lang), block: true })` 整块替换（与 `Table` 同型）。`code` = 去掉首尾围栏行后的源码；`lang` = 开围栏 info string（正则 `/^[ \t]*```[ \t]*(\S*)/`）。
+- 不再使用 CM 的 `codeLanguages`/嵌套语言高亮；`editor.ts` 的 `markdown()` 不挂 `codeLanguages`。
 
-### 5.4 代码块视觉（圆角 + 浅灰背景 + 右上角语言标签）
+### 5.4 代码块视觉（圆角 + 浅灰背景 + 右上角语言标签 + 横向滚动）
 
-保持行内可编辑（5.3 已定），用**首/末行圆角 + 合并背景 + 内联 widget 语言标签**实现容器观感：
+整块 widget 模型下，容器观感由单个 `<div class="cm-codeblock">` 直接实现：
 
-- `preview.ts` 的 `FencedCode` 分支：首行加 `cm-preview-codeblock-first`、末行加 `cm-preview-codeblock-last`、单行块加 `cm-preview-codeblock-single`。
-- 每行 `cm-preview-codeblock`：背景浅灰、去掉行间纵向间隙使背景连成一体；首行 `border-radius: 8px 8px 0 0`、末行 `0 0 8px 8px`、单行 `8px`。
-- **语言标签**：首行起始处插入内联 `Decoration.widget`，渲染 `<span class="cm-code-lang">python</span>`，`float: right` 落到右上角；语言取自 info string **原样**显示（不首字母大写）；无 info string 则不显示标签。
-- **hover**：浅灰圆角背景为常态（始终在），hover 时背景略加深、标签提亮——即"鼠标停在内时保持浅灰圆角背景"。
-- 字体/排版：等宽、`padding: 0 12px`；**超长行横向滚动**（`white-space: nowrap` + `overflow-x: auto`），不折行——避免折行破坏代码列对齐，也消除折行处圆角背景缝隙。代码块容器为横向滚动定位上下文。
-- 围栏 ```` ``` ```` 仍隐藏（现状逻辑保留）。
-- 样式仍放 `preview.ts` 的 `EditorView.theme`（沿用现状约定，不进 `styles.css`）。
+- `.cm-codeblock`：`background: rgba(0,0,0,0.05); border-radius: 8px; position: relative; margin: 4px 0; overflow: hidden;`（`overflow: hidden` 让圆角裁剪横向滚动）。
+- `.cm-codeblock pre`：`margin: 0; padding: 10px 12px; overflow-x: auto;`（**单块横向滚动**；超长行不折行，`white-space: pre`）。
+- `.cm-codeblock code`：等宽、`font-size: 0.9em`、`background: transparent`。
+- **语言标签**：`.cm-codeblock` 内顶部右侧 `<span class="cm-code-lang">python</span>`，`position: absolute; top: 4px; right: 8px;`；语言取自 info string **原样**（不首字母大写）；无 info string 则不渲染标签。标签常态低对比度，hover 提亮。
+- **hover**：`.cm-codeblock:hover` 背景略加深（如 `rgba(0,0,0,0.08)`）、标签提亮——即"鼠标停在内时保持浅灰圆角背景"。
+- 样式放 `preview.ts` 的 `previewTheme`（沿用现状约定，不进 `styles.css`）；hljs 主题 CSS 在 `src/note/main.ts` 顶部 `import "highlight.js/styles/github.css"`（或 `index.html` 引入，二选一，实现期定）。
 
 ## 6. 测试
 
@@ -101,8 +106,8 @@ markdown({ extensions: [Table, Strikethrough, TaskList], codeLanguages }),
 ## 7. 依赖变更
 
 - 新增 `@lezer/markdown`（直接依赖，GFM 扩展 `Table`/`Strikethrough`/`TaskList`）。
-- 新增 `@codemirror/language-data`（`codeLanguages` 一套常用语言，懒加载）。
-- 不引入 highlight.js / prism / shiki / marked / markdown-it。
+- 新增 `highlight.js`（代码块着色，用 `highlight.js/lib/common` 子集 + `github.css` 主题）。
+- 不引入 `@codemirror/language-data`、prism、shiki、marked、markdown-it。
 
 ## 8. 风险与回退
 
@@ -110,5 +115,6 @@ markdown({ extensions: [Table, Strikethrough, TaskList], codeLanguages }),
 - **行首 Backspace 与 `deleteMarkupBackward` 冲突**：行首 Backspace 既要删缩进单元又要（空列表项时）删标记。需按"先缩进后标记"次序调和；若难调和，回退为仅 Shift-Tab 负责反缩进、Backspace 交还 `markdownKeymap`。
 - **列表降级上限的"相邻项"判定**：需准确取"紧邻的上一列表项"深度（跨空行/跨块）。若边界复杂，回退为"全局最多两级"简化规则。
 - **提示（toast）机制**：项目若无现成 toast，需新增极小组件；若不想新增，回退为不弹提示、仅静默不缩进。
-- **`@codemirror/language-data` 体积**：懒加载分块，Tauri 本地打包影响小；若顾虑可改为按需引入少量 `@codemirror/lang-*`。
+- **`highlight.js` 体积**：`lib/common` 约 37 语言、同步打包；Tauri 本地打包影响小。若顾虑可改为按需注册少量语言。
+- **代码块失去行内编辑**：整块 widget 下编辑需光标进入回退源码（与表格一致）。若后续强烈需要行内编辑，可回到行级渲染但须放弃单块横向滚动（互斥）。
 - **`TableWidget` 内联渲染器**：递归 Lezer 树节点的工作量较大；若范围超期，可先只做对齐+`textContent`，内联作为后续迭代。
