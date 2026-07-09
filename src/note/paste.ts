@@ -2,6 +2,8 @@ import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 import { EditorView } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
+import { savePastedImage } from "./image-fs";
+import { showToast } from "../shared/toast";
 
 /**
  * 粘贴时把剪贴板里的 HTML 片段转成 Markdown。
@@ -86,6 +88,49 @@ export function htmlPasteHandler(): Extension {
         userEvent: "input.paste",
         scrollIntoView: true,
       });
+      return true;
+    },
+  });
+}
+
+/**
+ * 粘贴图片位图：剪贴板含 image/* 时，落盘到 <noteDir>/_assets/ 并在光标处插入
+ * `![](./_assets/...)`。无图片时返回 false 放行给 htmlPasteHandler。20MB 上限
+ * 由 savePastedImage 强制；失败 toast 后不插入。
+ *
+ * 注意（Task 10 接线时）：本扩展必须在 htmlPasteHandler 之前注册，使图片检查
+ * 先于 HTML 粘贴；这里无图片时返回 false，后续处理器仍会触发。
+ */
+export function imagePasteHandler(getNoteDir: () => string): Extension {
+  return EditorView.domEventHandlers({
+    paste(event, view) {
+      const items = event.clipboardData?.items;
+      if (!items) return false;
+      let file: File | null = null;
+      for (const it of items) {
+        if (it.type.startsWith("image/")) {
+          file = it.getAsFile();
+          if (file) break;
+        }
+      }
+      if (!file) return false;
+      event.preventDefault();
+      const dir = getNoteDir();
+      if (!dir) return true;
+      void savePastedImage(dir, file)
+        .then((link) => {
+          const { from, to } = view.state.selection.main;
+          view.dispatch({
+            changes: { from, to, insert: `${link}\n` },
+            selection: { anchor: from + link.length + 1 },
+            userEvent: "input.paste",
+            scrollIntoView: true,
+          });
+        })
+        .catch((err) => {
+          console.error("image paste failed", err);
+          showToast(err instanceof Error ? err.message : "图片粘贴失败");
+        });
       return true;
     },
   });
