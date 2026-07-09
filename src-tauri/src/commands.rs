@@ -1,7 +1,10 @@
 use crate::agent::{ActiveNote, AgentHandle, HostToSidecar, NoteUpdated, PendingEdit};
 use crate::chat_history::{ChatConversationIndexEntry, ChatHistoryStore, ChatScopeType, ChatTitleState};
 use crate::watcher::{FileWatcher, SuppressList};
-use crate::{config::Config, notes, project, versions};
+use crate::{
+    config::{Config, WindowShortcuts},
+    notes, project, versions,
+};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -108,7 +111,12 @@ pub fn create_note(
 }
 
 #[tauri::command]
-pub fn rename_note(state: State<AppState>, dir: String, old_name: String, new_stem: String) -> Result<String, String> {
+pub fn rename_note(
+    state: State<AppState>,
+    dir: String,
+    old_name: String,
+    new_stem: String,
+) -> Result<String, String> {
     let dir_path = std::path::Path::new(&dir);
     let new_path =
         notes::rename_note(dir_path, &old_name, &new_stem).map_err(|error| error.to_string())?;
@@ -199,7 +207,10 @@ pub fn chat_list_recent(limit: usize) -> Result<Vec<ChatConversationIndexEntry>,
 }
 
 #[tauri::command]
-pub fn chat_list_all(cursor: usize, limit: usize) -> Result<Vec<ChatConversationIndexEntry>, String> {
+pub fn chat_list_all(
+    cursor: usize,
+    limit: usize,
+) -> Result<Vec<ChatConversationIndexEntry>, String> {
     chat_store()?
         .list_all(cursor, limit)
         .map_err(|error| error.to_string())
@@ -344,6 +355,12 @@ pub fn get_assistant_state(state: State<AppState>) -> AssistantState {
     }
 }
 
+/// 读取笔记窗内快捷键绑定（笔记窗初始化与热重载时调用）。
+#[tauri::command]
+pub fn get_window_shortcuts(state: State<AppState>) -> WindowShortcuts {
+    state.config.lock().unwrap().window_shortcuts.clone()
+}
+
 /// 折叠/展开助手（顶栏 robot_icon 单击）。前端据返回的新状态重算布局。
 #[tauri::command]
 pub fn toggle_assistant(state: State<AppState>) -> Result<AssistantState, String> {
@@ -468,11 +485,23 @@ pub fn resolve_permission(
 #[tauri::command]
 pub fn apply_shortcuts(
     app: tauri::AppHandle,
+    state: State<AppState>,
     capture: String,
     toggle: String,
     popup: String,
+    window_shortcuts: WindowShortcuts,
 ) -> Result<(), String> {
-    crate::shortcuts::apply(&app, &capture, &toggle, &popup)
+    crate::shortcuts::apply(&app, &capture, &toggle, &popup)?;
+    {
+        let mut config = state.config.lock().unwrap();
+        config.shortcut_capture = capture;
+        config.shortcut_toggle = toggle;
+        config.shortcut_popup = popup;
+        config.window_shortcuts = window_shortcuts;
+        crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
+    }
+    let _ = app.emit("window-shortcuts-changed", ());
+    Ok(())
 }
 
 #[tauri::command]
@@ -491,8 +520,8 @@ pub fn create_project(
     root: String,
     name: String,
 ) -> Result<project::ProjectEntry, String> {
-    let entry =
-        project::create_project(std::path::Path::new(&root), &name).map_err(|error| error.to_string())?;
+    let entry = project::create_project(std::path::Path::new(&root), &name)
+        .map_err(|error| error.to_string())?;
     // 隐式自动记录：项目新建时，将其所在目录记为工作目录。这是工作目录的唯一来源
     // ——没有设置入口，用户也不感知。失败不阻塞项目创建本身。
     {

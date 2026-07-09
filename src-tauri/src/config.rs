@@ -3,12 +3,42 @@ use std::path::Path;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
+pub struct WindowShortcuts {
+    pub assistant: String,
+    pub assistant_bubble: String,
+    pub action_panel: String,
+    pub add_action: String,
+    pub new_conversation: String,
+    pub view_inbox: String,
+    pub view_piece: String,
+    pub view_split: String,
+}
+
+impl Default for WindowShortcuts {
+    fn default() -> Self {
+        WindowShortcuts {
+            assistant: "Cmd+J".to_string(),
+            assistant_bubble: "Cmd+B".to_string(),
+            action_panel: "Cmd+T".to_string(),
+            add_action: "Cmd+G".to_string(),
+            new_conversation: "Cmd+K".to_string(),
+            view_inbox: "Cmd+1".to_string(),
+            view_piece: "Cmd+2".to_string(),
+            view_split: "Cmd+3".to_string(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(default)]
 pub struct Config {
     pub working_dir: Option<String>,
     pub shortcut_capture: String,
     pub shortcut_toggle: String,
     /// 划词悬浮窗快捷键（弹窗式抓取），默认 ⌥⌘P。与 shortcut_capture（直接抓取）独立。
     pub shortcut_popup: String,
+    /// 笔记窗内快捷键（窗口聚焦时生效，纯前端分派）。默认值见 WindowShortcuts::default。
+    pub window_shortcuts: WindowShortcuts,
     pub font_size: u32,
     pub launch_at_login: bool,
     /// 助手是否展开显示（折叠则隐藏）。助手始终活在笔记窗内，按窗宽自动 inline/floating。
@@ -37,6 +67,7 @@ impl Default for Config {
             shortcut_capture: "Alt+Cmd+C".to_string(),
             shortcut_toggle: "Alt+Cmd+N".to_string(),
             shortcut_popup: "Alt+Cmd+P".to_string(),
+            window_shortcuts: WindowShortcuts::default(),
             font_size: 15,
             launch_at_login: false,
             assistant_open: false,
@@ -100,5 +131,17 @@ mod tests {
         let config: Config = serde_json::from_str(r#"{"font_size":20}"#).unwrap();
         assert_eq!(config.shortcut_popup, "Alt+Cmd+P");
     }
-}
 
+    #[test]
+    fn window_shortcuts_default() {
+        let c = Config::default();
+        assert_eq!(c.window_shortcuts.assistant, "Cmd+J");
+        assert_eq!(c.window_shortcuts.view_split, "Cmd+3");
+    }
+
+    #[test]
+    fn partial_json_keeps_window_shortcuts_default() {
+        let config: Config = serde_json::from_str(r#"{"font_size":20}"#).unwrap();
+        assert_eq!(config.window_shortcuts.assistant, "Cmd+J");
+    }
+}

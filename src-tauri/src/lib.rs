@@ -30,13 +30,14 @@ pub fn run() {
             let path = commands::config_path(app.handle());
             let config = config::load(&path);
             let write_suppress = watcher::new_suppress_list();
-            let file_watcher = match watcher::FileWatcher::new(app.handle().clone(), write_suppress.clone()) {
-                Ok(w) => Some(w),
-                Err(e) => {
-                    eprintln!("文件监听器不可用，外部修改将不会实时刷新: {e}");
-                    None
-                }
-            };
+            let file_watcher =
+                match watcher::FileWatcher::new(app.handle().clone(), write_suppress.clone()) {
+                    Ok(w) => Some(w),
+                    Err(e) => {
+                        eprintln!("文件监听器不可用，外部修改将不会实时刷新: {e}");
+                        None
+                    }
+                };
             app.manage(AppState {
                 config: Mutex::new(config),
                 config_path: path,
@@ -149,6 +150,7 @@ pub fn run() {
             commands::toggle_assistant,
             commands::get_agent_status,
             commands::apply_shortcuts,
+            commands::get_window_shortcuts,
             commands::open_url,
             source::app_icon,
             popup::submit_popup_capture,
