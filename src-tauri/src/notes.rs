@@ -367,7 +367,7 @@ mod tests {
     #[test]
     fn is_safe_image_path_rejects_outside_assets() {
         let dir = tempdir();
-        let p = dir.path().join("secret.md");
+        let p = dir.path().join("secret.png");
         std::fs::write(&p, b"x").unwrap();
         assert!(!is_safe_image_path(&p));
     }
