@@ -20,6 +20,7 @@ import { tagFilter, setTagFilter } from "./tags/filter";
 import { openBlockTagMenu } from "./tags/picker";
 import { createLayoutController } from "./layout-controller";
 import { createPieceHeader } from "./piece-switcher";
+import { OutlineToggleEffect, outlineMode } from "./outline-mode";
 import { actionTargetForTransition, createTasksPanel } from "./tasks-panel";
 import {
   createDocument,
@@ -254,6 +255,9 @@ const pieceEditorRoot = document.querySelector<HTMLElement>("#piece-editor-root"
 const pieceCol = document.querySelector<HTMLElement>("#piece-col")!;
 const pieceScroll = document.querySelector<HTMLElement>("#piece-scroll")!;
 let currentPiece: NoteEntry | null = null;
+let pieceOutlineDefault = false;
+let pieceOutlineSessionOverride: boolean | null = null;
+let pieceOutlineOn = false;
 
 /** 当前装载进 pieceEditor 的文件（项目模式=成品，文档模式=独立文档）。 */
 function activePieceFile(): NoteEntry | null {
@@ -269,7 +273,7 @@ const pieceEditor = createEditor(
     const f = activePieceFile();
     if (f) scheduleSave(f.path, doc);
   },
-  [scrollerPositionTheme, placeholder("开始写……")],
+  [scrollerPositionTheme, ...outlineMode(), placeholder("开始写……")],
   {
     grow: true,
     // pieceEditor is shared by project piece mode AND document mode. Branch on
@@ -299,6 +303,24 @@ pieceEditor.contentDOM.addEventListener("focus", () => {
 
 // 文档头（标题 + 切换箭头）挂在「写作」栏内容区顶部，随正文一起滚。
 let pieceHeader: ReturnType<typeof createPieceHeader> | null = null;
+
+function applyPieceOutlineMode(next: boolean, opts: { user?: boolean } = {}) {
+  if (opts.user) pieceOutlineSessionOverride = next;
+  const lineNumber = pieceEditor.state.doc.lineAt(pieceEditor.state.selection.main.from).number;
+  pieceOutlineOn = next;
+  pieceEditor.dispatch({ effects: OutlineToggleEffect.of(next) });
+  const line = pieceEditor.state.doc.line(Math.min(lineNumber, pieceEditor.state.doc.lines));
+  pieceEditor.dispatch({
+    selection: { anchor: line.from },
+    scrollIntoView: true,
+  });
+  pieceHeader?.setOutlineMode(next);
+  requestEditorLayout(pieceEditor);
+}
+
+function resetPieceOutlineForOpen() {
+  applyPieceOutlineMode(pieceOutlineSessionOverride ?? pieceOutlineDefault);
+}
 
 function mountPieceHeader() {
   const topbar = document.querySelector<HTMLElement>("#piece-topbar-root")!;
@@ -365,14 +387,18 @@ function mountPieceHeader() {
       pieceEditor.focus();
       pieceEditor.dispatch({ selection: { anchor: 0, head: 0 } });
     },
+    isOutlineMode: () => pieceOutlineOn,
+    setOutlineMode: (next) => applyPieceOutlineMode(next, { user: true }),
   },
   });
+  pieceHeader.setOutlineMode(pieceOutlineOn);
 }
 
 async function openPiece(entry: NoteEntry) {
   currentPiece = entry;
   pieceHeader?.setLabel(entry.name);
   applyRemoteTo(pieceEditor, await loadNote(entry.path));
+  resetPieceOutlineForOpen();
 }
 
 /** 打开一个独立文档：切到文档模式，复用 pieceEditor 渲染该文件。 */
@@ -394,6 +420,7 @@ async function openDocument(doc: NoteEntry) {
   setProjectLabel(doc.name);
   clearEmptyState();
   applyRemoteTo(pieceEditor, await loadNote(doc.path));
+  resetPieceOutlineForOpen();
   pieceHeader?.setLabel(doc.name);
   applyView();
   void invoke("set_active_note", { dir: parentDir(doc.path), noteId: doc.name, path: doc.path, kind: "doc" });
@@ -1504,6 +1531,8 @@ function bumpFont(delta: number) {
 async function init() {
   const config = await getConfig();
   applyFontSize(config.font_size);
+  pieceOutlineDefault = config.piece_outline_default ?? false;
+  applyPieceOutlineMode(pieceOutlineDefault);
   await bootstrapProjects(config);
 
   const assistant = await invoke<{ open: boolean }>("get_assistant_state");

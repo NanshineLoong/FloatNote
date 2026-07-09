@@ -49,19 +49,23 @@ describe("setDoc undo", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const view = createEditor(host, () => {});
+    try {
+      // Seed the original document WITHOUT recording history, so the only
+      // history-tracked transaction is the AI write below.
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: "原文" },
+        annotations: Transaction.addToHistory.of(false),
+      });
 
-    // Seed the original document WITHOUT recording history, so the only
-    // history-tracked transaction is the AI write below.
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: "原文" },
-      annotations: Transaction.addToHistory.of(false),
-    });
+      setDoc(view, "AI 改写后");
+      expect(view.state.doc.toString()).toBe("AI 改写后");
 
-    setDoc(view, "AI 改写后");
-    expect(view.state.doc.toString()).toBe("AI 改写后");
-
-    undo(view);
-    expect(view.state.doc.toString()).toBe("原文");
+      undo(view);
+      expect(view.state.doc.toString()).toBe("原文");
+    } finally {
+      view.destroy();
+      host.remove();
+    }
   });
 });
 

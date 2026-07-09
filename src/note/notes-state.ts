@@ -55,6 +55,7 @@ export interface Config {
   working_dir: string | null;
   shortcut_capture: string;
   shortcut_toggle: string;
+  piece_outline_default: boolean;
   font_size: number;
   launch_at_login: boolean;
   recent_projects: string[];

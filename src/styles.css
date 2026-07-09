@@ -1159,15 +1159,16 @@ input {
   color: #555;
 }
 
-/* ── 文档模式（#app.doc-mode）：隐藏滑拨杆 / 行动 / 采集面 / 写作区顶栏，
-   只留独立文档编辑器。文档模式下顶栏那行（面包屑 / 版本 / 删除槽）整行隐藏——
-   独立文档无项目内切换、无版本历史，删除走左上角切换菜单的「文档」区逐行垃圾桶，
-   与项目模式删成品走面包屑菜单同构。写作区直接从大标题开始。 */
+/* ── 文档模式（#app.doc-mode）：隐藏滑拨杆 / 行动 / 采集面，以及项目内导航控件。
+   顶栏保留给正文/大纲 toggle；独立文档无项目内切换、无版本历史。 */
 #app.doc-mode #view-seg,
 #app.doc-mode #tasks-toggle,
 #app.doc-mode .piece-breadcrumb,
-#app.doc-mode .piece-version-btn,
-#app.doc-mode #piece-topbar-root {
+#app.doc-mode .piece-version-btn {
+  display: none !important;
+}
+
+#app.doc-mode .piece-crumb-row {
   display: none !important;
 }
 
@@ -1733,11 +1734,163 @@ input {
   user-select: none;
 }
 
-/* 模式切换预留位（如未来的 大纲/正文）。v1 留空；靠 .piece-crumb-row 的 flex:1 被推到右端。 */
+/* 模式切换预留位：正文 / 大纲 toggle；靠 .piece-crumb-row 的 flex:1 被推到右端。 */
 .piece-mode-slot {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+#app.doc-mode .piece-mode-slot {
+  margin-left: auto;
+}
+
+.piece-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 26px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #777;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.piece-mode-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+}
+
+.piece-mode-btn.active {
+  border-color: rgba(0, 0, 0, 0.10);
+  background: rgba(0, 0, 0, 0.07);
+  color: #202124;
+}
+
+.piece-mode-btn i {
+  font-size: 14px;
+}
+
+/* ── Outline Mode ───────────────────────────────────────────────────────
+   幕布式：每个节点行使用相同缩进变量，空行只压高度不从文档中删除。 */
+.cm-outline-mode .cm-content {
+  padding-left: 0;
+}
+
+.cm-outline-mode .cm-line.cm-outline-node {
+  position: relative;
+  padding-left: calc(var(--outline-indent, 0px) + 24px);
+}
+
+.cm-outline-bullet {
+  display: inline-flex;
+  align-items: center;
+  margin-left: -22px;
+  margin-right: 4px;
+  height: 1.6em;
+  vertical-align: middle;
+  color: #3c3c3c;
+  opacity: calc(1 - max(0, var(--outline-depth, 1) - 1) * 0.12);
+}
+
+.cm-outline-dot {
+  display: inline-block;
+  width: calc(max(5px, 8px - max(0, var(--outline-depth, 1) - 1) * 0.5px));
+  height: calc(max(5px, 8px - max(0, var(--outline-depth, 1) - 1) * 0.5px));
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.cm-outline-fold-toggle {
+  margin-left: 2px;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: #9a9a96;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.cm-outline-bullet:hover .cm-outline-fold-toggle,
+.cm-outline-mode .cm-line.cm-outline-node:hover .cm-outline-fold-toggle,
+.cm-outline-fold-toggle:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+.cm-outline-fold-toggle:hover {
+  color: #333;
+}
+
+.cm-outline-heading {
+  font-weight: 650;
+  color: #202124;
+}
+
+.cm-outline-mode .cm-preview-h1,
+.cm-outline-mode .cm-preview-h2,
+.cm-outline-mode .cm-preview-h3,
+.cm-outline-mode .cm-preview-h4,
+.cm-outline-mode .cm-preview-h5,
+.cm-outline-mode .cm-preview-h6 {
+  font-size: 1em;
+  line-height: 1.6;
+}
+
+.cm-outline-mode .cm-line.cm-outline-blank {
+  line-height: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cm-outline-fold-summary {
+  margin: 3px 0 5px calc(var(--outline-indent, 0px) + 24px);
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: #8a8a86;
+  background: rgba(0, 0, 0, 0.035);
+  font-size: 12px;
+}
+
+.cm-outline-card-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - (var(--outline-indent, 0px) + 22px));
+  min-height: 30px;
+  margin: 4px 0 4px calc(var(--outline-indent, 0px) + 22px);
+  padding: 5px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  background: #f7f7f5;
+  color: #555;
+  font-size: 13px;
+  text-align: left;
+}
+
+.cm-outline-card-chip .cm-outline-card-label {
+  flex: 1 1 auto;
+}
+
+.cm-outline-card-hr-card {
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.16);
+  background: transparent;
+}
+
+.cm-outline-card-hr-card .cm-outline-dot,
+.cm-outline-card-hr-card .cm-outline-card-label {
+  display: none;
 }
 
 .tag-bar {
@@ -2008,6 +2161,43 @@ input {
   #piece-topbar-root {
     background: #1e1e1e;
     border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+  .piece-mode-btn {
+    color: #a1a1aa;
+  }
+  .piece-mode-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: #f3f4f6;
+  }
+  .piece-mode-btn.active {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.10);
+    color: #f3f4f6;
+  }
+  .cm-outline-bullet {
+    color: #d4d4d8;
+  }
+  .cm-outline-fold-toggle {
+    color: #9ca3af;
+  }
+  .cm-outline-fold-toggle:hover {
+    color: #f3f4f6;
+  }
+  .cm-outline-heading {
+    color: #f3f4f6;
+  }
+  .cm-outline-fold-summary {
+    color: #a1a1aa;
+    background: rgba(255, 255, 255, 0.07);
+  }
+  .cm-outline-card-chip {
+    border-color: rgba(255, 255, 255, 0.10);
+    background: #27272a;
+    color: #d4d4d8;
+  }
+  .cm-outline-card-hr-card {
+    border-top-color: rgba(255, 255, 255, 0.18);
+    background: transparent;
   }
   .tag-filter-all {
     color: #9ca3af;

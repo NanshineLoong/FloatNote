@@ -28,6 +28,17 @@ export interface PieceHeaderHost {
   focusTitle?: () => void;
   /** 回车提交标题后，焦点跳到正文编辑器首行。 */
   focusBody: () => void;
+  /** 当前写作编辑器是否处于大纲模式。 */
+  isOutlineMode?: () => boolean;
+  /** 切换写作编辑器正文/大纲模式。 */
+  setOutlineMode?: (next: boolean) => void;
+}
+
+export function outlineToggleState(outlineOn: boolean): { icon: string; pressed: boolean } {
+  return {
+    icon: outlineOn ? "ph-list-tree" : "ph-text-align-left",
+    pressed: outlineOn,
+  };
 }
 
 /**
@@ -77,9 +88,22 @@ export function createPieceHeader(args: {
   crumbRow.appendChild(crumb);
   crumbRow.appendChild(versionBtn);
 
-  // 模式切换预留位（如未来的 大纲/正文）。v1 留空，不渲染任何按钮；顶栏布局先就位。
+  // 模式切换预留位：大纲/正文 toggle 放在这里，保持既有顶栏布局测试约束。
   const modeSlot = document.createElement("div");
   modeSlot.className = "piece-mode-slot";
+  let modeToggle: HTMLButtonElement | null = null;
+  if (host.setOutlineMode) {
+    modeToggle = document.createElement("button");
+    modeToggle.type = "button";
+    modeToggle.className = "piece-mode-btn piece-mode-toggle";
+    modeToggle.title = "切换正文 / 大纲";
+    modeToggle.setAttribute("aria-label", "切换正文 / 大纲");
+    modeToggle.onclick = (e) => {
+      e.preventDefault();
+      host.setOutlineMode?.(!(host.isOutlineMode?.() ?? false));
+    };
+    modeSlot.appendChild(modeToggle);
+  }
 
   // 标题即可编辑文本区：长标题自然软包折行，回车提交重命名并跳到正文。
   // value 永远单行（回车不写入换行符），折行只是视觉呈现。
@@ -94,6 +118,7 @@ export function createPieceHeader(args: {
   topbarMount.appendChild(crumbRow);
   topbarMount.appendChild(modeSlot);
   titleMount.appendChild(title);
+  if (modeToggle) syncOutlineMode(host.isOutlineMode?.() ?? false);
 
   function fit() {
     // 粘贴 / IME 可能带入换行符；标题=文件名永远是单行，落到 value 前先剔掉。
@@ -112,6 +137,14 @@ export function createPieceHeader(args: {
     crumb.querySelector<HTMLElement>(".piece-breadcrumb-label")!.textContent = name;
     title.classList.remove("rename-error");
     fit();
+  }
+
+  function syncOutlineMode(outlineOn: boolean) {
+    if (!modeToggle) return;
+    const state = outlineToggleState(outlineOn);
+    modeToggle.innerHTML = `<i class="ph ${state.icon}"></i>`;
+    modeToggle.classList.toggle("active", state.pressed);
+    modeToggle.setAttribute("aria-pressed", String(state.pressed));
   }
 
   /** 聚焦标题并全选，供新建 piece / 文档后原地改名。等一帧让布局就位。 */
@@ -302,5 +335,5 @@ export function createPieceHeader(args: {
     setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
   }
 
-  return { setLabel, focusTitle, closeMenu, closeVersionMenu };
+  return { setLabel, focusTitle, closeMenu, closeVersionMenu, setOutlineMode: syncOutlineMode };
 }

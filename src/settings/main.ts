@@ -14,6 +14,7 @@ interface Config {
   shortcut_capture: string;
   shortcut_toggle: string;
   shortcut_popup: string;
+  piece_outline_default: boolean;
   font_size: number;
   launch_at_login: boolean;
   ai_provider: string;
@@ -63,6 +64,14 @@ async function render() {
           <label class="settings-label">开机自启动</label>
           <label class="settings-toggle">
             <input id="autostart" type="checkbox" ${config.launch_at_login ? "checked" : ""} />
+            <span class="settings-toggle-track"></span>
+          </label>
+        </div>
+
+        <div class="settings-row settings-row-inline">
+          <label class="settings-label">写作区默认大纲模式</label>
+          <label class="settings-toggle">
+            <input id="piece-outline-default" type="checkbox" ${config.piece_outline_default ? "checked" : ""} />
             <span class="settings-toggle-track"></span>
           </label>
         </div>
@@ -265,6 +274,7 @@ async function render() {
       shortcut_capture: capture,
       shortcut_toggle: toggle,
       shortcut_popup: popup,
+      piece_outline_default: document.querySelector<HTMLInputElement>("#piece-outline-default")!.checked,
       launch_at_login: document.querySelector<HTMLInputElement>("#autostart")!.checked,
       ai_provider: providerSelect.value,
       ai_model: modelInput.value.trim(),

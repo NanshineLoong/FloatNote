@@ -39,6 +39,8 @@ pub struct Config {
     pub shortcut_popup: String,
     /// 笔记窗内快捷键（窗口聚焦时生效，纯前端分派）。默认值见 WindowShortcuts::default。
     pub window_shortcuts: WindowShortcuts,
+    /// 写作区默认是否以大纲模式打开。窗口内手动切换只影响当前会话。
+    pub piece_outline_default: bool,
     pub font_size: u32,
     pub launch_at_login: bool,
     /// 助手是否展开显示（折叠则隐藏）。助手始终活在笔记窗内，按窗宽自动 inline/floating。
@@ -68,6 +70,7 @@ impl Default for Config {
             shortcut_toggle: "Alt+Cmd+N".to_string(),
             shortcut_popup: "Alt+Cmd+P".to_string(),
             window_shortcuts: WindowShortcuts::default(),
+            piece_outline_default: false,
             font_size: 15,
             launch_at_login: false,
             assistant_open: false,
@@ -130,6 +133,12 @@ mod tests {
     fn partial_json_keeps_popup_default() {
         let config: Config = serde_json::from_str(r#"{"font_size":20}"#).unwrap();
         assert_eq!(config.shortcut_popup, "Alt+Cmd+P");
+    }
+
+    #[test]
+    fn piece_outline_default_starts_false() {
+        let config = Config::default();
+        assert!(!config.piece_outline_default);
     }
 
     #[test]
