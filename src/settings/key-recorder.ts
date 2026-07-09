@@ -4,34 +4,23 @@
  * 用法：
  *   const recorder = new KeyRecorder(element, initialValue);
  *   recorder.value; // 当前快捷键字符串，如 "Alt+Cmd+C"
+ *
+ * 可选第三参 onChange 在录制值变化后调用（Task 8 用于实时冲突检测）。
  */
 
-/** macOS 上 Meta 键显示为 Cmd，Windows/Linux 显示为 Win。 */
-const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-
-function keyName(key: string): string {
-  switch (key) {
-    case "Meta": return isMac ? "Cmd" : "Win";
-    case "Control": return "Ctrl";
-    case "Alt": return "Alt";
-    case "Shift": return "Shift";
-    case " ": return "Space";
-    default:
-      // 单字符大写（A-Z），功能键原样（F1, Escape 等）
-      if (key.length === 1) return key.toUpperCase();
-      return key;
-  }
-}
+import { eventToCombo } from "../shared/shortcuts";
 
 export class KeyRecorder {
   private readonly el: HTMLElement;
   private labelEl: HTMLElement;
   private _value: string;
   private recording = false;
+  private readonly onChange?: () => void;
 
-  constructor(el: HTMLElement, initialValue: string) {
+  constructor(el: HTMLElement, initialValue: string, onChange?: () => void) {
     this.el = el;
     this._value = initialValue;
+    this.onChange = onChange;
 
     // 确保内部结构
     this.labelEl = el.querySelector(".key-recorder-label") ?? el;
@@ -80,24 +69,14 @@ export class KeyRecorder {
 
       if (!this.recording) return;
 
-      const mods: string[] = [];
-      if (e.ctrlKey) mods.push("Ctrl");
-      if (e.altKey) mods.push("Alt");
-      if (e.shiftKey) mods.push("Shift");
-      if (e.metaKey) mods.push(isMac ? "Cmd" : "Win");
-
-      // 修饰键单独按下不算完整快捷键
-      if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return;
-
-      // Tauri 要求至少一个修饰键
-      if (mods.length === 0) {
+      const combo = eventToCombo(e);
+      if (combo === null) {
         this.labelEl.textContent = "需要修饰键 (Ctrl/Alt/Shift/Cmd)…";
         return;
       }
-
-      mods.push(keyName(e.key));
-      this._value = mods.join("+");
+      this._value = combo;
       this.stopRecording();
+      this.onChange?.();
     });
 
     this.el.addEventListener("focus", () => {
