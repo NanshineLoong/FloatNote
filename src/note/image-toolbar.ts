@@ -51,17 +51,6 @@ function locateImageRange(
   return found;
 }
 
-/** Find the currently-rendered figure whose `<img>.alt` equals `caption`. Used
- *  to re-attach the toolbar after a writeback rebuilds the widget DOM. */
-function findFigureByCaption(view: EditorView, caption: string): HTMLElement | null {
-  const figures = view.dom.querySelectorAll<HTMLElement>(".cm-preview-figure");
-  for (const f of Array.from(figures)) {
-    const img = f.querySelector("img");
-    if (img && img.alt === caption) return f;
-  }
-  return null;
-}
-
 /** Rewrite the source slice with canonical attrs. The image node's `from` is
  *  stable (we only ever replace starting at `from`), but `to` shifts when the
  *  inserted text is longer/shorter than the old slice — so recompute `active`
@@ -79,18 +68,25 @@ function writeSource(attrs: ImageAttrs): void {
 }
 
 /** After a writeback, the preview plugin rebuilds the ImgWidget DOM, destroying
- *  the figure that hosted the toolbar. Re-find the rebuilt figure (same caption)
- *  and move the toolbar into it; if it can't be found, close. */
-function reattach(caption: string): void {
+ *  the figure that hosted the toolbar. Re-find the rebuilt figure for THIS image
+ *  via its `from` position (`view.domAtPos(from)` → nearest `.cm-preview-figure`)
+ *  rather than by caption — duplicate empty captions (the common case for pasted
+ *  images) made caption matching attach the toolbar to the WRONG figure. If the
+ *  widget is torn down or the cursor is on the line (image in source mode),
+ *  `domAtPos` won't land inside a figure, so we close. */
+function reattach(view: EditorView): void {
   if (!active || !toolbarEl) return;
-  const newFigure = findFigureByCaption(active.view, caption);
-  if (!newFigure) {
+  const pos = active.from;
+  const dom = view.domAtPos(pos);
+  const node = (dom.node.nodeType === 1 ? dom.node : dom.node.parentElement) as HTMLElement | null;
+  const figure = node?.closest?.(".cm-preview-figure") as HTMLElement | null;
+  if (!figure) {
     closeToolbar();
     return;
   }
-  active.figure = newFigure;
-  newFigure.classList.add("cm-img-active");
-  newFigure.appendChild(toolbarEl);
+  active.figure = figure;
+  figure.classList.add("cm-img-active");
+  figure.appendChild(toolbarEl);
 }
 
 function openToolbar(view: EditorView, figure: HTMLElement): void {
@@ -129,7 +125,7 @@ function openToolbar(view: EditorView, figure: HTMLElement): void {
       const cur = currentAttrs();
       const nextAlign: ImageAlign | null = cur.align === al ? null : al;
       writeSource({ ...cur, align: nextAlign });
-      reattach(cur.caption);
+      reattach(view);
     };
     bar.appendChild(b);
   }
@@ -209,7 +205,7 @@ function openToolbar(view: EditorView, figure: HTMLElement): void {
     const w = Math.max(40, Math.round(startW + (e.clientX - startX)));
     const cur = currentAttrs();
     writeSource({ ...cur, width: w });
-    reattach(cur.caption);
+    reattach(view);
   };
 
   figure.classList.add("cm-img-active");
