@@ -50,8 +50,11 @@ async function main(): Promise<void> {
           send({ type: "done", requestId: msg.requestId, conversationId: msg.conversationId });
         }
         break;
-      case "apply_write_result":
-        runner.onApplyWriteResult(msg);
+      case "apply_edit_result":
+        runner.onApplyEditResult(msg);
+        break;
+      case "note_text":
+        runner.onNoteText(msg);
         break;
       case "cancel":
         await runner.cancel(msg.requestId);

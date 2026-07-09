@@ -4,14 +4,14 @@
  * or run block-level actions such as delete.
  */
 import { type EditorView } from "@codemirror/view";
-import type { BlockRange } from "../blocks/ranges";
 import {
   addTagAndSetBlockChanges,
   blockTagId,
   isTagColorTaken,
   parseDefs,
   setBlockTagChange,
-} from "./model";
+  type BlockRange,
+} from "@floatnote/note-logic";
 import { PALETTE } from "./palette";
 import { closeFloating, floatMenu } from "./floating";
 

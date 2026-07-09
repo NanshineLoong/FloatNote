@@ -327,6 +327,196 @@
   background: #1d4ed8;
 }
 
+/* permission bubble */
+.assistant-perm-region {
+  position: absolute;
+  /* 坐落在 dock 右上角，不占流、不挡编辑区。 */
+  right: 14px;
+  bottom: calc(100% + 6px);
+  z-index: 6;
+  max-width: 360px;
+}
+
+.perm-bubble-root:empty {
+  /* 无请求时不留痕，避免占位影响布局。 */
+  display: none;
+}
+
+.perm-bubble-root {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px;
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+  color: #202124;
+  font-size: 13px;
+  line-height: 1.45;
+  animation: perm-in 0.18s ease;
+}
+
+@keyframes perm-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.perm-card {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.perm-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #111827;
+}
+
+.perm-summary {
+  color: rgba(32, 33, 36, 0.62);
+  font-size: 13px;
+}
+
+.perm-detail {
+  color: rgba(32, 33, 36, 0.78);
+  font-size: 13px;
+}
+
+.perm-detail pre {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.06);
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  font-family: "SF Mono", ui-monospace, "Menlo", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.perm-mode {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 0.5px solid rgba(0, 0, 0, 0.14);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #202124;
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+  outline: none;
+}
+
+.perm-mode:focus {
+  border-color: #2563eb;
+}
+
+.tag-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  vertical-align: middle;
+  /* background 由 JS 内联设置 */
+}
+
+/* allow / deny 按钮：与 .assistant-send 一致的主色，deny 走次要态。 */
+.perm-bubble-root > button {
+  flex: 1;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.perm-bubble-root > button:first-of-type {
+  /* 允许写入：主色（蓝）。 */
+  background: #2563eb;
+  color: #fff;
+}
+
+.perm-bubble-root > button:first-of-type:hover {
+  background: #1d4ed8;
+}
+
+.perm-bubble-root > button:last-of-type {
+  /* 拒绝：次要态。 */
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(32, 33, 36, 0.78);
+}
+
+.perm-bubble-root > button:last-of-type:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #111827;
+}
+
+@media (prefers-color-scheme: dark) {
+  .perm-bubble-root {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(42, 42, 44, 0.96);
+    color: #e5e5e5;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  }
+
+  .perm-title {
+    color: #fff;
+  }
+
+  .perm-summary {
+    color: rgba(229, 229, 229, 0.54);
+  }
+
+  .perm-detail {
+    color: rgba(229, 229, 229, 0.78);
+  }
+
+  .perm-detail pre {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .perm-mode {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: #2a2a2c;
+    color: #e5e5e5;
+  }
+
+  .perm-mode:focus {
+    border-color: #3b82f6;
+  }
+
+  .perm-bubble-root > button:first-of-type {
+    background: #3b82f6;
+  }
+
+  .perm-bubble-root > button:first-of-type:hover {
+    background: #2563eb;
+  }
+
+  .perm-bubble-root > button:last-of-type {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(229, 229, 229, 0.78);
+  }
+
+  .perm-bubble-root > button:last-of-type:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   .assistant {
     background: transparent;

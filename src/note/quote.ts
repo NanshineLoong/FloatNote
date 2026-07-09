@@ -42,7 +42,7 @@ function normalizeWebUrl(url: string): string {
 }
 
 // ── bundle-id marker ──────────────────────────────────────────────────────
-// Mirrors the tag-marker convention in tags/model.ts: an inline HTML comment
+// Mirrors the tag-marker convention in @floatnote/note-logic (tags/model): an inline HTML comment
 // `<!-- floatnote:bid=<id> -->` on the title line. The tag decoration plugin
 // hides it; parseChips / the chip-widget range strip it so it never reads as a
 // chip. Persisting it per card lets the icon re-render on file reopen.
@@ -123,8 +123,7 @@ export function isQuoteCardBlock(blockText: string): boolean {
   return /^>\s*\[!quote\]/.test(firstLine);
 }
 
-import { blockRanges, type BlockRange } from "./blocks/ranges";
-import { blockTagId, buildMarker, stripTagMarker } from "./tags/model";
+import { blockRanges, blockTagId, buildMarker, stripTagMarker, type BlockRange } from "@floatnote/note-logic";
 
 export type MergeTarget =
   | { kind: "merge"; range: BlockRange }

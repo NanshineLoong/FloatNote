@@ -14,7 +14,7 @@ import {
   ViewPlugin,
   type ViewUpdate,
 } from "@codemirror/view";
-import { blockTagIds, isDefsLine, parseDefs } from "./model";
+import { blockTagIds, isDefsLine, parseDefs } from "@floatnote/note-logic";
 import { tint } from "./palette";
 
 const HIDE = Decoration.replace({});

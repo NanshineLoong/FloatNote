@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockRanges } from "./ranges";
+import { blockRanges } from "@floatnote/note-logic";
 import { pieceDropPos, pickMode } from "./drag";
 
 /** Minimal stand-in for a DOMRect — `pickMode` only reads left/right/top/bottom. */

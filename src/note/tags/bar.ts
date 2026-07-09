@@ -15,7 +15,7 @@ import {
   parseDefs,
   patchTagDefChange,
   type TagDef,
-} from "./model";
+} from "@floatnote/note-logic";
 import { PALETTE } from "./palette";
 import { activeTagFilter, setTagFilterEffect } from "./filter";
 import { showToast } from "../../shared/toast";

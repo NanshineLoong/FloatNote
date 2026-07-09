@@ -10,5 +10,5 @@
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
     "types": ["vite/client", "vitest/globals"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "shared", "vite.config.ts"]
 }
