@@ -526,6 +526,9 @@ function currentChatScope(): ChatScope | null {
 }
 
 void onNoteUpdated(async (payload) => {
+  // 与 onFileChanged 对齐：编辑器有未保存的本地修改时跳过 AI 热刷新，
+  // 否则磁盘内容会覆盖用户输入，而 pending 仍持旧内容会在后续 flush 时盖回 AI 结果。
+  if (isDirty(payload.path)) return;
   // 采集面（项目模式）被 AI 改写。
   if (current && payload.path === current.entry.path) {
     applyRemoteDoc(await loadNote(current.entry.path));
