@@ -96,6 +96,15 @@ class ImgWidget extends WidgetType {
       fig.textContent = a.caption;
       figure.appendChild(fig);
     }
+    // Mirror CheckboxWidget's mousedown + preventDefault so CodeMirror doesn't
+    // move the cursor onto this line (which would tear the widget down via the
+    // onCursorLine gate) before the subsequent click can open the toolbar.
+    // Toolbar interactions (buttons / caption input / resize handle) are left
+    // alone so they keep working.
+    figure.addEventListener("mousedown", (e) => {
+      if ((e.target as HTMLElement | null)?.closest?.(".cm-img-toolbar")) return;
+      e.preventDefault();
+    });
     return figure;
   }
   ignoreEvent() { return false; } // allow clicks for the toolbar (Task 7)

@@ -2,7 +2,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { livePreview, attachImageToolbar, setNoteDir } from "./preview";
 import { htmlPasteHandler, imagePasteHandler } from "./paste";
@@ -52,6 +52,18 @@ export function createEditor(
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown(),
       syntaxHighlighting(highlight),
+      // Refresh the image-widget noteDir map BEFORE the preview plugin rebuilds
+      // decorations, so a setDoc (project/document switch) renders images with the
+      // new dir. updateListener runs after plugin updates, so it can't help here.
+      ViewPlugin.fromClass(
+        class {
+          update(u: ViewUpdate) {
+            if (u.docChanged || u.selectionSet || u.focusChanged) {
+              setNoteDir(view, noteDirProvider());
+            }
+          }
+        },
+      ),
       ...livePreview(),
       // imagePasteHandler must come BEFORE htmlPasteHandler so the image check
       // runs first; it returns false (no image) and lets the html handler run.
@@ -63,13 +75,10 @@ export function createEditor(
       EditorView.updateListener.of((update) => {
         if (update.docChanged) onChange(update.state.doc.toString());
       }),
-      EditorView.updateListener.of((u) => {
-        if (u.selectionSet || u.focusChanged) setNoteDir(view, noteDirProvider());
-      }),
     ],
   });
-  // Seed the image-widget noteDir map immediately; the updateListener above keeps
-  // it fresh on selection/focus change (doc changes force widget rebuilds anyway).
+  // Seed the image-widget noteDir map immediately; the ViewPlugin above keeps
+  // it fresh on doc/selection/focus change before the preview plugin rebuilds.
   setNoteDir(view, noteDirProvider());
   // Editors are long-lived; best-effort wiring for drop + toolbar. Cleanup is
   // not invoked (app lifetime), but we call the setup so the handlers attach.
