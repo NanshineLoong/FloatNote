@@ -38,6 +38,7 @@ export interface EscContext {
   permissionBubbleOpen: boolean;
   skillMenuOpen: boolean;
   historyPopoverOpen: boolean;
+  mentionMenuOpen: boolean;
   focusInAssistant: boolean;
   streaming: boolean;
   actionPanelOpen: boolean;
@@ -47,6 +48,7 @@ export interface EscContext {
 export type EscAction =
   | "closePermissionBubble"
   | "closeSkillMenu"
+  | "closeMentionMenu"
   | "closeHistoryPopover"
   | "cancelAssistant"
   | "closeActionPanel"
@@ -55,6 +57,7 @@ export type EscAction =
 export function resolveEsc(ctx: EscContext): EscAction | null {
   if (ctx.permissionBubbleOpen) return "closePermissionBubble";
   if (ctx.skillMenuOpen) return "closeSkillMenu";
+  if (ctx.mentionMenuOpen) return "closeMentionMenu";
   if (ctx.historyPopoverOpen) return "closeHistoryPopover";
   if (ctx.focusInAssistant && ctx.streaming) return "cancelAssistant";
   if (ctx.actionPanelOpen) return "closeActionPanel";
@@ -81,6 +84,8 @@ export interface ShortcutActions {
   closePermissionBubble(): void;
   isSkillMenuOpen(): boolean;
   closeSkillMenu(): void;
+  isMentionMenuOpen(): boolean;
+  closeMentionMenu(): void;
   canSplit(): boolean;
   bumpFont(delta: number): void; // +1 / -1 / 0 复位
 }
@@ -107,6 +112,7 @@ function runEsc(act: EscAction, a: ShortcutActions): void {
   switch (act) {
     case "closePermissionBubble": a.closePermissionBubble(); break;
     case "closeSkillMenu": a.closeSkillMenu(); break;
+    case "closeMentionMenu": a.closeMentionMenu(); break;
     case "closeHistoryPopover": a.closeHistoryPopover(); break;
     case "cancelAssistant": a.cancelAssistant(); break;
     case "closeActionPanel": a.closeActionPanel(); break;
@@ -120,6 +126,7 @@ export function installShortcuts(actions: ShortcutActions, bindings: Bindings): 
       const act = resolveEsc({
         permissionBubbleOpen: actions.isPermissionBubbleOpen(),
         skillMenuOpen: actions.isSkillMenuOpen(),
+        mentionMenuOpen: actions.isMentionMenuOpen(),
         historyPopoverOpen: actions.isHistoryPopoverOpen(),
         focusInAssistant: isFocusInAssistant(),
         streaming: actions.isAssistantStreaming(),

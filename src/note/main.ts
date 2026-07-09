@@ -33,6 +33,7 @@ import {
   getConfig,
   inboxEntry,
   isDirty,
+  listNotes,
   listPieces,
   listProjects,
   loadNote,
@@ -504,6 +505,18 @@ const assistantHandle: AssistantHandle = mountAssistant(assistantRegion, {
   subscribe: (cb) => onAgentEvent(cb),
   cancel: (requestId) => { void agentCancel(requestId); },
   listSkills: () => agentListSkills(),
+  listFiles: async (scope) => {
+    if (scope.scopeType === "project") {
+      // 项目模式：列出项目内全部 .md（采集区 _inbox、任务 _tasks、各 piece）
+      const notes = await listNotes(scope.scopePath);
+      return notes.map((n) => ({
+        name: n.name,
+        kind: n.name === "_inbox" ? "inbox" : n.name === "_tasks" ? "tasks" : "piece",
+      }));
+    }
+    // 文档模式：仅当前文档
+    return [{ name: currentDocument?.name ?? scope.scopeLabel, kind: "doc" as const }];
+  },
 });
 
 async function toggleAssistantFromChrome() {
@@ -1548,6 +1561,8 @@ async function init() {
     closePermissionBubble: () => assistantHandle.closePermissionBubble(),
     isSkillMenuOpen: () => assistantHandle.isSkillMenuOpen(),
     closeSkillMenu: () => assistantHandle.closeSkillMenu(),
+    isMentionMenuOpen: () => assistantHandle.isMentionMenuOpen(),
+    closeMentionMenu: () => assistantHandle.closeMentionMenu(),
     canSplit: () => canSplit(window.innerWidth),
     bumpFont,
   };

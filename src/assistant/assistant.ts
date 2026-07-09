@@ -7,6 +7,7 @@ import { deriveTitleFromFirstMessage, formatHistoryTime } from "../note/chat-his
 import socratesSvg from "../assets/socrates.svg?raw";
 import { mountPermissionBubble, type PermissionRequest } from "./permission-bubble.js";
 import { mountSkillPicker, type SkillSummary } from "./skill-picker.js";
+import { mountMentionPicker, type MentionFile } from "./mention-picker.js";
 import {
   type ChatEvent,
   type ChatState,
@@ -40,6 +41,9 @@ export interface AssistantDeps {
   cancel?: (requestId: string) => void;
   /** 拉取已加载 skill 列表（供 picker 右键菜单与 `/` 自动补全）。 */
   listSkills: () => Promise<SkillSummary[]>;
+  /** 拉取当前作用域内全部文件（供 `@` 文件提及）：project 模式为项目内全部 .md，
+   *  document 模式为当前文档。 */
+  listFiles: (scope: ChatScope) => Promise<MentionFile[]>;
 }
 
 export interface AssistantHandle {
@@ -69,6 +73,10 @@ export interface AssistantHandle {
   isSkillMenuOpen: () => boolean;
   /** 关闭 skill 菜单/下拉（Esc 链中优先于历史浮层）。 */
   closeSkillMenu: () => void;
+  /** `@` 文件提及下拉是否打开。 */
+  isMentionMenuOpen: () => boolean;
+  /** 关闭 `@` 文件提及下拉（Esc 链中置于 skill 菜单之后、历史浮层之前）。 */
+  closeMentionMenu: () => void;
 }
 
 export function mountAssistant(root: HTMLElement, deps: AssistantDeps): AssistantHandle {
@@ -305,7 +313,25 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   const permBubble = mountPermissionBubble(permRegion, (req, decision, writeMode) => {
     resolvePermission(req.request_id, decision, writeMode);
   });
-  const skillPicker = mountSkillPicker({ bot, input, inputWrap, listSkills: deps.listSkills });
+  // mention 下拉需在 skillPicker 之后创建（closeSkill 引用 skillPicker），故用前置占位
+  // 让 skillPicker 的 closeMention 能引用到尚未创建的 mentionPicker。
+  let closeMentionMenuFn: () => void = () => {};
+  const skillPicker = mountSkillPicker({
+    bot,
+    input,
+    inputWrap,
+    listSkills: deps.listSkills,
+    openInput: () => setInputOpen(true),
+    closeMention: () => closeMentionMenuFn(),
+  });
+  const mentionPicker = mountMentionPicker({
+    input,
+    dock: inputWrap.parentElement!,
+    listFiles: deps.listFiles,
+    getScope: () => currentScope,
+    closeSkill: () => skillPicker.close(),
+  });
+  closeMentionMenuFn = () => mentionPicker.close();
 
   /** 统一的 permission resolve 入口：派发 reducer 状态 + 调 Rust + 清 dock 兜底气泡。
    *  流内 action 卡与 dock 兜底气泡共用，以 requestId 为幂等键。 */
@@ -390,6 +416,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       permUnlisten?.();
       permBubble.destroy();
       skillPicker.destroy();
+      mentionPicker.destroy();
       document.removeEventListener("pointerdown", onDocumentPointerDown);
       root.classList.remove("assistant");
       root.innerHTML = "";
@@ -447,6 +474,12 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     },
     closeSkillMenu() {
       skillPicker.close();
+    },
+    isMentionMenuOpen() {
+      return mentionPicker.isOpen();
+    },
+    closeMentionMenu() {
+      mentionPicker.close();
     },
   };
 }

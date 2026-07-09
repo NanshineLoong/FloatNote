@@ -20,8 +20,9 @@ function setup(skills: SkillSummary[] = SKILLS) {
   document.body.appendChild(inputWrap);
   document.body.appendChild(bot);
   const listSkills = vi.fn(async () => skills);
-  const picker = mountSkillPicker({ bot, input, inputWrap, listSkills });
-  return { bot, input, inputWrap, listSkills, picker };
+  const openInput = vi.fn();
+  const picker = mountSkillPicker({ bot, input, inputWrap, listSkills, openInput });
+  return { bot, input, inputWrap, listSkills, openInput, picker };
 }
 
 describe("renderSkillList", () => {
@@ -54,7 +55,7 @@ describe("renderSkillList", () => {
 
 describe("mountSkillPicker right-click menu", () => {
   it("opens a skill menu on contextmenu and inserts /skill:<name> on click", async () => {
-    const { bot, input, picker } = setup();
+    const { bot, input, openInput, picker } = setup();
     bot.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
     // listSkills is async; let it resolve
     await vi.waitFor(() => {
@@ -66,6 +67,8 @@ describe("mountSkillPicker right-click menu", () => {
 
     expect(input.value).toBe("/skill:socratic-review ");
     expect(picker.isOpen()).toBe(false);
+    // 收起态选中技能后立即展开输入框
+    expect(openInput).toHaveBeenCalled();
     picker.destroy();
   });
 

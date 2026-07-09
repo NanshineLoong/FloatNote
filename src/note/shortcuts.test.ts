@@ -38,6 +38,7 @@ describe("resolveEsc 优先级链", () => {
   const base = {
     permissionBubbleOpen: false,
     skillMenuOpen: false,
+    mentionMenuOpen: false,
     historyPopoverOpen: false,
     focusInAssistant: false,
     streaming: false,
@@ -62,6 +63,12 @@ describe("resolveEsc 优先级链", () => {
     expect(
       resolveEsc({ ...base, skillMenuOpen: true, historyPopoverOpen: true, bubbleOpen: true }),
     ).toBe("closeSkillMenu");
+  });
+  it("0c. mention 下拉优先于历史浮层，但低于 skill 菜单", () => {
+    expect(
+      resolveEsc({ ...base, mentionMenuOpen: true, historyPopoverOpen: true, bubbleOpen: true }),
+    ).toBe("closeMentionMenu");
+    expect(resolveEsc({ ...base, skillMenuOpen: true, mentionMenuOpen: true })).toBe("closeSkillMenu");
   });
   it("1. 历史浮层最优先", () => {
     expect(

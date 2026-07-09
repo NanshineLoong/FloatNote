@@ -692,11 +692,14 @@ pre.chat-codeblock code {
   transform: translateX(0);
 }
 
-/* `/` 触发的 skill 自动补全下拉：锚定在输入框上方，复用 history popover 的视觉。 */
-.assistant-skill-dropdown {
+/* `/` 触发的 skill 自动补全下拉 / `@` 触发的文件提及下拉：锚定在输入框上方，
+   复用 history popover 的视觉。挂在 .assistant-dock 上（与历史浮层同位），
+   镜像其 left/right 以避免覆盖小人列。 */
+.assistant-skill-dropdown,
+.assistant-mention-dropdown {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 56px;
+  right: 14px;
   bottom: calc(100% + 6px);
   z-index: 6;
   max-height: 220px;
@@ -708,7 +711,14 @@ pre.chat-codeblock code {
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
 }
 
-.assistant-skill-dropdown[hidden] {
+#app.mode-floating .assistant-skill-dropdown,
+#app.mode-floating .assistant-mention-dropdown {
+  right: auto;
+  width: 240px;
+}
+
+.assistant-skill-dropdown[hidden],
+.assistant-mention-dropdown[hidden] {
   display: none;
 }
 
@@ -731,14 +741,35 @@ pre.chat-codeblock code {
   cursor: pointer;
 }
 
-.assistant-skill-item:hover {
+.assistant-skill-item:hover,
+.assistant-mention-item:hover {
   background: rgba(37, 99, 235, 0.08);
 }
 
-.assistant-skill-name {
+/* `@` 文件提及项：name + kind 标签横向排列。 */
+.assistant-mention-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant-skill-name,
+.assistant-mention-name {
   font-size: 13px;
   line-height: 1.35;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .assistant-skill-desc {
@@ -750,7 +781,19 @@ pre.chat-codeblock code {
   white-space: nowrap;
 }
 
-.assistant-skill-empty {
+/* 文件 kind 标签（采集/任务/成品/文档）。 */
+.assistant-mention-kind {
+  font-size: 11px;
+  line-height: 1.35;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.12);
+  color: rgba(37, 99, 235, 0.9);
+  white-space: nowrap;
+}
+
+.assistant-skill-empty,
+.assistant-mention-empty {
   padding: 8px 9px;
   color: rgba(32, 33, 36, 0.54);
   font-size: 12px;

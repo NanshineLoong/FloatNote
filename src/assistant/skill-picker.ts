@@ -1,15 +1,16 @@
-import { closeFloating, floatMenu } from "../note/tags/floating.js";
+import { closeFloating, floatMenuAnchored } from "../note/tags/floating.js";
 
 /**
  * Skill picker：两种显式入口（spec §4.3）。
  *
- * - 右键 Socrates 小人 → 在光标处弹 skill 菜单（复用 `floatMenu`，镜像
- *   `src/note/tags/bar.ts` 的 `oncontextmenu`）。
- * - 输入框行首输入 `/` → 在 `.assistant-input-wrap` 内弹出过滤下拉（镜像
- *   assistant.ts 的 history popover：`[hidden]` 切换 + `replaceChildren`）。
+ * - 右键 Socrates 小人 → 锚定到小人的 skill 菜单（`floatMenuAnchored`：收起态开在
+ *   小人左上方、展开态开在右上方，自带 flip+clamp）。选中后立即展开输入框。
+ * - 输入框行首输入 `/` → 在 `.assistant-dock` 上弹出过滤下拉（镜像 assistant.ts 的
+ *   history popover：`[hidden]` 切换 + `replaceChildren`，挂在 input-wrap 的兄弟节点
+ *   以避开其 overflow:hidden）。
  *
  * 选中后把输入框置为 `/skill:<name> ` 前缀，由 Pi 的 `session.prompt` 原生展开。
- * 前端不做语义解析。复用 `floatMenu` 的单浮层不变式与外点关闭。
+ * 前端不做语义解析。复用 `closeFloating` 的单浮层不变式与外点关闭。
  */
 
 export interface SkillSummary {
@@ -22,6 +23,10 @@ export interface SkillPickerOptions {
   input: HTMLTextAreaElement;
   inputWrap: HTMLElement;
   listSkills: () => Promise<SkillSummary[]>;
+  /** 收起态选中技能后立即展开输入框（assistant 注入 setInputOpen(true)）；展开态 no-op。 */
+  openInput: () => void;
+  /** 打开 `/` 下拉时关闭互斥的 mention 下拉（assistant 注入）。 */
+  closeMention?: () => void;
 }
 
 export interface SkillPickerHandle {
@@ -80,7 +85,7 @@ function applySkill(input: HTMLTextAreaElement, name: string): void {
 }
 
 export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
-  const { bot, input, inputWrap, listSkills } = opts;
+  const { bot, input, inputWrap, listSkills, openInput, closeMention } = opts;
   let cache: SkillSummary[] | null = null;
   let dropdown: HTMLElement | null = null;
   let open = false;
@@ -95,8 +100,10 @@ export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
     return cache;
   }
 
-  // ── 右键小人 → floatMenu 列表 ─────────────────────────────────────────
-  function openMenuAt(x: number, y: number, skills: SkillSummary[]): void {
+  // ── 右键小人 → 锚定到小人的技能菜单 ───────────────────────────────────
+  // 收起态（inputWrap 无 .open，小人在窗口右下角）开在小人左上方（up-left）；
+  // 展开态开在小人右上方（up-right）。选中后立即展开输入框。floatMenuAnchored 自带 flip+clamp。
+  function openMenuAt(skills: SkillSummary[]): void {
     const menu = renderSkillList(skills, "");
     menu.classList.add("switch-menu", "assistant-skill-menu");
     menu.addEventListener("click", (e) => {
@@ -106,8 +113,10 @@ export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
       applySkill(input, name);
       closeFloating();
       close();
+      openInput();
     });
-    floatMenu(menu, x, y);
+    const expanded = inputWrap.classList.contains("open");
+    floatMenuAnchored(menu, bot.getBoundingClientRect(), expanded ? "up-right" : "up-left");
     open = true;
   }
 
@@ -115,7 +124,7 @@ export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
     e.preventDefault();
     const skills = await ensureSkills();
     if (skills.length === 0) return; // 空态不弹
-    openMenuAt(e.clientX, e.clientY, skills);
+    openMenuAt(skills);
   }
 
   bot.addEventListener("contextmenu", onContextMenu);
@@ -145,7 +154,10 @@ export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
       });
       // 下拉内部 pointerdown 不冒泡，避免触发外点关闭与 assistant 的 onDocumentPointerDown。
       dropdown.addEventListener("pointerdown", (e) => e.stopPropagation());
-      inputWrap.appendChild(dropdown);
+      // 挂到 .assistant-dock（input-wrap 的父节点）而非 input-wrap 内部：input-wrap 有
+      // overflow:hidden（用于输入框滑入动画），下拉用 bottom:calc(100%+6px) 定位在其外侧
+      // 上方，挂内部会被裁掉看不见。历史浮层同理挂在 dock 上（assistant.ts 的 history popover）。
+      inputWrap.parentElement?.appendChild(dropdown);
     }
     dropdown.replaceChildren(renderSkillList(skills, query));
     dropdown.hidden = false;
@@ -173,6 +185,7 @@ export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
       closeDropdown();
       return;
     }
+    closeMention?.(); // 与 mention 下拉互斥
     openDropdown(skills, query);
   }
 
