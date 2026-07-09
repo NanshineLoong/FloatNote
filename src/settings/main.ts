@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { KeyRecorder } from "./key-recorder";
+import {
+  WINDOW_SHORTCUT_IDS,
+  WINDOW_SHORTCUT_DEFAULTS,
+  WINDOW_SHORTCUT_LABELS,
+  findAllConflicts,
+  type WindowShortcutId,
+} from "../shared/shortcuts";
 
 interface Config {
   working_dir: string | null;
@@ -13,6 +20,16 @@ interface Config {
   ai_model: string;
   ai_api_key: string;
   ai_base_url: string;
+  window_shortcuts: {
+    assistant: string;
+    assistant_bubble: string;
+    action_panel: string;
+    add_action: string;
+    new_conversation: string;
+    view_inbox: string;
+    view_piece: string;
+    view_split: string;
+  };
 }
 
 const app = document.querySelector<HTMLElement>("#app")!;
@@ -80,6 +97,26 @@ async function render() {
         </div>
       </section>
 
+      <!-- ── 窗口快捷键 ── -->
+      <section class="settings-section">
+        <div class="settings-section-header">
+          <i class="ph ph-keyboard"></i>
+          <span>窗口快捷键</span>
+        </div>
+        ${WINDOW_SHORTCUT_IDS.map((id) => `
+        <div class="settings-row">
+          <label class="settings-label">${WINDOW_SHORTCUT_LABELS[id]}</label>
+          <div id="recorder-${id}" class="key-recorder" tabindex="0">
+            <span class="key-recorder-label">${escapeHtml(config.window_shortcuts?.[id] ?? WINDOW_SHORTCUT_DEFAULTS[id])}</span>
+          </div>
+          <span class="settings-conflict" data-conflict-for="${id}"></span>
+        </div>
+        `).join("")}
+        <div class="settings-row settings-row-inline">
+          <button id="restore-shortcuts" class="settings-btn-ghost" type="button">恢复默认</button>
+        </div>
+      </section>
+
       <!-- ── AI 助手 ── -->
       <section class="settings-section">
         <div class="settings-section-header">
@@ -131,15 +168,53 @@ async function render() {
   const captureRecorder = new KeyRecorder(
     document.querySelector("#recorder-capture")!,
     config.shortcut_capture,
+    recomputeConflicts,
   );
   const toggleRecorder = new KeyRecorder(
     document.querySelector("#recorder-toggle")!,
     config.shortcut_toggle,
+    recomputeConflicts,
   );
   const popupRecorder = new KeyRecorder(
     document.querySelector("#recorder-popup")!,
     config.shortcut_popup,
+    recomputeConflicts,
   );
+
+  // ── 窗口快捷键录制器 ──
+  const windowRecorders: Partial<Record<WindowShortcutId, KeyRecorder>> = {};
+  for (const id of WINDOW_SHORTCUT_IDS) {
+    const el = document.querySelector<HTMLElement>(`#recorder-${id}`)!;
+    windowRecorders[id] = new KeyRecorder(el, config.window_shortcuts?.[id] ?? WINDOW_SHORTCUT_DEFAULTS[id], recomputeConflicts);
+  }
+
+  function recomputeConflicts() {
+    const all = {} as Record<WindowShortcutId, string>;
+    for (const id of WINDOW_SHORTCUT_IDS) {
+      all[id] = windowRecorders[id]!.value;
+    }
+    const globals = { capture: captureRecorder.value, toggle: toggleRecorder.value, popup: popupRecorder.value };
+    const conflicts = findAllConflicts(all, globals);
+    let hasConflict = false;
+    for (const id of WINDOW_SHORTCUT_IDS) {
+      const span = document.querySelector<HTMLElement>(`[data-conflict-for="${id}"]`)!;
+      const r = conflicts[id];
+      if (r) {
+        hasConflict = true;
+        span.textContent = `⚠ ${r.message}`;
+        span.classList.add("error");
+      } else {
+        span.textContent = "";
+        span.classList.remove("error");
+      }
+    }
+    // 全局录制器变化也可能引入冲突（window↔global），上面 findAllConflicts 已覆盖；
+    // 这里再禁用保存。
+    const saveBtn = document.querySelector<HTMLButtonElement>("#save-btn")!;
+    saveBtn.disabled = hasConflict;
+  }
+
+  recomputeConflicts();
 
   // ── AI provider 切换 ──
   const providerSelect = document.querySelector<HTMLSelectElement>("#ai-provider")!;
@@ -153,6 +228,14 @@ async function render() {
     baseUrlInput.placeholder = baseUrlPlaceholder(v);
   };
 
+  // ── 恢复默认窗口快捷键 ──
+  document.querySelector<HTMLButtonElement>("#restore-shortcuts")!.onclick = () => {
+    for (const id of WINDOW_SHORTCUT_IDS) {
+      windowRecorders[id]!.value = WINDOW_SHORTCUT_DEFAULTS[id];
+    }
+    recomputeConflicts();
+  };
+
   // ── 保存 ──
   document.querySelector<HTMLButtonElement>("#save-btn")!.onclick = async () => {
     const statusEl = document.querySelector<HTMLElement>("#settings-status")!;
@@ -162,10 +245,14 @@ async function render() {
     const capture = captureRecorder.value;
     const toggle = toggleRecorder.value;
     const popup = popupRecorder.value;
+    const windowShortcuts = {} as Record<WindowShortcutId, string>;
+    for (const id of WINDOW_SHORTCUT_IDS) {
+      windowShortcuts[id] = windowRecorders[id]!.value;
+    }
 
     // 1. 验证快捷键
     try {
-      await invoke("apply_shortcuts", { capture, toggle, popup });
+      await invoke("apply_shortcuts", { capture, toggle, popup, windowShortcuts });
     } catch (error) {
       statusEl.textContent = `快捷键无效或被占用：${error}`;
       statusEl.classList.add("error");
@@ -183,6 +270,7 @@ async function render() {
       ai_model: modelInput.value.trim(),
       ai_api_key: document.querySelector<HTMLInputElement>("#ai-api-key")!.value.trim(),
       ai_base_url: document.querySelector<HTMLInputElement>("#ai-base-url")!.value.trim(),
+      window_shortcuts: windowShortcuts,
     };
 
     const aiConfigError = validateAiConfig(newConfig);
