@@ -1,4 +1,4 @@
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { syntaxTree } from "@codemirror/language";
 import { StateEffect, type Extension, RangeSetBuilder } from "@codemirror/state";
 import {
@@ -11,6 +11,8 @@ import {
 } from "@codemirror/view";
 import { parseChips, readBidMarker, stripBidMarker, type Source } from "./quote";
 import { stripTagMarker } from "./tags/model";
+import { parseImage, type ImageAlign } from "./image-attrs";
+import { imageSrc } from "./image-fs";
 
 function getCursorLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
@@ -62,17 +64,41 @@ class HrWidget extends WidgetType {
   ignoreEvent() { return true; }
 }
 
+/** Per-editor note directory, set by editor.ts so ImgWidget can resolve
+ *  relative `./_assets/...` paths into floatnote-img:// URLs. Keyed by the
+ *  EditorView's DOM root so the inbox and piece editors don't collide. */
+const noteDirs = new WeakMap<HTMLElement, string>();
+export function setNoteDir(view: EditorView, dir: string): void {
+  noteDirs.set(view.dom, dir);
+}
+function noteDirOf(view: EditorView): string {
+  return noteDirs.get(view.dom) ?? "";
+}
+
 class ImgWidget extends WidgetType {
-  constructor(readonly url: string, readonly alt: string) { super(); }
-  eq(o: ImgWidget): boolean { return o.url === this.url && o.alt === this.alt; }
+  constructor(readonly raw: string, readonly view: EditorView) { super(); }
+  eq(o: ImgWidget): boolean { return o.raw === this.raw; }
   toDOM(): HTMLElement {
+    const a = parseImage(this.raw);
+    const figure = document.createElement("figure");
+    const align: ImageAlign = a?.align ?? "left";
+    figure.className = `cm-preview-figure img-${align}`;
     const img = document.createElement("img");
     img.className = "cm-preview-img";
-    img.alt = this.alt;
-    img.src = /^https?:\/\//.test(this.url) ? this.url : convertFileSrc(this.url);
-    return img;
+    img.alt = a?.caption ?? "";
+    const url = a?.url ?? "";
+    img.src = imageSrc(url, noteDirOf(this.view));
+    img.style.width = a?.width ? `${a.width}px` : "";
+    figure.appendChild(img);
+    if (a && a.caption) {
+      const fig = document.createElement("figcaption");
+      fig.className = "cm-preview-figcaption";
+      fig.textContent = a.caption;
+      figure.appendChild(fig);
+    }
+    return figure;
   }
-  ignoreEvent() { return true; }
+  ignoreEvent() { return false; } // allow clicks for the toolbar (Task 7)
 }
 
 class LinkWidget extends WidgetType {
@@ -494,13 +520,21 @@ function buildDecorations(view: EditorView): DecorationSet {
         case "Image": {
           if (onCursorLine(node.from)) return false;
           const raw = doc.sliceString(node.from, node.to);
-          const alt = raw.match(/!\[([^\]]*)\]/)?.[1] ?? "";
+          // lang-markdown's Image node covers `![alt](url)` but NOT the trailing
+          // `{...}` attr block (it's plain text). Extend the replacement to
+          // include a `{...}` immediately following so it is hidden too.
+          let to = node.to;
+          const after = doc.sliceString(node.to, node.to + 1);
+          if (after === "{") {
+            const close = doc.sliceString(node.to).indexOf("}");
+            if (close >= 0) to = node.to + close + 1;
+          }
           const url = raw.match(/\(([^)]+)\)/)?.[1].trim() ?? "";
           if (url) {
             entries.push({
               from: node.from,
-              to: node.to,
-              deco: Decoration.replace({ widget: new ImgWidget(url, alt) }),
+              to,
+              deco: Decoration.replace({ widget: new ImgWidget(doc.sliceString(node.from, to), view) }),
             });
           }
           return false;
@@ -743,13 +777,11 @@ const previewTheme = EditorView.theme({
     borderTop: "1px solid rgba(0,0,0,0.18)",
     verticalAlign: "middle",
   },
-  ".cm-preview-img": {
-    maxWidth: "100%",
-    borderRadius: "4px",
-    display: "inline-block",
-    verticalAlign: "middle",
-    margin: "2px 0",
-  },
+  ".cm-preview-figure": { display: "flex", flexDirection: "column", alignItems: "flex-start", margin: "6px 0" },
+  ".cm-preview-figure.img-center": { alignItems: "center" },
+  ".cm-preview-figure.img-right": { alignItems: "flex-end" },
+  ".cm-preview-img": { maxWidth: "100%", borderRadius: "4px", display: "block" },
+  ".cm-preview-figcaption": { fontSize: "0.85em", color: "#6b7280", marginTop: "2px" },
   ".cm-preview-checkbox": {
     marginRight: "4px",
     cursor: "pointer",
