@@ -159,9 +159,15 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
 }
 
 function writeResultText(res: WriteResult) {
-  if (res.denied) return { content: [{ type: "text", text: "用户拒绝了此操作" }], details: {} };
-  if (res.ok) return { content: [{ type: "text", text: res.version ? `已更新，版本 v${res.version}` : "已更新" }], details: {} };
-  return { content: [{ type: "text", text: `写入失败：${res.error ?? "未知错误"}` }], details: {} };
+  const text = res.denied
+    ? "用户拒绝了此操作"
+    : res.ok
+      ? (res.version ? `已更新，版本 v${res.version}` : "已更新")
+      : `写入失败：${res.error ?? "未知错误"}`;
+  return {
+    content: [{ type: "text" as const, text }],
+    details: {},
+  };
 }
 
 function applyChange(doc: string, c: { from: number; to: number; insert: string }): string {
