@@ -1,13 +1,17 @@
 import { markdownLanguage } from "@codemirror/lang-markdown";
-import { MarkdownParser, Strikethrough } from "@lezer/markdown";
+import { Autolink, MarkdownParser, Strikethrough } from "@lezer/markdown";
 import type { SyntaxNode } from "@lezer/common";
 
 // Configure a parser that also understands ~~strike~~ so strikethrough in
 // table cells parses the same way it does in the editor (GFM enabled in
 // editor.ts). `markdownLanguage.parser` is the MarkdownParser from Lezer;
 // `LRLanguage.parser` is typed as the base `Parser`, so cast to configure.
+// `Autolink` mirrors the editor: bare URLs / <url> become URL/Autolink nodes,
+// and (because Lezer inline parsers don't run inside code) URLs inside inline
+// code stay plain.
 const inlineParser = (markdownLanguage.parser as MarkdownParser).configure([
   Strikethrough,
+  Autolink,
 ]);
 
 function escapeHtml(s: string): string {
@@ -19,13 +23,20 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Allowlist URL schemes/relative forms for href attributes. Returns "" for
+/** Allowlist URL schemes/relative forms. Returns "" for
  *  anything that could execute script (javascript:, data:, vbscript:, …). */
 function safeHref(url: string): string {
+  return isSafeUrl(url) ? url.trim() : "";
+}
+
+/** True for schemes/relative forms safe to pass to the OS opener / href:
+ *  https?:, mailto:, anchor (#), root (/), ./, ../. Everything else
+ *  (javascript:, data:, vbscript:, …) is rejected — the backend `open_url`
+ *  command does no scheme validation, so this is the only guard. */
+export function isSafeUrl(url: string): boolean {
   const u = url.trim();
-  if (u === "") return "";
-  if (/^(https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(u)) return u;
-  return "";
+  if (u === "") return false;
+  return /^(https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(u);
 }
 
 // Walk a node's children in order, interleaving the (escaped) text that lives
@@ -76,6 +87,19 @@ function renderNode(node: SyntaxNode, text: string): string {
         return `<a href="${href}">${renderInline(m[1])}</a>`;
       }
       return escapeHtml(raw);
+    }
+    case "URL": {
+      // Bare URL (Lezer Autolink extension). Display text == url.
+      const url = text.slice(node.from, node.to);
+      const href = escapeHtml(safeHref(url));
+      return `<a href="${href}">${escapeHtml(url)}</a>`;
+    }
+    case "Autolink": {
+      // <url> syntax: node spans the angle brackets; inner URL is the text
+      // between them. Strip the <…> for both href and display text.
+      const url = text.slice(node.from + 1, node.to - 1);
+      const href = escapeHtml(safeHref(url));
+      return `<a href="${href}">${escapeHtml(url)}</a>`;
     }
     case "Escape": {
       // backslash escape: emit the escaped character itself, escaped for HTML.

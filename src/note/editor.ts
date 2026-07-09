@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { Strikethrough, Table, TaskList } from "@lezer/markdown";
+import { Autolink, Strikethrough, Table, TaskList } from "@lezer/markdown";
 import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
 import { EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
@@ -136,7 +136,7 @@ export function createEditor(
     extensions: [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
-      markdown({ extensions: [Table, Strikethrough, TaskList], codeLanguages }),
+      markdown({ extensions: [Autolink, Table, Strikethrough, TaskList], codeLanguages }),
       syntaxHighlighting(highlight),
       // Refresh the image-widget noteDir map BEFORE the preview plugin rebuilds
       // decorations, so a setDoc (project/document switch) renders images with the

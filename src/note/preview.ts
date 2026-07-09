@@ -14,7 +14,7 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { parseChips, readBidMarker, stripBidMarker, type Source } from "./quote";
-import { renderInline } from "./inline";
+import { isSafeUrl, renderInline } from "./inline";
 import { parseGfmTableOffsets, type Align, type CellRange } from "./table";
 import { stripTagMarker } from "@floatnote/note-logic";
 import { parseImage, type ImageAlign } from "./image-attrs";
@@ -647,11 +647,43 @@ function buildDecorations(state: EditorState): DecorationSet {
           const raw = doc.sliceString(node.from, node.to);
           const text = raw.match(/\[([^\]]*)\]/)?.[1] ?? "";
           const url = raw.match(/\(([^)]+)\)/)?.[1].trim() ?? "";
-          if (url) {
+          if (isSafeUrl(url)) {
             entries.push({
               from: node.from,
               to: node.to,
               deco: Decoration.replace({ widget: new LinkWidget(text, url) }),
+            });
+          }
+          return false;
+        }
+
+        case "URL": {
+          // Bare URL produced by Lezer's Autolink extension (www./http/https/
+          // mailto/xmpp). Trailing punctuation & unbalanced ')' are already
+          // trimmed by the grammar, so the node range is exactly the URL.
+          if (touches(node.from, node.to)) return false;
+          const url = doc.sliceString(node.from, node.to);
+          if (isSafeUrl(url)) {
+            entries.push({
+              from: node.from,
+              to: node.to,
+              deco: Decoration.replace({ widget: new LinkWidget(url, url) }),
+            });
+          }
+          return false;
+        }
+
+        case "Autolink": {
+          // <url> syntax: node spans the angle brackets; the inner URL is a
+          // child node. We slice the inner text and return false so iterate
+          // does not descend into that child (which would double-decorate).
+          if (touches(node.from, node.to)) return false;
+          const url = doc.sliceString(node.from + 1, node.to - 1);
+          if (isSafeUrl(url)) {
+            entries.push({
+              from: node.from,
+              to: node.to,
+              deco: Decoration.replace({ widget: new LinkWidget(url, url) }),
             });
           }
           return false;
