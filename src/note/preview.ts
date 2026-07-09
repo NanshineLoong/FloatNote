@@ -526,7 +526,8 @@ function buildDecorations(view: EditorView): DecorationSet {
           let to = node.to;
           const after = doc.sliceString(node.to, node.to + 1);
           if (after === "{") {
-            const close = doc.sliceString(node.to).indexOf("}");
+            const line = doc.lineAt(node.to);
+            const close = doc.sliceString(node.to, line.to).indexOf("}");
             if (close >= 0) to = node.to + close + 1;
           }
           const url = raw.match(/\(([^)]+)\)/)?.[1].trim() ?? "";
