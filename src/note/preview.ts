@@ -15,9 +15,8 @@ import {
 } from "@codemirror/view";
 import { parseChips, readBidMarker, stripBidMarker, type Source } from "./quote";
 import { renderInline } from "./inline";
-import { parseGfmTable, type Align } from "./table";
+import { parseGfmTableOffsets, type Align, type CellRange } from "./table";
 import { stripTagMarker } from "@floatnote/note-logic";
-import hljs from "highlight.js/lib/common";
 import { parseImage, type ImageAlign } from "./image-attrs";
 import { imageSrc } from "./image-fs";
 
@@ -169,25 +168,49 @@ class CheckboxWidget extends WidgetType {
   ignoreEvent() { return false; }
 }
 
+/**
+ * GFM table, rendered for reading. Clicking a cell dispatches the CodeMirror
+ * caret to that cell's source offset (tracked via the offset-aware parser),
+ * which trips the Table cursor-line reveal gate below — the table source then
+ * shows with the caret inside the clicked cell, ready to edit. Click away and
+ * the rendered table returns.
+ *
+ * Why not WYSIWYG typing inside the cells: CodeMirror's DOMObserver listens to
+ * `beforeinput`/`input` on contentDOM in the CAPTURE phase, so it reads DOM
+ * changes from anywhere in the editor — including a nested contenteditable
+ * cell — and maps them to document positions inside the table's replaced
+ * range, corrupting the source. Capture-phase listeners can't be preempted
+ * from a descendant, so editable-in-widget cells aren't viable in CM6. The
+ * offset model in table.ts is kept so this click-to-locate path is precise.
+ */
 class TableWidget extends WidgetType {
-  constructor(readonly src: string) { super(); }
+  constructor(readonly src: string, readonly base: number) { super(); }
   eq(o: TableWidget): boolean { return o.src === this.src; }
-  toDOM(): HTMLElement {
+
+  private buildCell(tag: "th" | "td", cell: CellRange, align: Align, view: EditorView): HTMLElement {
+    const el = document.createElement(tag);
+    el.style.textAlign = align === "none" ? "" : align;
+    el.innerHTML = renderInline(cell.text);
+    // Click a cell → caret at that cell's source span → reveal gate fires.
+    el.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      view.dispatch({ selection: { anchor: this.base + cell.from } });
+    });
+    return el;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "cm-preview-table-wrap";
-    const parsed = parseGfmTable(this.src);
+    const parsed = parseGfmTableOffsets(this.src);
     if (!parsed) { wrap.textContent = this.src; return wrap; }
     const table = document.createElement("table");
     table.className = "cm-preview-table";
-    const alignStyle = (a: Align): string => (a === "none" ? "" : a);
 
     const thead = document.createElement("thead");
     const htr = document.createElement("tr");
     parsed.header.forEach((cell, i) => {
-      const th = document.createElement("th");
-      th.innerHTML = renderInline(cell);
-      th.style.textAlign = alignStyle(parsed.aligns[i] ?? "none");
-      htr.appendChild(th);
+      htr.appendChild(this.buildCell("th", cell, parsed.aligns[i] ?? "none", view));
     });
     thead.appendChild(htr);
     table.appendChild(thead);
@@ -196,10 +219,7 @@ class TableWidget extends WidgetType {
     for (const row of parsed.rows) {
       const tr = document.createElement("tr");
       row.forEach((cell, i) => {
-        const td = document.createElement("td");
-        td.innerHTML = renderInline(cell);
-        td.style.textAlign = alignStyle(parsed.aligns[i] ?? "none");
-        tr.appendChild(td);
+        tr.appendChild(this.buildCell("td", cell, parsed.aligns[i] ?? "none", view));
       });
       tbody.appendChild(tr);
     }
@@ -207,42 +227,10 @@ class TableWidget extends WidgetType {
     wrap.appendChild(table);
     return wrap;
   }
-  ignoreEvent() { return true; }
-}
 
-class CodeBlockWidget extends WidgetType {
-  constructor(readonly code: string, readonly lang: string) { super(); }
-  eq(o: CodeBlockWidget): boolean {
-    return o.code === this.code && o.lang === this.lang;
-  }
-  toDOM(): HTMLElement {
-    const wrap = document.createElement("div");
-    wrap.className = "cm-codeblock";
-
-    if (this.lang) {
-      const label = document.createElement("span");
-      label.className = "cm-code-lang";
-      label.textContent = this.lang;
-      wrap.appendChild(label);
-    }
-
-    const pre = document.createElement("pre");
-    const codeEl = document.createElement("code");
-    codeEl.className = "hljs";
-    try {
-      const lang = this.lang.toLowerCase();
-      const html = lang && hljs.getLanguage(lang)
-        ? hljs.highlight(this.code, { language: lang }).value
-        : hljs.highlightAuto(this.code).value;
-      codeEl.innerHTML = html;
-    } catch {
-      codeEl.textContent = this.code;
-    }
-    pre.appendChild(codeEl);
-    wrap.appendChild(pre);
-    return wrap;
-  }
-  ignoreEvent() { return true; }
+  // Widget owns the mousedown (to dispatch the caret); other events fall
+  // through harmlessly.
+  ignoreEvent() { return false; }
 }
 
 // ── App-icon cache ─────────────────────────────────────────────────────────
@@ -509,6 +497,18 @@ function buildDecorations(state: EditorState): DecorationSet {
           return false;
         }
 
+        case "CodeInfo": {
+          // The fenced-code language identifier. Style it as a muted label but
+          // keep it editable text (mark, not replace) so the user can change the
+          // language. The surrounding fence (```/```) is hidden by CodeMark.
+          entries.push({
+            from: node.from,
+            to: node.to,
+            deco: Decoration.mark({ class: "cm-code-lang-text" }),
+          });
+          return false;
+        }
+
         case "InlineCode": {
           // Always style the code text; the backticks (CodeMark) reveal only
           // when the cursor touches them. Keeps inline code styled even on the
@@ -630,31 +630,35 @@ function buildDecorations(state: EditorState): DecorationSet {
         }
 
         case "FencedCode": {
-          // Block-level: reveal the whole block (fences + source) when the
-          // cursor is on any of its lines, like Table. Otherwise render the
-          // whole block as a single highlighted <pre> widget.
+          // Keep the block editable: do NOT replace it with a block widget.
+          // Instead style every line of the block with `cm-codeblock` (with
+          // first/last variants so the grey rounded frame doesn't stack per
+          // line), then let the child CodeMark/CodeInfo/CodeText cases handle
+          // the rest. The body (`CodeText`) stays live editable text; a nested
+          // language parser (registered in editor.ts via `codeLanguages`)
+          // highlights it, so arrow keys, click, and selection all work natively.
           const fromLine = doc.lineAt(node.from).number;
           const toLine = doc.lineAt(node.to).number;
-          for (let l = fromLine; l <= toLine; l++) {
-            if (cursorLines.has(l)) return false;
-          }
-          const firstLine = doc.line(fromLine).text;
-          const lang = (/^[ \t]*```[ \t]*(\S*)/.exec(firstLine)?.[1] ?? "");
-          // Body = lines strictly between the fences (drop first & last line).
-          // Guard the 2-line block (open fence + close fence, no content):
-          // fromLine+1 would point at the close fence; body should be empty.
-          const body = fromLine + 1 <= toLine - 1
-            ? doc.sliceString(doc.line(fromLine + 1).from, doc.line(toLine - 1).to)
-            : "";
           entries.push({
-            from: node.from,
-            to: node.to,
-            deco: Decoration.replace({
-              widget: new CodeBlockWidget(body, lang),
-              block: true,
-            }),
+            from: lineStart(node.from),
+            to: lineStart(node.from),
+            deco: Decoration.line({ class: "cm-codeblock cm-codeblock-first" }),
           });
-          return false;
+          entries.push({
+            from: lineStart(doc.line(toLine).from),
+            to: lineStart(doc.line(toLine).from),
+            deco: Decoration.line({ class: "cm-codeblock cm-codeblock-last" }),
+          });
+          for (let l = fromLine; l <= toLine; l++) {
+            if (l === fromLine || l === toLine) continue;
+            const cl = doc.line(l);
+            entries.push({
+              from: cl.from,
+              to: cl.from,
+              deco: Decoration.line({ class: "cm-codeblock" }),
+            });
+          }
+          return; // visit children: CodeMark (hide fences), CodeInfo, CodeText
         }
 
         case "TaskMarker": {
@@ -672,6 +676,9 @@ function buildDecorations(state: EditorState): DecorationSet {
         }
 
         case "Table": {
+          // Reveal the whole table as source when the caret is on any of its
+          // lines (so the clicked cell, whose offset the widget dispatched the
+          // caret to, becomes editable text). Otherwise render the table.
           const fromLine = doc.lineAt(node.from).number;
           const toLine = doc.lineAt(node.to).number;
           for (let l = fromLine; l <= toLine; l++) {
@@ -681,7 +688,7 @@ function buildDecorations(state: EditorState): DecorationSet {
           entries.push({
             from: node.from,
             to: node.to,
-            deco: Decoration.replace({ widget: new TableWidget(src), block: true }),
+            deco: Decoration.replace({ widget: new TableWidget(src, node.from), block: true }),
           });
           return false;
         }
@@ -797,7 +804,7 @@ function buildDecorations(state: EditorState): DecorationSet {
   return builder.finish();
 }
 
-const previewField = StateField.define<DecorationSet>({
+export const previewField = StateField.define<DecorationSet>({
   create(state) {
     return buildDecorations(state);
   },
@@ -853,43 +860,43 @@ const previewTheme = EditorView.theme({
     border: "1px solid rgba(0,0,0,0.15)",
     padding: "4px 8px",
     textAlign: "left",
+    cursor: "text",
+    minWidth: "2em",
+  },
+  ".cm-preview-table th:focus, .cm-preview-table td:focus": {
+    outline: "2px solid #3b82f6",
+    outlineOffset: "-2px",
   },
   ".cm-preview-table th": { fontWeight: "600", background: "rgba(0,0,0,0.04)" },
+  // Code blocks are now editable text (no widget): each line of the block
+  // carries `cm-codeblock`, with `cm-codeblock-first`/`-last` rounding only the
+  // top/bottom so the grey frame doesn't stack per line. The body stays live
+  // text highlighted by the nested language parser; fences are hidden by the
+  // CodeMark case, the language id is styled muted by CodeInfo.
+  // NOTE: do NOT change the line's HEIGHT here — no font-size, no vertical
+  // padding/margin. CM6 maps clicks via per-line measured heights; a code line
+  // whose height differs from a prose line (different font-size or vertical
+  // padding) drifts posAtCoords so clicks land too high. Keep the line at the
+  // inherited 1em / 1.6 line-height; only background + horizontal padding +
+  // monospace family + corner radius are safe.
   ".cm-codeblock": {
-    position: "relative",
     background: "rgba(0,0,0,0.05)",
-    borderRadius: "8px",
-    margin: "4px 0",
-    overflow: "hidden",
-  },
-  ".cm-codeblock:hover": {
-    background: "rgba(0,0,0,0.08)",
-  },
-  ".cm-codeblock pre": {
-    margin: "0",
-    padding: "10px 12px",
-    overflowX: "auto",
-  },
-  ".cm-codeblock code": {
     fontFamily: "ui-monospace, 'SF Mono', monospace",
-    fontSize: "0.9em",
-    background: "transparent",
-    whiteSpace: "pre",
+    paddingLeft: "12px",
+    paddingRight: "12px",
   },
-  ".cm-codeblock .hljs": {
-    background: "transparent",
+  ".cm-codeblock.cm-codeblock-first": {
+    borderTopLeftRadius: "8px",
+    borderTopRightRadius: "8px",
   },
-  ".cm-code-lang": {
-    position: "absolute",
-    top: "4px",
-    right: "8px",
-    fontSize: "0.75em",
-    color: "rgba(0,0,0,0.35)",
+  ".cm-codeblock.cm-codeblock-last": {
+    borderBottomLeftRadius: "8px",
+    borderBottomRightRadius: "8px",
+  },
+  ".cm-code-lang-text": {
+    color: "rgba(0,0,0,0.4)",
     fontFamily: "ui-monospace, 'SF Mono', monospace",
-    pointerEvents: "none",
-  },
-  ".cm-codeblock:hover .cm-code-lang": {
-    color: "rgba(0,0,0,0.6)",
+    fontSize: "0.8em",
   },
   ".cm-preview-link": {
     color: "#2563eb",

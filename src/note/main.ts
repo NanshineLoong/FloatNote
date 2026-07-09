@@ -1,6 +1,5 @@
 import "@phosphor-icons/web/regular";
 import "../assistant/styles.css";
-import "highlight.js/styles/github.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";

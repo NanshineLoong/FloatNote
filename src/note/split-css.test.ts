@@ -56,7 +56,7 @@ describe("split view CSS placement", () => {
       /#editor-root\s+\.cm-gutters\s*{[^}]*border-right:\s*none;[^}]*border-left:\s*none;[^}]*background:\s*transparent;/s,
     );
     expect(css).toMatch(
-      /\.cm-block-gutter:hover\s+\.cm-block-handle\s*{[^}]*opacity:\s*1;/s,
+      /\.cm-gutterElement:hover\s+\.cm-block-handle\s*{[^}]*opacity:\s*1;/s,
     );
     expect(css).toMatch(
       /\.cm-block-handle:hover\s*{[^}]*opacity:\s*1;/s,
