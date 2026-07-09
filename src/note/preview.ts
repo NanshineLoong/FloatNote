@@ -95,7 +95,14 @@ class ImgWidget extends WidgetType {
     const url = a?.url ?? "";
     img.src = imageSrc(url, noteDirOf(view));
     img.style.width = a?.width ? `${a.width}px` : "";
-    figure.appendChild(img);
+    // cm-img-wrap is a tight positioning context around the image only: the
+    // active toolbar (floating above) and the 8 resize handles are absolutely
+    // positioned against this box. line-height:0 lets the inline-block hug the
+    // img with no descender gap so handles align to the image edges exactly.
+    const wrap = document.createElement("div");
+    wrap.className = "cm-img-wrap";
+    wrap.appendChild(img);
+    figure.appendChild(wrap);
     if (a && a.caption) {
       const fig = document.createElement("figcaption");
       fig.className = "cm-preview-figcaption";
@@ -104,11 +111,12 @@ class ImgWidget extends WidgetType {
     }
     // Mirror CheckboxWidget's mousedown + preventDefault so CodeMirror doesn't
     // move the cursor onto this line (which would tear the widget down via the
-    // onCursorLine gate) before the subsequent click can open the toolbar.
-    // Toolbar interactions (buttons / caption input / resize handle) are left
-    // alone so they keep working.
+    // onCursorLine gate) before the subsequent click can open the toolbar. The
+    // active overlays (toolbar / handles / caption input) must NOT be
+    // preventDefaulted so handles drag, the input focuses, and buttons click.
     figure.addEventListener("mousedown", (e) => {
-      if ((e.target as HTMLElement | null)?.closest?.(".cm-img-toolbar")) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.(".cm-img-toolbar, .cm-img-handles, .cm-img-caption-input")) return;
       e.preventDefault();
     });
     return figure;
@@ -849,6 +857,7 @@ const previewTheme = EditorView.theme({
   ".cm-preview-figure.img-right": { alignItems: "flex-end" },
   ".cm-preview-img": { maxWidth: "100%", borderRadius: "4px", display: "block" },
   ".cm-preview-figcaption": { fontSize: "0.85em", color: "#6b7280", marginTop: "2px" },
+  ".cm-img-wrap": { position: "relative", display: "inline-block", lineHeight: "0" },
   ".cm-preview-checkbox": {
     marginRight: "4px",
     cursor: "pointer",
@@ -911,6 +920,10 @@ const previewTheme = EditorView.theme({
   },
   ".cm-preview-figure.cm-img-active": { outline: "2px solid #3b82f6", borderRadius: "4px" },
   ".cm-img-toolbar": {
+    position: "absolute",
+    top: "-34px",
+    left: "50%",
+    transform: "translateX(-50%)",
     display: "flex",
     gap: "4px",
     alignItems: "center",
@@ -918,9 +931,10 @@ const previewTheme = EditorView.theme({
     border: "1px solid rgba(0,0,0,0.15)",
     borderRadius: "4px",
     padding: "2px 4px",
-    marginTop: "2px",
     boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+    zIndex: "5",
   },
+  ".cm-img-toolbar.cm-img-toolbar-below": { top: "auto", bottom: "-34px" },
   ".cm-img-toolbar button": {
     border: "1px solid rgba(0,0,0,0.15)",
     borderRadius: "3px",
@@ -928,21 +942,40 @@ const previewTheme = EditorView.theme({
     padding: "0 6px",
     cursor: "pointer",
   },
-  ".cm-img-caption-input": {
-    border: "1px solid rgba(0,0,0,0.15)",
-    borderRadius: "3px",
-    padding: "0 4px",
-    fontSize: "0.8em",
-    minWidth: "120px",
-  },
-  ".cm-img-resize-handle": {
-    width: "12px",
-    height: "12px",
+  ".cm-img-handles": { position: "absolute", inset: "0", pointerEvents: "none" },
+  ".cm-img-handle": {
+    position: "absolute",
+    width: "10px",
+    height: "10px",
     background: "#3b82f6",
+    border: "1px solid #fff",
     borderRadius: "2px",
-    cursor: "nwse-resize",
-    alignSelf: "flex-end",
+    pointerEvents: "auto",
   },
+  ".cm-img-handle-e": { right: "-5px", top: "50%", marginTop: "-5px" },
+  ".cm-img-handle-w": { left: "-5px", top: "50%", marginTop: "-5px" },
+  ".cm-img-handle-s": { bottom: "-5px", left: "50%", marginLeft: "-5px" },
+  ".cm-img-handle-n": { top: "-5px", left: "50%", marginLeft: "-5px" },
+  ".cm-img-handle-se": { right: "-5px", bottom: "-5px" },
+  ".cm-img-handle-sw": { left: "-5px", bottom: "-5px" },
+  ".cm-img-handle-ne": { right: "-5px", top: "-5px" },
+  ".cm-img-handle-nw": { left: "-5px", top: "-5px" },
+  ".cm-img-caption-input": {
+    border: "none",
+    background: "transparent",
+    outline: "none",
+    boxShadow: "none",
+    padding: "0",
+    margin: "0",
+    marginTop: "2px",
+    fontSize: "0.85em",
+    color: "#6b7280",
+    fontFamily: "inherit",
+    textAlign: "inherit",
+    width: "120px",
+  },
+  ".cm-img-caption-input::placeholder": { color: "#9ca3af" },
+  ".cm-img-caption-input:focus": { outline: "none" },
 });
 
 export function livePreview(): Extension[] {

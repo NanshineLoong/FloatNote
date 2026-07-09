@@ -1,6 +1,7 @@
 import { syntaxTree } from "@codemirror/language";
 import type { EditorView } from "@codemirror/view";
 import { parseImage, writeAttrs, type ImageAlign, type ImageAttrs } from "./image-attrs";
+import { computeResize, HANDLE_SPECS, type HandleSpec } from "./image-resize";
 
 interface Active {
   view: EditorView;
@@ -11,7 +12,26 @@ interface Active {
 }
 
 let active: Active | null = null;
-let toolbarEl: HTMLElement | null = null;
+// Active overlays live as module singletons (not part of ImgWidget.toDOM):
+// they're injected on open and re-appended after every widget rebuild.
+let toolbarEl: HTMLElement | null = null; // div.cm-img-toolbar (align buttons only)
+let handlesEl: HTMLElement | null = null; // div.cm-img-handles (8 resize handles)
+let captionInput: HTMLInputElement | null = null;
+// Uncommitted typed caption; null = trust the source. Preserved across the
+// rebuild that an align/resize writeback triggers, so a half-typed caption
+// isn't lost when the user nudges alignment or resizes mid-type.
+let pendingCaption: string | null = null;
+let inCommit = false; // re-entrancy guard: dispatch removes the old input, firing blur synchronously
+let drag: {
+  pointerId: number;
+  handle: HTMLElement;
+  spec: HandleSpec;
+  startX: number;
+  startY: number;
+  startW: number;
+  ratio: number;
+  maxW: number;
+} | null = null;
 
 /** Find the Image node (plus trailing `{...}`) whose widget produced `figure`.
  *  Looks up the doc position of the figure DOM via `posAtDOM` (the widget's
@@ -67,17 +87,26 @@ function writeSource(attrs: ImageAttrs): void {
   active.raw = next;
 }
 
+/** Current attrs, with caption sourced from `pendingCaption` (uncommitted
+ *  typed value) when present so a mid-type caption survives align/resize
+ *  writes that rebuild the widget. */
+function currentAttrs(): ImageAttrs {
+  if (!active) return { caption: "", url: "", width: null, align: null };
+  const parsed = parseImage(active.raw) ?? { caption: "", url: "", width: null, align: null };
+  const caption = pendingCaption != null ? pendingCaption : parsed.caption;
+  return { ...parsed, caption };
+}
+
 /** After a writeback, the preview plugin rebuilds the ImgWidget DOM, destroying
- *  the figure that hosted the toolbar. Re-find the rebuilt figure for THIS image
- *  via its `from` position (`view.domAtPos(from)` → nearest `.cm-preview-figure`)
- *  rather than by caption — duplicate empty captions (the common case for pasted
- *  images) made caption matching attach the toolbar to the WRONG figure. If the
- *  widget is torn down or the cursor is on the line (image in source mode),
- *  `domAtPos` won't land inside a figure, so we close. */
+ *  the figure that hosted the overlays. Re-find the rebuilt figure for THIS
+ *  image via its `from` position (`view.domAtPos(from)` → nearest
+ *  `.cm-preview-figure`) rather than by caption — duplicate empty captions (the
+ *  common case for pasted images) made caption matching attach to the WRONG
+ *  figure. If the widget is torn down or the cursor is on the line (image in
+ *  source mode), `domAtPos` won't land inside a figure, so we close. */
 function reattach(view: EditorView): void {
-  if (!active || !toolbarEl) return;
-  const pos = active.from;
-  const dom = view.domAtPos(pos);
+  if (!active || !toolbarEl || !handlesEl || !captionInput) return;
+  const dom = view.domAtPos(active.from);
   const node = (dom.node.nodeType === 1 ? dom.node : dom.node.parentElement) as HTMLElement | null;
   const figure = node?.closest?.(".cm-preview-figure") as HTMLElement | null;
   if (!figure) {
@@ -86,55 +115,96 @@ function reattach(view: EditorView): void {
   }
   active.figure = figure;
   figure.classList.add("cm-img-active");
-  figure.appendChild(toolbarEl);
-}
 
-function openToolbar(view: EditorView, figure: HTMLElement): void {
-  closeToolbar();
-  const range = locateImageRange(view, figure);
-  if (!range) return;
-  const attrs = parseImage(range.raw) ?? { caption: "", url: "", width: null, align: null };
-  active = { view, figure, from: range.from, to: range.to, raw: range.raw };
-
-  const bar = document.createElement("div");
-  bar.className = "cm-img-toolbar";
-
-  const input = document.createElement("input");
-  input.className = "cm-img-caption-input";
-  input.value = attrs.caption;
-
-  // The caption input is the live editor for the caption field; always trust
-  // its value over the source (they only diverge before the first caption
-  // writeback, while the user is mid-type).
-  const currentAttrs = (): ImageAttrs => {
-    const fb: ImageAttrs = attrs;
-    const cur = active
-      ? parseImage(view.state.doc.sliceString(active.from, active.to)) ?? fb
-      : fb;
-    return { ...cur, caption: input.value };
-  };
-
-  // Align buttons: 左 / 中 / 右. Clicking the active align clears it (→ left).
-  for (const al of ["left", "center", "right"] as ImageAlign[]) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = al === "left" ? "左" : al === "center" ? "中" : "右";
-    b.onclick = (e) => {
-      e.stopPropagation();
-      if (!active) return;
-      const cur = currentAttrs();
-      const nextAlign: ImageAlign | null = cur.align === al ? null : al;
-      writeSource({ ...cur, align: nextAlign });
-      reattach(view);
-    };
-    bar.appendChild(b);
+  const wrap = figure.querySelector(".cm-img-wrap") as HTMLElement | null;
+  if (wrap) {
+    wrap.appendChild(handlesEl);
+    wrap.appendChild(toolbarEl); // absolutely positioned → floats above image
   }
 
-  // Caption input: live-updates the figure's img.alt + figcaption (no source
-  // write on every keystroke — that would rebuild the widget and destroy the
-  // input mid-type). Source is committed on blur / Enter, which also closes.
+  const parsed = parseImage(active.raw);
+  captionInput.value = pendingCaption != null ? pendingCaption : parsed?.caption ?? "";
+  // Hide the static figcaption while active — the input covers it.
+  const fig = figure.querySelector("figcaption");
+  if (fig) (fig as HTMLElement).style.display = "none";
+  // Size the caption input to the image width so it sits directly under the
+  // image at its horizontal extent (align-items centers/rights it with the img).
+  const img = figure.querySelector("img") as HTMLImageElement | null;
+  if (img) captionInput.style.width = `${img.offsetWidth || img.clientWidth || 120}px`;
+
+  // Flip the toolbar below the image when there's no room above (image at the
+  // top of the scroll viewport) so it isn't clipped by the editor bounds.
+  const figTop = figure.getBoundingClientRect().top;
+  const viewTop = view.dom.getBoundingClientRect().top;
+  toolbarEl.classList.toggle("cm-img-toolbar-below", figTop - viewTop < 40);
+
+  figure.appendChild(captionInput); // input as a sibling of the wrap
+}
+
+/** True if `t` is inside any active overlay — clicks there must not re-open or
+ *  close the toolbar. */
+function isOverlayTarget(t: HTMLElement | null): boolean {
+  return !!t && (!!toolbarEl?.contains(t) || !!handlesEl?.contains(t) || t === captionInput);
+}
+
+function buildAlignButton(al: ImageAlign, label: string): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = label;
+  // Prevent mousedown from moving focus out of the caption input (which would
+  // blur-commit-close and eat the align click). Focus stays in the input;
+  // pendingCaption carries the in-progress caption through the write.
+  b.addEventListener("mousedown", (e) => e.preventDefault());
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (!active) return;
+    const cur = currentAttrs();
+    const nextAlign: ImageAlign | null = cur.align === al ? null : al;
+    writeSource({ ...cur, align: nextAlign });
+    reattach(active.view);
+  };
+  return b;
+}
+
+function buildToolbar(): HTMLElement {
+  const bar = document.createElement("div");
+  bar.className = "cm-img-toolbar";
+  bar.appendChild(buildAlignButton("left", "左"));
+  bar.appendChild(buildAlignButton("center", "中"));
+  bar.appendChild(buildAlignButton("right", "右"));
+  return bar;
+}
+
+function buildHandles(): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "cm-img-handles";
+  for (const spec of HANDLE_SPECS) {
+    const h = document.createElement("div");
+    h.className = `cm-img-handle cm-img-handle-${spec.id}`;
+    h.style.cursor = spec.cursor;
+    h.addEventListener("pointerdown", onHandlePointerDown(spec));
+    container.appendChild(h);
+  }
+  // move/up live on the container; setPointerCapture on the handle retargets
+  // captured pointer events to the handle, which bubble up to the container.
+  container.addEventListener("pointermove", onHandlePointerMove);
+  container.addEventListener("pointerup", onHandlePointerUp);
+  container.addEventListener("pointercancel", onHandlePointerUp);
+  return container;
+}
+
+function buildCaptionInput(caption: string): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "cm-img-caption-input";
+  input.placeholder = "添加图注…";
+  input.value = caption;
+  // No per-keystroke source write — that would rebuild the widget and destroy
+  // the input mid-type. Live-update img.alt/figcaption for preview; commit on
+  // blur/Enter.
   input.oninput = () => {
     if (!active) return;
+    pendingCaption = input.value;
     const img = active.figure.querySelector("img");
     if (img) img.alt = input.value;
     const fig = active.figure.querySelector("figcaption");
@@ -150,7 +220,6 @@ function openToolbar(view: EditorView, figure: HTMLElement): void {
   };
   // Guard re-entrancy: dispatching removes the old figure (and the input) from
   // the DOM, which fires blur synchronously mid-commit.
-  let inCommit = false;
   input.onblur = () => {
     if (inCommit || !active) return;
     inCommit = true;
@@ -159,64 +228,95 @@ function openToolbar(view: EditorView, figure: HTMLElement): void {
     inCommit = false;
     closeToolbar();
   };
-  bar.appendChild(input);
+  return input;
+}
 
-  // Resize handle: pointer-drag changes img.style.width live; on release the
-  // width is written back (rounded, min 40px). Re-query the img on every
-  // handler: after a writeSource + reattach (align click, or a prior resize's
-  // pointerup) the preview plugin rebuilds ImgWidget (its `eq` is keyed on
-  // `raw`, which changed), discarding the old figure DOM. `reattach` updates
-  // `active.figure` but a captured `img` const would still point at the
-  // detached old img (offsetWidth → 0, no live preview, width anchored to 0).
-  const handle = document.createElement("div");
-  handle.className = "cm-img-resize-handle";
-  bar.appendChild(handle);
-  let dragging = false;
-  let startX = 0;
-  let startW = 0;
-  handle.onpointerdown = (e) => {
+function onHandlePointerDown(spec: HandleSpec) {
+  return (e: PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!active) return;
-    const img = active.figure.querySelector("img");
+    const img = active.figure.querySelector("img") as HTMLImageElement | null;
     if (!img) return; // figure torn down
-    dragging = true;
-    startX = e.clientX;
-    startW = img.offsetWidth;
-    handle.setPointerCapture(e.pointerId);
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    const ratio = nw && nh ? nw / nh : img.offsetWidth && img.offsetHeight ? img.offsetWidth / img.offsetHeight : 1;
+    drag = {
+      pointerId: e.pointerId,
+      handle: e.currentTarget as HTMLElement,
+      spec,
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: img.offsetWidth,
+      ratio,
+      maxW: active.view.dom.clientWidth,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
-  handle.onpointermove = (e) => {
-    if (!dragging || !active) return;
-    const img = active.figure.querySelector("img");
-    if (!img) {
-      dragging = false;
-      return;
-    }
-    const w = Math.max(40, Math.round(startW + (e.clientX - startX)));
-    img.style.width = `${w}px`;
-  };
-  handle.onpointerup = (e) => {
-    if (!dragging) return;
-    dragging = false;
-    handle.releasePointerCapture(e.pointerId);
-    if (!active) return;
-    const img = active.figure.querySelector("img");
-    if (!img) return; // figure torn down mid-drag — abort
-    const w = Math.max(40, Math.round(startW + (e.clientX - startX)));
-    const cur = currentAttrs();
-    writeSource({ ...cur, width: w });
-    reattach(view);
-  };
+}
 
-  figure.classList.add("cm-img-active");
-  figure.appendChild(bar);
-  toolbarEl = bar;
+function onHandlePointerMove(e: PointerEvent) {
+  if (!drag || !active) return;
+  const img = active.figure.querySelector("img") as HTMLImageElement | null;
+  if (!img) {
+    drag = null;
+    return;
+  }
+  const wrap = active.figure.querySelector(".cm-img-wrap") as HTMLElement | null;
+  const { width, tx, ty } = computeResize(drag.spec, {
+    startW: drag.startW,
+    dx: e.clientX - drag.startX,
+    dy: e.clientY - drag.startY,
+    ratio: drag.ratio,
+    maxW: drag.maxW,
+  });
+  img.style.width = `${width}px`;
+  if (wrap) wrap.style.transform = `translate(${tx}px, ${ty}px)`;
+  if (captionInput) captionInput.style.width = `${width}px`;
+}
+
+function onHandlePointerUp(e: PointerEvent) {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  d.handle.releasePointerCapture?.(d.pointerId);
+  if (!active) return;
+  const img = active.figure.querySelector("img") as HTMLImageElement | null;
+  const wrap = active.figure.querySelector(".cm-img-wrap") as HTMLElement | null;
+  if (!img) return; // torn down mid-drag — abort, no commit
+  if (wrap) wrap.style.transform = ""; // clear transform before the rebuild
+  const w = Math.max(40, Math.min(Math.round(img.offsetWidth), d.maxW));
+  const cur = currentAttrs();
+  writeSource({ ...cur, width: w });
+  reattach(active.view);
+}
+
+function openToolbar(view: EditorView, figure: HTMLElement): void {
+  closeToolbar();
+  const range = locateImageRange(view, figure);
+  if (!range) return;
+  const attrs = parseImage(range.raw) ?? { caption: "", url: "", width: null, align: null };
+  active = { view, figure, from: range.from, to: range.to, raw: range.raw };
+  pendingCaption = attrs.caption;
+
+  toolbarEl = buildToolbar();
+  handlesEl = buildHandles();
+  captionInput = buildCaptionInput(attrs.caption);
+
+  reattach(view);
 }
 
 function closeToolbar(): void {
   if (active) active.figure.classList.remove("cm-img-active");
   toolbarEl?.remove();
+  handlesEl?.remove();
+  captionInput?.remove();
   toolbarEl = null;
+  handlesEl = null;
+  captionInput = null;
+  pendingCaption = null;
+  inCommit = false;
+  drag = null;
   active = null;
 }
 
@@ -224,9 +324,9 @@ function closeToolbar(): void {
 export function attachImageToolbar(view: EditorView): () => void {
   const onClick = (e: MouseEvent) => {
     const target = e.target as HTMLElement;
-    // Clicks on the toolbar itself (buttons / input / handle) must not re-open
-    // or close the toolbar — let their own handlers run.
-    if (toolbarEl && toolbarEl.contains(target)) return;
+    // Clicks on any overlay (buttons / handles / caption) must not re-open or
+    // close the toolbar — let their own handlers run.
+    if (isOverlayTarget(target)) return;
     const figure = target.closest(".cm-preview-figure") as HTMLElement | null;
     if (figure) {
       e.stopPropagation();
