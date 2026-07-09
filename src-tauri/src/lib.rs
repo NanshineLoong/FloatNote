@@ -145,6 +145,8 @@ pub fn run() {
             commands::get_config,
             commands::set_config,
             commands::list_notes,
+            commands::save_pasted_image,
+            commands::import_image_files,
             commands::read_note,
             commands::write_note,
             commands::create_note,
