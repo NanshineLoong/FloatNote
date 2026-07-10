@@ -1,12 +1,12 @@
 /**
- * Shared menu / dropdown. Pragmatic unification of three existing impls:
- *  - `src/shared/ui/floating-menu.ts` (floatMenu/floatMenuAnchored/closeFloating)
- *  - `src/assistant/dock-dropdown.ts` (createDockDropdown)
- *  - `src/note/project-menu-render.ts` (submenu lifecycle)
+ * Shared menu / dropdown. Unifies the former per-window float/menu impls:
+ *  - the old `floating-menu.ts` (floatMenu/floatMenuAnchored/closeFloating) — retired;
+ *    tag context menus (tags/bar.ts), the block tag picker (tags/picker.ts), and the
+ *    assistant skill right-click menu (skill-picker.ts) now use `createMenu`.
+ *  - `src/assistant/dock-dropdown.ts` (createDockDropdown) and
+ *    `src/note/project-menu-render.ts` submenu lifecycle migrate next.
  *
- * Call sites migrate incrementally (Phase 3): `floating-menu.ts` first (lowest
- * risk), then `dock-dropdown`, then `project-menu-render` submenus (highest
- * risk). CSS is `.fn-menu*` in `src/styles/components.css`.
+ * CSS is `.fn-menu*` in `src/styles/components.css`.
  *
  * Submenus mirror the old note-app behavior: Escape closes only the submenu
  * (main menu stays open) and focus moves to the first enabled item. A

@@ -1772,10 +1772,8 @@ body {
   display: none;
 }
 
-/* 浮层（右键菜单 / 新建 / 选色 / picker）复用 .switch-menu，下面只补差异。 */
-.tag-floating {
-  z-index: 110;
-}
+/* 浮层菜单（右键 / 标签 picker / 标签右键 / skill）已迁至 createMenu（.fn-menu）；
+   下面只补各菜单的 per-menu 差异。 */
 .tag-picker-item {
   display: flex;
   align-items: center;

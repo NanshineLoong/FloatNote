@@ -13,7 +13,7 @@ import {
   type BlockRange,
 } from "@floatnote/note-logic";
 import { PALETTE } from "./palette";
-import { closeFloating, floatMenu } from "./floating";
+import { createMenu } from "../../shared/ui/menu";
 
 export function openBlockTagMenu(
   view: EditorView,
@@ -26,13 +26,17 @@ export function openBlockTagMenu(
   const map = parseDefs(doc);
   const currentId = blockTagId(doc.slice(range.from, range.to));
 
-  const menu = document.createElement("div");
-  menu.className = "switch-menu tag-picker tag-block-menu";
+  // createMenu 当容器（.fn-menu，与原 .switch-menu 同构）；tag-picker 类加到
+  // handle.el 保留 .tag-picker .switch-item.active 等祖先选择器样式。
+  const handle = createMenu();
+  handle.el.classList.add("tag-picker", "tag-block-menu");
+  const close = (): void => handle.hide();
+  const items: HTMLElement[] = [];
 
   const label = document.createElement("div");
   label.className = "tag-picker-label";
   label.textContent = "标签";
-  menu.appendChild(label);
+  items.push(label);
 
   const clear = document.createElement("button");
   clear.type = "button";
@@ -40,10 +44,10 @@ export function openBlockTagMenu(
   if (currentId === null) clear.classList.add("active");
   clear.innerHTML = `<i class="ph ph-x"></i> 无标签`;
   clear.onclick = () => {
-    closeFloating();
+    close();
     assign(view, range, null);
   };
-  menu.appendChild(clear);
+  items.push(clear);
 
   for (const def of map.values()) {
     const item = document.createElement("button");
@@ -57,40 +61,38 @@ export function openBlockTagMenu(
     name.textContent = def.name;
     item.append(dot, name);
     item.onclick = () => {
-      closeFloating();
+      close();
       assign(view, range, def.id);
     };
-    menu.appendChild(item);
+    items.push(item);
   }
 
   const createToggle = document.createElement("button");
   createToggle.type = "button";
   createToggle.className = "switch-item tag-create-toggle";
   createToggle.innerHTML = `<i class="ph ph-plus"></i> 新建标签`;
-  createToggle.onclick = () => {
-    createToggle.remove();
-    menu.insertBefore(buildCreateForm(view, range), divider);
-  };
-  menu.appendChild(createToggle);
-
   const divider = document.createElement("div");
   divider.className = "tag-menu-divider";
-  menu.appendChild(divider);
+  createToggle.onclick = () => {
+    createToggle.remove();
+    handle.el.insertBefore(buildCreateForm(view, range, close), divider);
+  };
+  items.push(createToggle, divider);
 
   const del = document.createElement("button");
   del.type = "button";
   del.className = "switch-item tag-context-delete";
   del.innerHTML = `<i class="ph ph-trash"></i> 删除`;
   del.onclick = () => {
-    closeFloating();
+    close();
     onDelete();
   };
-  menu.appendChild(del);
+  items.push(del);
 
-  floatMenu(menu, x, y);
+  handle.showAt(x, y, items);
 }
 
-function buildCreateForm(view: EditorView, range: BlockRange): HTMLElement {
+function buildCreateForm(view: EditorView, range: BlockRange, close: () => void): HTMLElement {
   const form = document.createElement("div");
   form.className = "tag-create-form";
   const map = parseDefs(view.state.doc.toString());
@@ -136,7 +138,7 @@ function buildCreateForm(view: EditorView, range: BlockRange): HTMLElement {
     const doc = view.state.doc.toString();
     const { changes } = addTagAndSetBlockChanges(doc, range, name, picked);
     if (changes.length) view.dispatch({ changes });
-    closeFloating();
+    close();
   };
 
   const ok = document.createElement("button");
@@ -149,7 +151,7 @@ function buildCreateForm(view: EditorView, range: BlockRange): HTMLElement {
 
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); confirm(); }
-    if (e.key === "Escape") { e.preventDefault(); closeFloating(); }
+    if (e.key === "Escape") { e.preventDefault(); close(); }
   });
 
   setTimeout(() => input.focus(), 0);

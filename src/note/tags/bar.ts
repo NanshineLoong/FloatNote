@@ -19,7 +19,7 @@ import {
 import { PALETTE } from "./palette";
 import { activeTagFilter, setTagFilterEffect } from "./filter";
 import { showToast } from "../../shared/toast";
-import { closeFloating, floatMenu } from "./floating";
+import { createMenu } from "../../shared/ui/menu";
 
 export interface TagBarHandle {
   el: HTMLElement;
@@ -110,15 +110,17 @@ export function nextTagFilter(current: string | null, clicked: string): string |
 // ── edit popover (rename / recolor / delete) ────────────────────────────────
 
 function openContextMenu(view: EditorView, def: TagDef, x: number, y: number): void {
-  const menu = document.createElement("div");
-  menu.className = "switch-menu tag-context-menu tag-edit-popover";
+  // createMenu 当容器（.fn-menu，与原 .switch-menu 同构）；保留 tag-context-menu /
+  // tag-edit-popover hook 类供识别。
+  const handle = createMenu();
+  handle.el.classList.add("tag-context-menu", "tag-edit-popover");
+  const close = (): void => handle.hide();
 
   const input = document.createElement("input");
   input.className = "tag-add-input";
   input.type = "text";
   input.value = def.name;
   input.maxLength = 24;
-  menu.appendChild(input);
 
   const row = document.createElement("div");
   row.className = "swatch-row";
@@ -141,11 +143,10 @@ function openContextMenu(view: EditorView, def: TagDef, x: number, y: number): v
       const doc = view.state.doc.toString();
       const change = patchTagDefChange(doc, def.id, { color: sw.color });
       if (change) view.dispatch({ changes: [change] });
-      closeFloating();
+      close();
     };
     row.appendChild(s);
   }
-  menu.appendChild(row);
 
   const commitName = (): void => {
     const name = input.value.trim();
@@ -155,8 +156,8 @@ function openContextMenu(view: EditorView, def: TagDef, x: number, y: number): v
     if (change) view.dispatch({ changes: [change] });
   };
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); commitName(); closeFloating(); }
-    if (e.key === "Escape") { e.preventDefault(); closeFloating(); }
+    if (e.key === "Enter") { e.preventDefault(); commitName(); close(); }
+    if (e.key === "Escape") { e.preventDefault(); close(); }
   });
   input.addEventListener("blur", commitName);
 
@@ -170,11 +171,10 @@ function openContextMenu(view: EditorView, def: TagDef, x: number, y: number): v
     if (changes.length) view.dispatch({ changes });
     if (activeTagFilter(view.state) === def.id) setTagFilterEffect(view, null);
     showToast(`已删除标签「${def.name}」，⌘Z 撤销`);
-    closeFloating();
+    close();
   };
 
-  menu.appendChild(del);
-  floatMenu(menu, x, y);
+  handle.showAt(x, y, [input, row, del]);
   input.focus();
   input.select();
 }

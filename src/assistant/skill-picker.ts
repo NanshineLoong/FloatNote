@@ -1,17 +1,17 @@
-import { closeFloating, floatMenuAnchored } from "../shared/ui/floating-menu.js";
+import { createMenu, type MenuHandle } from "../shared/ui/menu.js";
 import { createDockDropdown } from "./dock-dropdown.js";
 
 /**
  * Skill picker：两种显式入口（spec §4.3）。
  *
- * - 右键 Socrates 小人 → 锚定到小人的 skill 菜单（`floatMenuAnchored`：收起态开在
+ * - 右键 Socrates 小人 → 锚定到小人的 skill 菜单（`createMenu`：收起态开在
  *   小人左上方、展开态开在右上方，自带 flip+clamp）。选中后立即展开输入框。
  * - 输入框行首输入 `/` → 在 `.assistant-dock` 上弹出过滤下拉。下拉生命周期复用
  *   `dock-dropdown.ts`（`[hidden]` 切换 + `replaceChildren`，挂在 input-wrap 的兄弟节点
  *   以避开其 overflow:hidden）。
  *
  * 选中后把输入框置为 `/skill:<name> ` 前缀，由 Pi 的 `session.prompt` 原生展开。
- * 前端不做语义解析。复用 `closeFloating` 的单浮层不变式与外点关闭。
+ * 前端不做语义解析。右键浮层走 createMenu 的单浮层不变式与外点关闭。
  */
 
 export interface SkillSummary {
@@ -102,21 +102,23 @@ export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
 
   // ── 右键小人 → 锚定到小人的技能菜单 ───────────────────────────────────
   // 收起态（inputWrap 无 .open，小人在窗口右下角）开在小人左上方（up-left）；
-  // 展开态开在小人右上方（up-right）。选中后立即展开输入框。floatMenuAnchored 自带 flip+clamp。
+  // 展开态开在小人右上方（up-right）。选中后立即展开输入框。createMenu 自带 flip+clamp。
+  let floatHandle: MenuHandle | null = null;
   function openMenuAt(skills: SkillSummary[]): void {
-    const menu = renderSkillList(skills, "");
-    menu.classList.add("switch-menu", "assistant-skill-menu");
-    menu.addEventListener("click", (e) => {
+    const list = renderSkillList(skills, "");
+    list.addEventListener("click", (e) => {
       const target = e.target instanceof Element ? e.target.closest("[data-skill-name]") : null;
       if (!target) return;
       const name = target.getAttribute("data-skill-name")!;
       applySkill(input, name);
-      closeFloating();
+      floatHandle?.hide();
       close();
       openInput();
     });
     const expanded = inputWrap.classList.contains("open");
-    floatMenuAnchored(menu, bot.getBoundingClientRect(), expanded ? "up-right" : "up-left");
+    floatHandle = createMenu({ anchor: bot, placement: expanded ? "up-right" : "up-left" });
+    floatHandle.el.classList.add("assistant-skill-menu");
+    floatHandle.show(list);
     open = true;
   }
 
@@ -141,7 +143,7 @@ export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
   }
 
   function close(): void {
-    closeFloating();
+    floatHandle?.hide();
     menu.hide();
     open = false;
   }
@@ -192,7 +194,7 @@ export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
   input.addEventListener("input", onInput);
 
   function isMenuFloating(): boolean {
-    return document.querySelector(".assistant-skill-menu.tag-floating") !== null;
+    return floatHandle?.isOpen() ?? false;
   }
 
   function isOpen(): boolean {
