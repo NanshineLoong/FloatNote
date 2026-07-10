@@ -56,8 +56,15 @@ pub fn list_markdown(dir: &Path) -> std::io::Result<Vec<NoteEntry>> {
             ));
         }
     }
+    Ok(sort_newest_first(entries))
+}
+
+/// Sort `(modified, entry)` pairs newest-first and drop the timestamps.
+/// Shared by `list_markdown` / `list_projects` / `list_pieces`, which all want
+/// their entries ordered by descending modification time.
+pub(crate) fn sort_newest_first<T>(mut entries: Vec<(std::time::SystemTime, T)>) -> Vec<T> {
     entries.sort_by(|a, b| b.0.cmp(&a.0));
-    Ok(entries.into_iter().map(|(_, entry)| entry).collect())
+    entries.into_iter().map(|(_, entry)| entry).collect()
 }
 
 pub fn rename_note(dir: &Path, old_name: &str, new_stem: &str) -> std::io::Result<String> {

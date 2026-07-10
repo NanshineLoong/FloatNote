@@ -38,8 +38,7 @@ pub fn list_projects(root: &Path) -> std::io::Result<Vec<ProjectEntry>> {
             },
         ));
     }
-    entries.sort_by(|a, b| b.0.cmp(&a.0));
-    Ok(entries.into_iter().map(|(_, entry)| entry).collect())
+    Ok(crate::notes::sort_newest_first(entries))
 }
 
 /// Given an ordered list of candidate project paths (MRU), keep only those that
@@ -107,8 +106,7 @@ pub fn list_pieces(project: &Path) -> std::io::Result<Vec<NoteEntry>> {
             },
         ));
     }
-    entries.sort_by(|a, b| b.0.cmp(&a.0));
-    Ok(entries.into_iter().map(|(_, entry)| entry).collect())
+    Ok(crate::notes::sort_newest_first(entries))
 }
 
 /// Pick a folder name under `root` that does not collide, appending " 2", " 3", …

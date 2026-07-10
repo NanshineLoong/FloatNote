@@ -105,11 +105,14 @@ static MONITOR: Mutex<Option<MonitorHandles>> = Mutex::new(None);
 /// 回调读取用的 AppHandle（只装一次）。Mutex 而非 OnceLock，仅需 AppHandle: Send。
 static APP: Mutex<Option<AppHandle>> = Mutex::new(None);
 
+#[cfg(target_os = "macos")]
+type LastDown = ((f64, f64), u32, std::time::Instant);
+
 /// 上次左键按下的（位置、累计多击数、时刻）。抬起时算位移判断「真选区 vs 纯点击」，
 /// 多击数用于放行双击选词/三击选行。macOS 26 未导出 CGEventGetIntegerEventField，
 /// 故多击数靠手动计数（500ms 内、位移小的连续按下累加）。
 #[cfg(target_os = "macos")]
-static LAST_DOWN: Mutex<Option<((f64, f64), u32, std::time::Instant)>> = Mutex::new(None);
+static LAST_DOWN: Mutex<Option<LastDown>> = Mutex::new(None);
 
 #[cfg(target_os = "macos")]
 extern "C" fn on_mouse_event(

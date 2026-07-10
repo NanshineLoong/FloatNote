@@ -174,7 +174,7 @@ pub fn read_selection() -> Option<CapturedContent> {
 /// AX menu-triggered copy path: avoids physical Option polluting Cmd+C.
 #[cfg(target_os = "macos")]
 pub fn read_selection_via_menu() -> Option<CapturedContent> {
-    read_selection_with(|| crate::ax_copy::copy_via_menu().map_err(|e| e.into()))
+    read_selection_with(crate::ax_copy::copy_via_menu)
 }
 
 #[cfg(not(target_os = "macos"))]

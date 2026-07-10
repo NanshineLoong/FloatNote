@@ -14,7 +14,6 @@ use std::ffi::c_void;
 
 #[cfg(target_os = "macos")]
 #[link(name = "ApplicationServices", kind = "framework")]
-#[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
     fn AXUIElementCreateApplication(pid: i32) -> *mut c_void;
     fn AXUIElementCopyAttributeValue(
@@ -30,7 +29,11 @@ extern "C" {
         values: *mut *mut c_void,
     ) -> i32;
     fn AXUIElementPerformAction(el: *mut c_void, action: *const c_void) -> i32;
+}
 
+#[cfg(target_os = "macos")]
+#[link(name = "CoreFoundation", kind = "framework")]
+extern "C" {
     fn CFRelease(cf: *const c_void);
     fn CFStringCreateWithCString(
         alloc: *const c_void,

@@ -8,6 +8,7 @@
 //! - macOS (FSEvent)：事件合批投递，延迟约 300ms；保存可能同时产生 Modify + Create。
 //! - Windows (ReadDirectoryChangesW)：事件更即时；原子保存（写临时文件→重命名）
 //!   产生 Remove + Create，本模块已处理 Create 事件。
+//!
 //! 去抖窗口 (500ms) 覆盖两种行为。
 
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
