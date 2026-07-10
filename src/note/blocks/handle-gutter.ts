@@ -2,6 +2,7 @@ import { type Extension, RangeSetBuilder } from "@codemirror/state";
 import { type BlockInfo, EditorView, gutter, GutterMarker } from "@codemirror/view";
 import { blockRanges, removeBlockChanges, type BlockRange } from "@floatnote/note-logic";
 import { startBlockDrag, type DragContext } from "./drag";
+import { createIcon } from "../../shared/ui/icon";
 
 /**
  * A block action is one entry in the handle's click menu. The list is the
@@ -47,7 +48,7 @@ class HandleMarker extends GutterMarker {
   toDOM(): HTMLElement {
     const el = document.createElement("div");
     el.className = "cm-block-handle";
-    el.innerHTML = `<i class="ph ph-dots-six-vertical"></i>`;
+    el.append(createIcon({ phosphor: "ph ph-dots-six-vertical", size: 16 }));
     return el;
   }
 }
@@ -80,7 +81,7 @@ function openMenu(view: EditorView, range: BlockRange, index: number, x: number,
   for (const action of ACTIONS) {
     const item = document.createElement("button");
     item.className = "switch-item";
-    item.innerHTML = `<i class="ph ${action.icon}"></i> ${action.label}`;
+    item.append(createIcon({ phosphor: `ph ${action.icon}`, size: 13 }), document.createTextNode(action.label));
     item.onclick = () => {
       closeMenu();
       action.run(view, range, index);

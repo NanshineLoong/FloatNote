@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { createButton } from "../shared/ui/button";
 
 // Local mirror of the permission://request payload emitted by Rust (agent.rs).
 // Kept in sync manually with sidecar/src/protocol.ts EditPreview + the
@@ -138,13 +139,17 @@ export function mountPermissionBubble(
     root.replaceChildren();
     currentReq = req;
     const card = renderPreviewCard(req.preview, req.can_snapshot);
-    const allow = document.createElement("button");
-    allow.textContent = "允许写入";
-    const deny = document.createElement("button");
-    deny.textContent = "拒绝";
     const select = card.querySelector<HTMLSelectElement>(".perm-mode")!;
-    allow.addEventListener("click", () => resolve("allow", select.value as WriteMode));
-    deny.addEventListener("click", () => resolve("deny", "direct"));
+    const allow = createButton({
+      variant: "primary",
+      label: "允许写入",
+      onClick: () => resolve("allow", select.value as WriteMode),
+    });
+    const deny = createButton({
+      variant: "secondary",
+      label: "拒绝",
+      onClick: () => resolve("deny", "direct"),
+    });
     root.append(card, allow, deny);
   }
 

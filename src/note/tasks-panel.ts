@@ -9,6 +9,7 @@ import {
   toggleTask,
   type TaskLine,
 } from "./tasks";
+import { createIcon } from "../shared/ui/icon";
 
 export interface TasksPanelHost {
   /** 当前项目的 _tasks.md 路径，无项目时 null。 */
@@ -71,8 +72,8 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
         <span class="tasks-count"></span>
       </span>
       <span class="tasks-head-actions">
-        <button class="tasks-filter" type="button" aria-pressed="false" aria-label="筛选未完成" title="只看未完成"><i class="ph ph-circle-dashed"></i></button>
-        <button class="tasks-add-icon" type="button" aria-label="添加行动"><i class="ph ph-plus"></i></button>
+        <button class="tasks-filter" type="button" aria-pressed="false" aria-label="筛选未完成" title="只看未完成">${createIcon({ phosphor: "ph ph-circle-dashed" }).outerHTML}</button>
+        <button class="tasks-add-icon" type="button" aria-label="添加行动">${createIcon({ phosphor: "ph ph-plus" }).outerHTML}</button>
       </span>
     </div>
     <div class="tasks-list"></div>
@@ -126,7 +127,7 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
       box.className = "tasks-box";
       box.setAttribute("aria-pressed", String(item.checked));
       box.setAttribute("aria-label", item.checked ? "标记为未完成" : "标记为完成");
-      box.innerHTML = `<i class="ph ph-check"></i>`;
+      box.append(createIcon({ phosphor: "ph ph-check", size: 12 }));
       box.onclick = (e) => {
         e.stopPropagation();
         if (consumeDragClick()) return;
@@ -179,7 +180,7 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
         more.type = "button";
         more.className = "tasks-more";
         more.setAttribute("aria-label", "更多操作");
-        more.innerHTML = `<i class="ph ph-dots-three-vertical"></i>`;
+        more.append(createIcon({ phosphor: "ph ph-dots-three-vertical" }));
         more.onclick = (e) => {
           e.stopPropagation();
           if (consumeDragClick()) return;
@@ -267,8 +268,8 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
     const menu = document.createElement("div");
     menu.className = "tasks-menu";
     menu.innerHTML = `
-      <button class="tasks-menu-item" type="button" data-act="rename"><i class="ph ph-pencil-simple-line"></i>重命名</button>
-      <button class="tasks-menu-item danger" type="button" data-act="delete"><i class="ph ph-trash"></i>删除</button>
+      <button class="tasks-menu-item" type="button" data-act="rename">${createIcon({ phosphor: "ph ph-pencil-simple-line", size: 14 }).outerHTML}重命名</button>
+      <button class="tasks-menu-item danger" type="button" data-act="delete">${createIcon({ phosphor: "ph ph-trash", size: 14 }).outerHTML}删除</button>
     `;
     menu.addEventListener("click", (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");

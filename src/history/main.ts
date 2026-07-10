@@ -7,6 +7,15 @@ import {
   type ChatConversation,
 } from "../platform/chat-history";
 import { formatHistoryTime } from "../platform/chat-history-format";
+import { createIcon } from "../shared/ui/icon";
+import { createButton } from "../shared/ui/button";
+
+/** 加载更多：createButton secondary 出骨架，附加 .history-more 供查询与全宽布局。 */
+function createHistoryMoreButton(): string {
+  const btn = createButton({ variant: "secondary", label: "加载更多" });
+  btn.classList.add("history-more");
+  return btn.outerHTML;
+}
 
 const PAGE_SIZE = 60;
 const app = document.querySelector<HTMLElement>("#app")!;
@@ -14,14 +23,14 @@ const app = document.querySelector<HTMLElement>("#app")!;
 app.innerHTML = `
   <main class="history-shell">
     <nav class="history-toolbar" aria-label="对话历史工具栏">
-      <span class="history-mark" aria-hidden="true"><i class="ph ph-clock-counter-clockwise"></i></span>
+      <span class="history-mark" aria-hidden="true">${createIcon({ phosphor: "ph ph-clock-counter-clockwise", size: 17 }).outerHTML}</span>
       <div class="history-spacer"></div>
       <button class="history-icon-btn history-reload" type="button" aria-label="刷新" title="刷新">
-        <i class="ph ph-arrow-clockwise"></i>
+        ${createIcon({ phosphor: "ph ph-arrow-clockwise" }).outerHTML}
       </button>
       <div class="history-clear-menu">
         <button class="history-icon-btn history-clear-trigger" type="button" aria-label="清理旧对话" title="清理旧对话">
-          <i class="ph ph-broom"></i>
+          ${createIcon({ phosphor: "ph ph-broom" }).outerHTML}
         </button>
         <div class="history-clear-options" hidden>
           <button type="button" data-days="7">7 天前</button>
@@ -30,7 +39,7 @@ app.innerHTML = `
       </div>
     </nav>
     <section class="history-list" aria-label="对话历史"></section>
-    <button class="history-more" type="button">加载更多</button>
+    ${createHistoryMoreButton()}
   </main>
 `;
 
@@ -141,7 +150,7 @@ function renderRow(conversation: ChatConversation): HTMLElement {
   del.className = "history-icon-btn history-delete";
   del.setAttribute("aria-label", "删除");
   del.title = "删除";
-  del.innerHTML = `<i class="ph ph-trash"></i>`;
+  del.append(createIcon({ phosphor: "ph ph-trash" }));
   del.addEventListener("click", async () => {
     if (!confirm(`删除「${conversation.title}」？`)) return;
     await chatDelete(conversation.id);

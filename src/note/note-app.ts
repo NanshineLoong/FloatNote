@@ -10,6 +10,7 @@ import { blockHandleGutter, deleteBlock } from "./blocks/handle-gutter";
 import { cancelBlockDrag, scrollerPositionTheme } from "./blocks/drag";
 import { mountTagBar } from "./tags/bar";
 import { showToast } from "../shared/toast";
+import { createIcon } from "../shared/ui/icon";
 import { tagDecorations } from "./tags/decoration";
 import { tagFilter, setTagFilter } from "./tags/filter";
 import { openBlockTagMenu } from "./tags/picker";
@@ -1113,14 +1114,14 @@ function beginNewProjectName(parent: string) {
 /** 项目标题 `+` 的二级菜单：在当前目录新建 / 选择位置新建… */
 function openProjectAddSubmenu(trigger: HTMLButtonElement) {
   const items = [
-    makeSubmenuItem(`<i class="ph ph-plus"></i> 在当前目录新建`, {
+    makeSubmenuItem(`${createIcon({ phosphor: "ph ph-plus", size: 13 }).outerHTML} 在当前目录新建`, {
       disabled: !session.currentProject,
       onClick: () => {
         if (!session.currentProject) return;
         beginNewProjectName(parentDir(session.currentProject.path));
       },
     }),
-    makeSubmenuItem(`<i class="ph ph-folder-open"></i> 选择位置新建…`, {
+    makeSubmenuItem(`${createIcon({ phosphor: "ph ph-folder-open", size: 13 }).outerHTML} 选择位置新建…`, {
       onClick: async () => {
         const picked = await open({ directory: true, multiple: false });
         const parent = typeof picked === "string" ? picked : null;
@@ -1131,7 +1132,7 @@ function openProjectAddSubmenu(trigger: HTMLButtonElement) {
         beginNewProjectName(parent);
       },
     }),
-    makeSubmenuItem(`<i class="ph ph-folder-open"></i> 打开现有项目…`, {
+    makeSubmenuItem(`${createIcon({ phosphor: "ph ph-folder-open", size: 13 }).outerHTML} 打开现有项目…`, {
       onClick: async () => {
         closeSubmenu();
         closeMenu();
@@ -1145,7 +1146,7 @@ function openProjectAddSubmenu(trigger: HTMLButtonElement) {
 /** 文档标题 `+` 的二级菜单：新建文档 / 打开 Markdown 文件… */
 function openDocumentAddSubmenu(trigger: HTMLButtonElement) {
   const items = [
-    makeSubmenuItem(`<i class="ph ph-file-plus"></i> 新建文档…`, {
+    makeSubmenuItem(`${createIcon({ phosphor: "ph ph-file-plus", size: 13 }).outerHTML} 新建文档…`, {
       onClick: async () => {
         closeSubmenu();
         closeMenu();
@@ -1155,7 +1156,7 @@ function openDocumentAddSubmenu(trigger: HTMLButtonElement) {
         await openDocument(doc);
       },
     }),
-    makeSubmenuItem(`<i class="ph ph-folder-open"></i> 打开 Markdown 文件…`, {
+    makeSubmenuItem(`${createIcon({ phosphor: "ph ph-folder-open", size: 13 }).outerHTML} 打开 Markdown 文件…`, {
       onClick: async () => {
         closeSubmenu();
         closeMenu();

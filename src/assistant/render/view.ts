@@ -1,6 +1,7 @@
 import type { Block, ChatMessage } from "./state";
 import { buildActionCard } from "../action-card";
 import { fillMarkdown } from "../markdown";
+import { createIcon } from "../../shared/ui/icon";
 
 /**
  * 助手聊天的 DOM 渲染层：把 state.ts 产出的 `ChatMessage`/`Block` 投影成
@@ -19,16 +20,16 @@ function attachCopyButton(textEl: HTMLElement, rawText: string, align: "left" | 
   btn.className = "chat-copy-btn" + (align === "right" ? " is-right" : "");
   btn.setAttribute("aria-label", "复制原文");
   btn.title = "复制";
-  btn.innerHTML = `<i class="ph ph-copy" aria-hidden="true"></i>`;
+  btn.append(createIcon({ phosphor: "ph ph-copy", size: 14 }));
   btn.addEventListener("click", () => {
     void copyText(rawText).then((ok) => {
       if (!ok) return;
       btn.title = "已复制";
-      btn.innerHTML = `<i class="ph ph-check" aria-hidden="true"></i>`;
+      btn.replaceChildren(createIcon({ phosphor: "ph ph-check", size: 14 }));
       btn.classList.add("is-copied");
       window.setTimeout(() => {
         btn.title = "复制";
-        btn.innerHTML = `<i class="ph ph-copy" aria-hidden="true"></i>`;
+        btn.replaceChildren(createIcon({ phosphor: "ph ph-copy", size: 14 }));
         btn.classList.remove("is-copied");
       }, 1200);
     });

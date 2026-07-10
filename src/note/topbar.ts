@@ -1,4 +1,5 @@
 import socratesIconSvg from "../assets/socrates_head_icon.svg?raw";
+import { createIcon } from "../shared/ui/icon";
 import {
   viewToIdx,
   maxReachableIdx,
@@ -26,6 +27,20 @@ export interface TitlebarCallbacks {
  * 第一行标题栏：左侧空位让系统红绿灯叠加、整行可拖拽，最右端助手 icon。
  * macOS 经 `titleBarStyle:"Overlay"` 与系统标题栏合并为一条。
  */
+/** 项目名面包屑内部标记：folder/file 图标靠 `.project-name-icon` 类做
+ *  项目/文档模式可见性切换，故 createIcon 产物需保留这些类。 */
+function projectNameInner(): string {
+  const folder = createIcon({ phosphor: "ph ph-folder", size: 13 });
+  folder.classList.add("project-name-icon", "folder-icon");
+  const file = createIcon({ phosphor: "ph ph-file", size: 13 });
+  file.classList.add("project-name-icon", "file-icon");
+  const label = document.createElement("span");
+  label.id = "project-label";
+  label.textContent = "-";
+  const caret = createIcon({ phosphor: "ph ph-caret-down", size: 13 });
+  return folder.outerHTML + file.outerHTML + label.outerHTML + caret.outerHTML;
+}
+
 export function renderTitlebar(root: HTMLElement, callbacks: TitlebarCallbacks) {
   root.innerHTML = `
     <div class="titlebar">
@@ -41,7 +56,7 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
     <div class="topbar">
       <div class="topbar-left">
         <button class="project-name" id="project-name" title="切换项目空间">
-          <i class="ph ph-folder project-name-icon folder-icon"></i><i class="ph ph-file project-name-icon file-icon"></i><span id="project-label">-</span><i class="ph ph-caret-down"></i>
+          ${projectNameInner()}
         </button>
       </div>
       <div class="view-seg" id="view-seg" data-reach="full">
@@ -53,7 +68,7 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
         </div>
       </div>
       <div class="topbar-right">
-        <button class="icon-btn" id="tasks-toggle" title="行动"><i class="ph ph-list-checks"></i></button>
+        <button class="icon-btn" id="tasks-toggle" title="行动">${createIcon({ phosphor: "ph ph-list-checks", size: 13 }).outerHTML}</button>
       </div>
     </div>
   `;

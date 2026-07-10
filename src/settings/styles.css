@@ -201,52 +201,8 @@
   transform: translateX(16px);
 }
 
-/* ── Secondary button (folder picker) ── */
-
-.settings-btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-size: 16px;
-  transition: background 120ms ease, border-color 120ms ease;
-}
-
-.settings-btn-secondary:hover {
-  background: var(--color-surface-2);
-  border-color: var(--color-border-strong);
-}
-
-/* ── Primary button (save) ── */
-
-.settings-btn-primary {
-  padding: 7px 20px;
-  border: none;
-  border-radius: 6px;
-  background: var(--color-accent);
-  color: var(--color-text-on-accent);
-  font-size: 13px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-
-.settings-btn-primary:hover {
-  background: var(--color-accent-hover);
-}
-
-.settings-btn-primary:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
+/* 设置页按钮迁移到 createButton（.fn-btn--primary / --secondary），
+   variant 接管颜色与 hover/disabled；.settings .fn-btn 只保留左对齐布局。 */
 
 /* ── Key recorder ── */
 

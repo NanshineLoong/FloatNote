@@ -2,6 +2,7 @@ import { TOOL_LABEL, type EditPreviewDetail } from "./permission-bubble";
 import { fillMarkdown } from "./markdown";
 import type { Block } from "./render";
 import { escapeHtml } from "../shared/escape";
+import { createButton } from "../shared/ui/button";
 
 /**
  * 流内动作卡（只读，Phase 1）。
@@ -98,31 +99,31 @@ export function buildActionCard(block: Extract<Block, { kind: "action" }>): HTML
   snap.value = "snapshot";
   snap.textContent = "保存快照后写入";
   modeSelect.appendChild(snap);
-  const allow = document.createElement("button");
-  allow.type = "button";
-  allow.className = "chat-action-allow";
-  allow.textContent = "允许";
-  const deny = document.createElement("button");
-  deny.type = "button";
-  deny.className = "chat-action-deny";
-  deny.textContent = "拒绝";
-  allow.addEventListener("click", () => {
-    if (!block.requestId) return;
-    el.dispatchEvent(
-      new CustomEvent("chat:resolve", {
-        bubbles: true,
-        detail: { requestId: block.requestId, decision: "allow", writeMode: modeSelect.value },
-      }),
-    );
+  const allow = createButton({
+    variant: "primary",
+    label: "允许",
+    onClick: () => {
+      if (!block.requestId) return;
+      el.dispatchEvent(
+        new CustomEvent("chat:resolve", {
+          bubbles: true,
+          detail: { requestId: block.requestId, decision: "allow", writeMode: modeSelect.value },
+        }),
+      );
+    },
   });
-  deny.addEventListener("click", () => {
-    if (!block.requestId) return;
-    el.dispatchEvent(
-      new CustomEvent("chat:resolve", {
-        bubbles: true,
-        detail: { requestId: block.requestId, decision: "deny", writeMode: "direct" },
-      }),
-    );
+  const deny = createButton({
+    variant: "secondary",
+    label: "拒绝",
+    onClick: () => {
+      if (!block.requestId) return;
+      el.dispatchEvent(
+        new CustomEvent("chat:resolve", {
+          bubbles: true,
+          detail: { requestId: block.requestId, decision: "deny", writeMode: "direct" },
+        }),
+      );
+    },
   });
   footer.append(modeSelect, allow, deny);
   el.appendChild(footer);

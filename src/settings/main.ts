@@ -9,6 +9,15 @@ import {
   type WindowShortcutId,
 } from "../shared/shortcuts";
 import { escapeHtml } from "../shared/escape";
+import { createIcon } from "../shared/ui/icon";
+import { createButton } from "../shared/ui/button";
+
+/** 设置页 id'd 按钮：用 createButton 出骨架并设 id，onclick 由 main.ts 按 id 绑定。 */
+function settingsButton(id: string, opts: Parameters<typeof createButton>[0]): string {
+  const btn = createButton(opts);
+  btn.id = id;
+  return btn.outerHTML;
+}
 
 interface Config {
   working_dir: string | null;
@@ -51,7 +60,7 @@ async function render() {
       <!-- ── 通用 ── -->
       <section class="settings-section">
         <div class="settings-section-header">
-          <i class="ph ph-gear"></i>
+          ${createIcon({ phosphor: "ph ph-gear" }).outerHTML}
           <span>通用</span>
         </div>
 
@@ -75,7 +84,7 @@ async function render() {
       <!-- ── 快捷键 ── -->
       <section class="settings-section">
         <div class="settings-section-header">
-          <i class="ph ph-keyboard"></i>
+          ${createIcon({ phosphor: "ph ph-keyboard" }).outerHTML}
           <span>快捷键</span>
         </div>
 
@@ -113,7 +122,7 @@ async function render() {
       <!-- ── 窗口快捷键 ── -->
       <section class="settings-section">
         <div class="settings-section-header">
-          <i class="ph ph-keyboard"></i>
+          ${createIcon({ phosphor: "ph ph-keyboard" }).outerHTML}
           <span>窗口快捷键</span>
         </div>
         ${WINDOW_SHORTCUT_IDS.map((id) => `
@@ -126,14 +135,14 @@ async function render() {
         </div>
         `).join("")}
         <div class="settings-row settings-row-inline">
-          <button id="restore-shortcuts" class="settings-btn-ghost" type="button">恢复默认</button>
+          ${settingsButton("restore-shortcuts", { variant: "secondary", label: "恢复默认" })}
         </div>
       </section>
 
       <!-- ── AI 助手 ── -->
       <section class="settings-section">
         <div class="settings-section-header">
-          <i class="ph ph-brain"></i>
+          ${createIcon({ phosphor: "ph ph-brain" }).outerHTML}
           <span>AI 助手</span>
         </div>
 
@@ -172,7 +181,7 @@ async function render() {
       <!-- ── Footer ── -->
       <div class="settings-footer">
         <span id="settings-status" class="settings-status"></span>
-        <button id="save-btn" class="settings-btn-primary" type="button">保存</button>
+        ${settingsButton("save-btn", { variant: "primary", label: "保存" })}
       </div>
     </div>
   `;

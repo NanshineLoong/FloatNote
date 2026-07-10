@@ -177,25 +177,15 @@
   color: var(--color-danger-hover);
 }
 
+/* 加载更多迁移到 createButton（.fn-btn--secondary）；这里只保留全宽布局。 */
 .history-more {
   width: 100%;
   min-height: 38px;
   margin-top: 10px;
-  border: 0.5px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface-2);
-  color: var(--color-text-muted);
-  cursor: pointer;
-}
-
-.history-more:hover {
-  background: var(--color-surface);
-  color: var(--color-text);
 }
 
 .history-more:disabled {
   cursor: wait;
-  opacity: 0.55;
 }
 
 .history-empty {

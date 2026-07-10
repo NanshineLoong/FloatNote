@@ -1,3 +1,5 @@
+import { createIcon } from "../shared/ui/icon";
+
 export interface RowAction {
   label: string;
   /** Phosphor icon class without the `ph ` prefix, e.g. `ph-pencil-simple`. */
@@ -51,7 +53,9 @@ export function createProjectMenuRenderer(deps: ProjectMenuRendererDeps) {
   ): HTMLElement {
     const header = document.createElement("div");
     header.className = "switch-section";
-    header.innerHTML = `<i class="ph ${icon}"></i><span>${label}</span>`;
+    const headerLabel = document.createElement("span");
+    headerLabel.textContent = label;
+    header.append(createIcon({ phosphor: `ph ${icon}`, size: 11 }), headerLabel);
     if (!add) return header;
 
     const button = document.createElement("button");
@@ -60,7 +64,7 @@ export function createProjectMenuRenderer(deps: ProjectMenuRendererDeps) {
     button.setAttribute("aria-label", add.ariaLabel);
     button.setAttribute("aria-haspopup", "menu");
     button.setAttribute("aria-expanded", "false");
-    button.innerHTML = `<i class="ph ph-plus"></i>`;
+    button.append(createIcon({ phosphor: "ph ph-plus", size: 14 }));
     button.onclick = (event) => {
       event.stopPropagation();
       if (deps.isSubmenuOpenFor(button)) {
@@ -82,7 +86,9 @@ export function createProjectMenuRenderer(deps: ProjectMenuRendererDeps) {
 
   function buildKebabItems(row: HTMLElement, actions: RowAction[]): HTMLElement[] {
     return actions.map((action) => {
-      const item = makeSubmenuItem(`<i class="ph ${action.icon}"></i> ${action.label}`, {
+      const item = makeSubmenuItem(
+        `${createIcon({ phosphor: `ph ${action.icon}`, size: 13 }).outerHTML} ${action.label}`,
+        {
         onClick: () => {
           deps.closeSubmenu();
           action.onClick(row);
@@ -117,7 +123,7 @@ export function createProjectMenuRenderer(deps: ProjectMenuRendererDeps) {
     kebab.setAttribute("aria-label", "更多操作");
     kebab.setAttribute("aria-haspopup", "menu");
     kebab.setAttribute("aria-expanded", "false");
-    kebab.innerHTML = `<i class="ph ph-dots-three-vertical"></i>`;
+    kebab.append(createIcon({ phosphor: "ph ph-dots-three-vertical", size: 13 }));
     kebab.onclick = (event) => {
       event.stopPropagation();
       if (deps.isSubmenuOpenFor(kebab)) {

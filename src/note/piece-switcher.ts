@@ -8,6 +8,7 @@ import {
   type NoteEntry,
 } from "./notes-state";
 import { formatVersionLabel, type VersionEntry } from "./versions";
+import { createIcon } from "../shared/ui/icon";
 
 export interface PieceHeaderHost {
   /** 当前项目文件夹路径。 */
@@ -62,11 +63,14 @@ export function createPieceHeader(args: {
   const crumb = document.createElement("button");
   crumb.className = "piece-breadcrumb";
   crumb.title = "切换成品";
-  crumb.innerHTML = `
-    <i class="ph ph-file-text"></i>
-    <span class="piece-breadcrumb-label">-</span>
-    <i class="ph ph-caret-down"></i>
-  `;
+  const crumbLabel = document.createElement("span");
+  crumbLabel.className = "piece-breadcrumb-label";
+  crumbLabel.textContent = "-";
+  crumb.append(
+    createIcon({ phosphor: "ph ph-file-text", size: 12 }),
+    crumbLabel,
+    createIcon({ phosphor: "ph ph-caret-down", size: 12 }),
+  );
   crumb.onclick = (e) => {
     e.stopPropagation();
     void openMenu();
@@ -76,7 +80,7 @@ export function createPieceHeader(args: {
   const versionBtn = document.createElement("button");
   versionBtn.className = "piece-version-btn";
   versionBtn.title = "版本";
-  versionBtn.innerHTML = `<i class="ph ph-clock-counter-clockwise"></i>`;
+  versionBtn.append(createIcon({ phosphor: "ph ph-clock-counter-clockwise", size: 14 }));
   versionBtn.onclick = (e) => {
     e.stopPropagation();
     void openVersionMenu();
@@ -221,7 +225,7 @@ export function createPieceHeader(args: {
     // 顶部一行：手动记录当前版本（与成品切换菜单顶部的「新建」行同构）。
     const snap = document.createElement("button");
     snap.className = "version-item version-snap-row";
-    snap.innerHTML = `<i class="ph ph-camera"></i> 记录当前版本`;
+    snap.append(createIcon({ phosphor: "ph ph-camera", size: 12 }), document.createTextNode("记录当前版本"));
     snap.onclick = async (e) => {
       e.stopPropagation();
       closeVersionMenu();
@@ -273,7 +277,7 @@ export function createPieceHeader(args: {
     // 顶部：新建图标行。
     const newItem = document.createElement("button");
     newItem.className = "switch-item piece-new-row";
-    newItem.innerHTML = `<i class="ph ph-plus"></i> 新建`;
+    newItem.append(createIcon({ phosphor: "ph ph-plus", size: 13 }), document.createTextNode("新建"));
     newItem.onclick = async (e) => {
       e.stopPropagation();
       const entry = await createNote(host.dir(), "未命名作品");
@@ -291,7 +295,10 @@ export function createPieceHeader(args: {
 
       const label = document.createElement("button");
       label.className = "switch-row-label";
-      label.innerHTML = `<i class="ph ph-file-text"></i><span class="switch-row-name">${piece.name}</span>`;
+      const labelName = document.createElement("span");
+      labelName.className = "switch-row-name";
+      labelName.textContent = piece.name;
+      label.append(createIcon({ phosphor: "ph ph-file-text", size: 13 }), labelName);
       label.onclick = (e) => {
         e.stopPropagation();
         closeMenu();
@@ -301,7 +308,7 @@ export function createPieceHeader(args: {
       const del = document.createElement("button");
       del.className = "switch-row-action switch-row-delete";
       del.title = "删除";
-      del.innerHTML = `<i class="ph ph-trash"></i>`;
+      del.append(createIcon({ phosphor: "ph ph-trash", size: 13 }));
       del.onclick = async (e) => {
         e.stopPropagation();
         if (!(await confirmDialog(`删除「${piece.name}」？它会被移到废纸篓。`))) return;

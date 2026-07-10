@@ -4,7 +4,9 @@
  * raw `<button>` in popup.html) behind one factory + the `.fn-btn*` contract in
  * `src/styles/components.css`.
  *
- * Ships unused this round; call sites migrate incrementally (Phase C).
+ * Call sites migrate incrementally (Phase 2). `iconOnly && label` keeps `label`
+ * as the accessible name only — no visible text — so icon-only buttons stay
+ * icon-only.
  */
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
@@ -53,14 +55,16 @@ export function createButton(opts: ButtonOptions = {}): HTMLButtonElement {
     i.setAttribute("aria-hidden", "true");
     btn.appendChild(i);
   }
-  if (label) {
+  if (iconOnly && label) {
+    // Icon-only button: `label` is the accessible name, not visible text.
+    btn.setAttribute("aria-label", label);
+  } else if (label) {
     const span = document.createElement("span");
     span.className = "fn-btn__label";
     span.textContent = label;
     btn.appendChild(span);
   }
   if (title) btn.title = title;
-  if (iconOnly && label) btn.setAttribute("aria-label", label);
   if (disabled) btn.disabled = true;
   if (onClick) btn.addEventListener("click", () => onClick());
   return btn;

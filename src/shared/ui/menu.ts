@@ -4,12 +4,25 @@
  *  - `src/assistant/dock-dropdown.ts` (createDockDropdown)
  *  - `src/note/project-menu-render.ts` (submenu lifecycle)
  *
- * Ships unused this round; `floating-menu.ts` ports first (lowest risk), then
- * `dock-dropdown`, then `project-menu-render` submenus (highest risk). CSS is
- * `.fn-menu*` in `src/styles/components.css`.
+ * Call sites migrate incrementally (Phase 3): `floating-menu.ts` first (lowest
+ * risk), then `dock-dropdown`, then `project-menu-render` submenus (highest
+ * risk). CSS is `.fn-menu*` in `src/styles/components.css`.
+ *
+ * Submenus mirror the old note-app behavior: Escape closes only the submenu
+ * (main menu stays open) and focus moves to the first enabled item. A
+ * module-level `currentMenu` keeps at most one body-hosted menu open at a time,
+ * matching the old `closeFloating()` global sweep (docked menus are exempt).
  */
 
 export type MenuPlacement = "up" | "up-left" | "up-right" | "free";
+
+/**
+ * Mutual-exclusion invariant (mirrors the old `closeFloating()` global sweep):
+ * at most one body-hosted (free / anchored) menu is open at a time. Docked
+ * menus (`opts.parent`) are exempt — they coexist like the old
+ * `createDockDropdown`.
+ */
+let currentMenu: MenuHandle | null = null;
 
 export interface MenuOptions {
   /** Anchor for an anchored placement; ignored in "free" (use showAt). */
@@ -113,17 +126,21 @@ export function createMenu(opts: MenuOptions = {}): MenuHandle {
   }
 
   function show(content: HTMLElement | HTMLElement[]): void {
+    if (host === document.body && currentMenu && currentMenu !== handle) currentMenu.hide();
     mount(content);
     if (placement !== "free" || anchor) placeFromAnchor();
     armOutsideClose();
+    if (host === document.body) currentMenu = handle;
   }
 
   function showAt(x: number, y: number, content: HTMLElement | HTMLElement[]): void {
+    if (host === document.body && currentMenu && currentMenu !== handle) currentMenu.hide();
     mount(content);
     const c = clamp(x, y);
     el.style.left = `${c.left}px`;
     el.style.top = `${c.top}px`;
     armOutsideClose();
+    if (host === document.body) currentMenu = handle;
   }
 
   function hide(): void {
@@ -134,6 +151,7 @@ export function createMenu(opts: MenuOptions = {}): MenuHandle {
       document.removeEventListener("pointerdown", outsideBound);
       outsideBound = null;
     }
+    if (currentMenu === handle) currentMenu = null;
   }
 
   function isOpen(): boolean {
@@ -143,6 +161,7 @@ export function createMenu(opts: MenuOptions = {}): MenuHandle {
   function openSubmenu(trigger: HTMLElement, items: HTMLElement[]): void {
     closeSubmenu();
     submenuTrigger = trigger;
+    trigger.setAttribute("aria-expanded", "true");
     submenu = document.createElement("div");
     submenu.className = "fn-menu fn-menu__submenu";
     for (const it of items) submenu.appendChild(it);
@@ -151,9 +170,25 @@ export function createMenu(opts: MenuOptions = {}): MenuHandle {
     const c = clamp(r.right + 6, r.top);
     submenu.style.left = `${c.left}px`;
     submenu.style.top = `${c.top}px`;
+    // Esc closes only the submenu; the main menu stays open (mirrors the old
+    // note-app submenu keydown handler).
+    submenu.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSubmenu();
+        trigger.focus();
+      }
+    });
+    // Focus the first enabled item so keyboard nav works immediately.
+    const first = items.find(
+      (it) => !(it as HTMLButtonElement).disabled,
+    ) as HTMLButtonElement | undefined;
+    first?.focus();
   }
 
   function closeSubmenu(): void {
+    if (submenuTrigger) submenuTrigger.setAttribute("aria-expanded", "false");
     submenu?.remove();
     submenu = null;
     submenuTrigger = null;
@@ -165,7 +200,7 @@ export function createMenu(opts: MenuOptions = {}): MenuHandle {
 
   el.addEventListener("pointerdown", (e) => e.stopPropagation());
 
-  return {
+  const handle: MenuHandle = {
     el,
     show,
     showAt,
@@ -176,4 +211,5 @@ export function createMenu(opts: MenuOptions = {}): MenuHandle {
     isSubmenuOpenFor,
     destroy: hide,
   };
+  return handle;
 }
