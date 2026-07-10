@@ -380,5 +380,5 @@ mod tests {
         assert!(store.open(&entry.id).unwrap().is_none());
     }
 
-    use crate::testutil::{tempdir, TempDir};
+    use crate::testutil::tempdir;
 }

@@ -1,0 +1,63 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+export type AgentEvent =
+  | { type: "ready" }
+  | { type: "session_opened"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
+  | { type: "delta"; requestId: string; conversationId: string; text: string }
+  | { type: "tool"; requestId: string; conversationId: string; name: string; phase: "start" | "end" }
+  | { type: "done"; requestId: string; conversationId: string }
+  | { type: "title"; conversationId: string; title: string }
+  | { type: "error"; requestId: string | null; conversationId?: string; message: string }
+  | { type: "thinking_start"; requestId: string; conversationId: string; blockId: string }
+  | { type: "thinking_delta"; requestId: string; conversationId: string; text: string }
+  | { type: "thinking_end"; requestId: string; conversationId: string };
+
+export type ChatDisplayMessage =
+  | { role: "user"; text: string; timestamp: number }
+  | { role: "assistant"; text: string; timestamp: number }
+  | { role: "tool"; label: string; timestamp: number }
+  | { role: "error"; text: string; timestamp: number };
+
+export interface NoteUpdated {
+  noteId: string;
+  path: string;
+  version: number;
+}
+
+export interface Skill {
+  name: string;
+  description: string;
+}
+
+export function agentSend(args: { conversationId: string; userText: string }): Promise<string> {
+  return invoke<string>("agent_send", args);
+}
+
+export function agentNewSession(args: { conversationId: string; cwd: string; sessionDir: string }): Promise<void> {
+  return invoke<void>("agent_new_session", args);
+}
+
+export function agentOpenSession(args: { conversationId: string; sessionFile: string }): Promise<void> {
+  return invoke<void>("agent_open_session", args);
+}
+
+export function agentCancel(requestId: string): Promise<void> {
+  return invoke<void>("agent_cancel", { requestId });
+}
+
+export function agentListSkills(): Promise<Skill[]> {
+  return invoke<Skill[]>("agent_list_skills");
+}
+
+export function onAgentEvent(cb: (event: AgentEvent) => void): Promise<UnlistenFn> {
+  return listen<AgentEvent>("agent://event", (event) => cb(event.payload));
+}
+
+export function onNoteUpdated(cb: (payload: NoteUpdated) => void): Promise<UnlistenFn> {
+  return listen<NoteUpdated>("note://updated", (event) => cb(event.payload));
+}
+
+export function onFileChanged(cb: (path: string) => void): Promise<UnlistenFn> {
+  return listen<string>("file://changed", (event) => cb(event.payload));
+}

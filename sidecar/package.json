@@ -3,20 +3,26 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "bin": "dist/floatnote-agent.mjs",
   "description": "FloatNote AI tutor agent sidecar (Pi SDK over stdio JSONL)",
   "scripts": {
     "dev": "tsx src/main.ts",
     "build": "tsc",
+    "bundle": "npm run build && node scripts/bundle.mjs",
+    "prepare:tauri": "npm run bundle && node scripts/prepare-tauri.mjs",
+    "package:sidecar": "npm run prepare:tauri",
+    "smoke": "npm run bundle && node scripts/smoke.mjs",
     "test": "vitest run"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.79.4",
     "@earendil-works/pi-coding-agent": "^0.79.4",
-    "typebox": "^1.2.14",
-    "@floatnote/note-logic": "file:../shared/note-logic"
+    "@floatnote/note-logic": "file:../shared/note-logic",
+    "typebox": "^1.2.14"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "esbuild": "^0.28.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"

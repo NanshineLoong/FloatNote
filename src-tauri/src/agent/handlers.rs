@@ -4,9 +4,9 @@
 //! `handle_apply_edit_at` 是纯函数落盘逻辑，`commands::resolve_permission`
 //! 在用户裁决后也直接调用它。
 
+use crate::project::{INBOX_FILE, TASKS_FILE};
 use crate::state::AppState;
 use crate::versions;
-use crate::project::{INBOX_FILE, TASKS_FILE};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -257,8 +257,9 @@ mod tests {
                 watcher: Mutex::new(None),
                 write_suppress: crate::watcher::new_suppress_list(),
                 popup_cache: crate::popup::PopupCache::default(),
-                pending_edits: Mutex::new(HashMap::new()),
-                pending_skill_lists: Mutex::new(HashMap::new()),
+            pending_edits: Mutex::new(HashMap::new()),
+            pending_skill_lists: Mutex::new(HashMap::new()),
+            authorized_roots: crate::state::AuthorizedRoots::default(),
             }
         }
 

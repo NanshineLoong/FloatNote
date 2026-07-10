@@ -7,12 +7,14 @@ mod config;
 mod cursor;
 mod notes;
 mod paths;
+mod platform;
 mod popup;
 mod project;
 mod selection_monitor;
 mod shortcuts;
 mod source;
 mod state;
+mod trash;
 mod tray;
 mod versions;
 mod watcher;
@@ -28,12 +30,13 @@ use tauri::{Manager, WindowEvent};
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
-        .register_uri_scheme_protocol("floatnote-img", |_ctx, request| {
+        .register_uri_scheme_protocol("floatnote-img", |ctx, request| {
             use std::path::PathBuf;
             // URI path is like "/<percent-encoded absolute path>". Strip the
             // leading "/", percent-decode, then validate + serve.
@@ -43,7 +46,8 @@ pub fn run() {
                 .decode_utf8_lossy()
                 .into_owned();
             let path = PathBuf::from(&decoded);
-            if !crate::notes::is_safe_image_path(&path) {
+            let state = ctx.app_handle().state::<AppState>();
+            if !crate::notes::is_safe_image_path(&path) || !state.authorized_roots.allows_image(&path) {
                 return tauri::http::Response::builder()
                     .status(tauri::http::StatusCode::FORBIDDEN)
                     .header(tauri::http::header::CONTENT_TYPE, "text/plain")
@@ -91,6 +95,7 @@ pub fn run() {
                 popup_cache: crate::popup::PopupCache::new(),
                 pending_edits: Mutex::new(std::collections::HashMap::new()),
                 pending_skill_lists: Mutex::new(std::collections::HashMap::new()),
+                authorized_roots: state::AuthorizedRoots::default(),
             });
 
             // 拉起 agent-sidecar；失败存入状态供前端查询，不阻断 app 启动。

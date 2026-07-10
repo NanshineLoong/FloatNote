@@ -9,12 +9,12 @@ entry that calls `floatnote::run()`.
 - `state.rs` — the `AppState` root (managed state shared by all commands,
   the sidecar reader thread, popup, selection monitor). Constructed in
   `lib.rs::run` via `app.manage`.
-- `commands.rs` — Tauri `#[tauri::command]` handler layer. Thin: delegates
-  file/note ops to `notes`/`project`/`versions` per the convention that
-  project-space file logic lives in `notes.rs`, not here.
-- `agent.rs` — sidecar orchestration: stdin/stdout JSONL protocol types
-  (`HostToSidecar`/`SidecarToHost`), spawn + read loop, target resolution,
-  `handle_apply_edit`/`handle_apply_edit_at`. Largest backend module.
+- `commands.rs` + `commands/` — Tauri `#[tauri::command]` adapter layer.
+  Domain modules currently cover agent, chat, and settings; add siblings rather
+  than growing the root file. File logic stays in `notes`/`project`/`versions`.
+- `agent/` — JSONL protocol, dev/release spawn, and edit handlers. Debug uses
+  local `tsx`; release uses Tauri's packaged Node external binary plus ESM
+  resource bundle.
 - `notes.rs` — note file read/write, `rename_note`/`delete_note`/`create_note`
   (atomic write, mtime), image path safety, project-space listing.
 - `project.rs` — project-space discovery, pieces, `sanitize_folder_name`.
@@ -36,5 +36,5 @@ entry that calls `floatnote::run()`.
 - `rustfmt`, snake_case, `serde`-serializable command payloads.
 - Add project-space file operations to `notes.rs`/`project.rs`, not
   `commands.rs`.
-- Verify backend changes with `cargo check` (and `cargo test --lib`) from
-  `src-tauri/`; exercise flows with `npm run tauri dev`.
+- Verify backend changes with `cargo check`, `cargo check --release`, and
+  `cargo test --lib` from `src-tauri/`; exercise flows with `npm run tauri dev`.

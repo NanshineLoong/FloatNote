@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
-const mainSource = readFileSync(resolve(process.cwd(), "src/note/main.ts"), "utf8");
+const noteAppSource = readFileSync(resolve(process.cwd(), "src/note/note-app.ts"), "utf8");
 const editorSource = readFileSync(resolve(process.cwd(), "src/note/editor.ts"), "utf8");
 const tagDecorationSource = readFileSync(resolve(process.cwd(), "src/note/tags/decoration.ts"), "utf8");
 const pieceSwitcherSource = readFileSync(resolve(process.cwd(), "src/note/piece-switcher.ts"), "utf8");
@@ -90,8 +90,8 @@ describe("split view CSS placement", () => {
 
   it("lets the tag control bar span the full note body instead of the centered text column", () => {
     const tagBar = css.match(/\.tag-bar\s*{([^}]*)}/s)?.[1] ?? "";
-    expect(mainSource).toMatch(/<div id="tag-bar-root"><\/div>[\s\S]*<div id="text-col">/);
-    expect(mainSource).toMatch(/#tag-bar-root/);
+    expect(noteAppSource).toMatch(/<div id="tag-bar-root"><\/div>[\s\S]*<div id="text-col">/);
+    expect(noteAppSource).toMatch(/#tag-bar-root/);
     expect(tagBar).not.toMatch(/margin-left:\s*calc\(-1 \* var\(--left\)\);/);
     expect(tagBar).not.toMatch(/width:\s*calc\(100% \+ var\(--left\) \+ var\(--right\)\);/);
     expect(css).toMatch(
@@ -143,7 +143,7 @@ describe("per-area topbars (采集 / 写作)", () => {
   });
 
   it("gives the writing area its own fixed topbar, hidden by default", () => {
-    expect(mainSource).toMatch(/<div id="piece-topbar-root"><\/div>/);
+    expect(noteAppSource).toMatch(/<div id="piece-topbar-root"><\/div>/);
     expect(css).toMatch(/#piece-topbar-root\s*\{[^}]*grid-row:\s*1;[^}]*display:\s*none;/s);
   });
 
@@ -164,7 +164,7 @@ describe("per-area topbars (采集 / 写作)", () => {
   });
 
   it("splits createPieceHeader across the topbar mount and the title mount", () => {
-    expect(mainSource).toMatch(/createPieceHeader\(\{[^}]*topbarMount/);
+    expect(noteAppSource).toMatch(/createPieceHeader\(\{[^}]*topbarMount/);
     expect(pieceSwitcherSource).toMatch(/topbarMount\.appendChild\(crumbRow\)/);
     expect(pieceSwitcherSource).toMatch(/topbarMount\.appendChild\(modeSlot\)/);
     expect(pieceSwitcherSource).toMatch(/titleMount\.appendChild\(title\)/);

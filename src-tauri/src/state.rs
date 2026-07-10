@@ -12,6 +12,37 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Mutex;
 
+/// Project roots that have been explicitly opened by this app instance.
+/// Custom image URLs are constrained to these roots so another local
+/// `_assets` directory cannot be used as an arbitrary-file reader.
+#[derive(Default)]
+pub struct AuthorizedRoots {
+    roots: Mutex<Vec<PathBuf>>,
+}
+
+impl AuthorizedRoots {
+    pub fn authorize(&self, root: &std::path::Path) {
+        let Ok(root) = root.canonicalize() else {
+            return;
+        };
+        let mut roots = self.roots.lock().unwrap();
+        if !roots.iter().any(|known| known == &root) {
+            roots.push(root);
+        }
+    }
+
+    pub fn allows_image(&self, path: &std::path::Path) -> bool {
+        let Ok(path) = path.canonicalize() else {
+            return false;
+        };
+        self.roots
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|root| path.starts_with(root))
+    }
+}
+
 pub struct AppState {
     pub config: Mutex<Config>,
     pub config_path: PathBuf,
@@ -38,4 +69,30 @@ pub struct AppState {
     /// reader 线程收到 `SkillsList` 时取出 sender 解除等待。
     pub pending_skill_lists:
         Mutex<HashMap<String, tokio::sync::oneshot::Sender<Vec<SkillSummary>>>>,
+    /// Roots authorised by opening/watching a project in this app instance.
+    pub authorized_roots: AuthorizedRoots,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AuthorizedRoots;
+    use crate::testutil::tempdir;
+
+    #[test]
+    fn authorized_roots_only_allow_assets_in_registered_project() {
+        let project = tempdir();
+        let outside = tempdir();
+        let allowed = project.path().join("_assets").join("photo.png");
+        let denied = outside.path().join("_assets").join("photo.png");
+        std::fs::create_dir_all(allowed.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(denied.parent().unwrap()).unwrap();
+        std::fs::write(&allowed, b"image").unwrap();
+        std::fs::write(&denied, b"image").unwrap();
+
+        let roots = AuthorizedRoots::default();
+        roots.authorize(project.path());
+
+        assert!(roots.allows_image(&allowed));
+        assert!(!roots.allows_image(&denied));
+    }
 }

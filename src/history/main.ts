@@ -5,8 +5,8 @@ import {
   chatDelete,
   chatListAll,
   type ChatConversation,
-} from "../note/chat-history";
-import { formatHistoryTime } from "../note/chat-history-format";
+} from "../platform/chat-history";
+import { formatHistoryTime } from "../platform/chat-history-format";
 
 const PAGE_SIZE = 60;
 const app = document.querySelector<HTMLElement>("#app")!;

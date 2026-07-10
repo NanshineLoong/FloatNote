@@ -1,4 +1,4 @@
-import { closeFloating, floatMenuAnchored } from "../note/tags/floating.js";
+import { closeFloating, floatMenuAnchored } from "../shared/ui/floating-menu.js";
 import { createDockDropdown } from "./dock-dropdown.js";
 
 /**

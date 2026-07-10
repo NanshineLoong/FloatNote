@@ -1,9 +1,9 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { AgentEvent } from "../note/agent";
-import type { ChatConversation, ChatScope } from "../note/chat-history";
-import { deriveTitleFromFirstMessage, formatHistoryTime } from "../note/chat-history-format";
+import type { AgentEvent } from "../platform/agent";
+import type { ChatConversation, ChatScope } from "../platform/chat-history";
+import { deriveTitleFromFirstMessage, formatHistoryTime } from "../platform/chat-history-format";
 import socratesSvg from "../assets/socrates.svg?raw";
 import { mountPermissionBubble, type PermissionRequest } from "./permission-bubble.js";
 import { mountSkillPicker, type SkillSummary } from "./skill-picker.js";

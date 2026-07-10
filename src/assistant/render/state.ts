@@ -1,4 +1,4 @@
-import type { ChatDisplayMessage } from "../../note/agent";
+import type { ChatDisplayMessage } from "../../platform/agent";
 import { type EditPreviewDetail, type WriteMode } from "../permission-bubble";
 
 /**

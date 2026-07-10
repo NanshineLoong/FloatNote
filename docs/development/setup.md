@@ -1,0 +1,12 @@
+# 开发环境
+
+需要 Node.js 22.19 或更高、Rust stable，以及目标平台的 Tauri 开发依赖。项目支持 macOS 和 Windows；在对应平台开发或发布时，使用该平台可运行的 Node 与 Rust toolchain。
+
+```bash
+npm install
+npm run tauri dev
+```
+
+只启动 WebView 前端时使用 `npm run dev`。完整桌面流程使用 `npm run tauri dev`，它会启动 Vite 并由 Tauri 拉起应用；debug sidecar 使用本仓库安装的 `tsx`。
+
+常用验证命令见 [测试与质量门禁](testing.md)。发布工件与外部 Node runtime 的准备见 [打包架构](../architecture/packaging.md) 和 [发布流程](release.md)。

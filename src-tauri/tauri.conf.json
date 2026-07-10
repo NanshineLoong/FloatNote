@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1422",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm run package:sidecar && npm run build"
   },
   "app": {
     "withGlobalTauri": false,
@@ -50,7 +50,9 @@
         "titleBarStyle": "Overlay"
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: floatnote-img:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'"
+    }
   },
   "bundle": {
     "active": true,
@@ -62,9 +64,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["resources/skills/**/*"],
+    "resources": ["resources/skills/**/*", "resources/sidecar/**/*"],
+    "externalBin": ["binaries/floatnote-node"],
     "macOS": {
-      "signingIdentity": "FloatNote Self Signed"
+      "signingIdentity": "FloatNote Self Signed",
+      "hardenedRuntime": true,
+      "entitlements": "./Entitlements.plist"
     }
   }
 }

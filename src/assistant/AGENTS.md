@@ -7,18 +7,18 @@ into a reconciled message list with incremental DOM updates.
 
 - `assistant.ts` — `AssistantHandle` connector: builds DOM, wires input/
   submit/history/permission/skills/mentions, subscribes to agent events.
-- `render.ts` — `ChatEvent`/`Block`/`ChatMessage`/`ChatState` state machine
-  (`reduceEvents`) + DOM rendering (`renderMessage`/`renderBlock`). (State
-  and view are candidate for further split — see audit notes.)
+- `render/` — `state.ts` owns the reducer/state machine and `view.ts` owns DOM
+  rendering; `index.ts` is the public feature API.
 - `blocks.ts` — incremental message-list reconciler (`reconcileMessages`).
 - `action-card.ts` — read-only action card (edit/tag diff preview, side-by-side
   with `mod`/`add`/`del`/`ctx` row kinds).
 - `permission-bubble.ts` — docked permission bubble for pending edits +
   `EditPreviewDetail` types shared with action-card.
-- `markdown.ts` — minimal block markdown renderer (reuses
-  `../note/inline` `renderInline` + shared `escapeHtml`).
+- `markdown.ts` — minimal block markdown renderer using shared Markdown
+  primitives, never note internals.
 - `mention-picker.ts`, `skill-picker.ts` — docked dropdowns (`/`-mention and
-  right-menu skills). Share a dock-dropdown pattern (candidate for extract).
+  right-menu skills). Share the docked floating-menu helper.
 - `styles.css` — assistant card/bubble/diff/picker styling.
 
-Shared helpers: `escapeHtml` from `../shared/escape`.
+Cross-feature contracts come from `src/platform/`; shared helpers/UI come from
+`src/shared/`. Do not import `src/note/` from this feature.

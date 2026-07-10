@@ -3,38 +3,41 @@
 ## Project Structure & Module Organization
 
 FloatNote is a Tauri 2 desktop app with a Vanilla TypeScript/Vite frontend.
-Four components, each with its own `AGENTS.md`:
+Four components; module-specific guidance exists where it is most needed:
 
-- `src/` — frontend. Note window in `src/note/` (see `src/note/AGENTS.md`),
-  assistant UI in `src/assistant/`, plus `src/history/`, `src/popup/`,
-  `src/settings/`, `src/shared/` (`escape`, `shortcuts`, `toast`), and
-  `src/styles.css`. Entry pages: `index.html`, `settings.html`, `popup.html`,
-  `history.html` (configured by `vite.config.ts`).
+- `src/` — frontend. Vite MPA HTML entries remain at root; `src/platform/`
+  owns Tauri commands/events and shared DTOs, `src/shared/` owns cross-feature
+  utilities/UI, and `src/note/`, `src/assistant/`, `src/history/`,
+  `src/popup/`, `src/settings/` own feature UI.
 - `src-tauri/` — Rust backend. `src-tauri/src/` (see its `AGENTS.md`):
-  `state.rs` (managed `AppState`), `commands.rs` (thin command layer),
-  `agent.rs` (sidecar orchestration), `notes.rs`/`project.rs`/`versions.rs`
+  `state.rs` (managed `AppState`), `commands.rs` + `commands/` (thin command
+  adapters), `agent/` (sidecar protocol, launch and handlers),
+  `notes.rs`/`project.rs`/`versions.rs`
   (note file ops + history), `chat_history.rs`, `paths.rs`, `watcher.rs`,
   `source.rs` (macOS), `testutil.rs`, and window/tray/shortcut wiring.
 - `shared/note-logic/` — workspace package `@floatnote/note-logic`: pure
   logic shared by frontend + sidecar (`blocks/ranges`, `tags/model`,
   `tags/palette`). See its `AGENTS.md`.
-- `sidecar/` — Node AI-agent process over stdio JSONL (`agent.ts`,
-  `note-tools.ts`, `protocol.ts`, `matching.ts`, `skills.ts`). See its
-  `AGENTS.md`.
+- `sidecar/` — Node AI-agent process over stdio JSONL. `bundle.mjs` produces
+  the release ESM bundle and `prepare-tauri.mjs` stages its bundled runtime.
 - A **project space** is a subfolder inside the working directory holding up
   to three Markdown kinds: `_inbox.md` (block drafts), `_tasks.md`
   (checklist), and one or more **piece** files (any `.md` without a `_`
   prefix, defaulting to `piece.md`). The `_` prefix alone distinguishes
   system files from pieces. Loose root `.md` files are legacy flat notes.
-- `docs/` stores design and planning notes. `dist/` and `src-tauri/target/`
-  are generated artifacts; avoid editing them by hand.
+- `docs/architecture/`, `docs/development/`, and `docs/adr/` are stable
+  project documentation. Dated specs/plans are historical implementation
+  records. `dist/`, `src-tauri/target/`, `src-tauri/binaries/`, and generated
+  sidecar resources are generated artifacts.
 
 ## Build, Test, and Development Commands
 
 - `npm run dev` starts the Vite frontend at the dev URL used by Tauri.
 - `npm run tauri dev` runs the full desktop app in development mode.
-- `npm run build` type-checks TypeScript with `tsc` and builds the frontend bundle.
-- `npm test` runs frontend unit tests with Vitest.
+- `npm run build` builds the frontend and sidecar.
+- `npm test` runs frontend/shared and sidecar unit tests.
+- `npm run check` runs tests, builds, and the sidecar JSONL smoke test.
+- `npm run package:sidecar` stages the release sidecar resource/runtime.
 - `npm run tauri build` creates the packaged desktop app.
 
 Run commands from the repository root unless a Tauri/Rust command specifically requires `src-tauri/`.
@@ -55,7 +58,9 @@ When you are unsure about a Tauri, plugin, or other library API — or need to c
 
 Frontend tests use Vitest and are named `*.test.ts` next to the code they cover, for example `src/note/append.test.ts`. Prefer focused tests for pure helpers and state transitions. Run `npm test` before submitting TypeScript behavior changes.
 
-There is no dedicated Rust test suite yet. For backend changes, at minimum run `cargo check` from `src-tauri/` and exercise the affected Tauri flow with `npm run tauri dev`.
+Rust has library tests. For backend changes, run `cargo test --lib` and both
+`cargo check` and `cargo check --release` from `src-tauri/`; exercise the
+affected Tauri flow with `npm run tauri dev`.
 
 ## Commit & Pull Request Guidelines
 

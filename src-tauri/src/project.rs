@@ -212,10 +212,14 @@ pub fn rename_project(dir: &Path, new_name: &str) -> std::io::Result<String> {
 /// The frontend confirms before calling. Version history lives inside the
 /// folder and is trashed with it.
 pub fn delete_project(dir: &Path) -> std::io::Result<()> {
+    delete_project_with(dir, &crate::trash::SystemTrash)
+}
+
+pub fn delete_project_with(dir: &Path, trash: &impl crate::trash::Trash) -> std::io::Result<()> {
     if !dir.exists() {
         return Ok(());
     }
-    trash::delete(dir).map_err(|error| std::io::Error::other(error.to_string()))
+    trash.move_to_trash(dir)
 }
 
 #[cfg(test)]
@@ -372,14 +376,20 @@ mod tests {
 
     #[test]
     fn delete_project_removes_folder_and_is_noop_when_missing() {
+        struct RemoveDirectory;
+        impl crate::trash::Trash for RemoveDirectory {
+            fn move_to_trash(&self, path: &Path) -> std::io::Result<()> {
+                std::fs::remove_dir_all(path)
+            }
+        }
         let root = tempdir();
         let dir = root.path().join("doomed");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(INBOX_FILE), "").unwrap();
-        delete_project(&dir).unwrap();
+        delete_project_with(&dir, &RemoveDirectory).unwrap();
         assert!(!dir.exists());
         // Already gone — no error.
-        delete_project(&dir).unwrap();
+        delete_project_with(&dir, &RemoveDirectory).unwrap();
     }
 
     #[test]
@@ -428,5 +438,5 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::NotADirectory);
     }
 
-    use crate::testutil::{tempdir, TempDir};
+    use crate::testutil::tempdir;
 }

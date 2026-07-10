@@ -1,4 +1,4 @@
-import { renderInline } from "../note/inline";
+import { renderInline } from "../shared/markdown/inline";
 import { escapeHtml } from "../shared/escape";
 
 /**

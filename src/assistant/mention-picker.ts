@@ -1,4 +1,4 @@
-import type { ChatScope } from "../note/chat-history";
+import type { ChatScope } from "../platform/chat-history";
 import { createDockDropdown } from "./dock-dropdown.js";
 
 /**

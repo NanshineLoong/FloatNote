@@ -5,19 +5,28 @@
 //! 分派到 `handlers` 模块的处理函数。
 
 use crate::state::AppState;
+#[cfg(debug_assertions)]
 use std::io::{BufRead, BufReader, Write};
+#[cfg(debug_assertions)]
 use std::path::{Path, PathBuf};
+#[cfg(debug_assertions)]
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
+#[cfg(not(debug_assertions))]
+use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 
 use super::handlers::{handle_apply_edit, handle_get_note_text};
 use super::protocol::{HostToSidecar, SidecarToHost};
 
 /// 活的 sidecar 子进程句柄：持有子进程与其 stdin。
 pub struct AgentHandle {
+    #[cfg(debug_assertions)]
     #[allow(dead_code)]
     child: Child,
+    #[cfg(debug_assertions)]
     stdin: ChildStdin,
+    #[cfg(not(debug_assertions))]
+    child: tauri_plugin_shell::process::CommandChild,
 }
 
 impl AgentHandle {
@@ -25,14 +34,22 @@ impl AgentHandle {
     pub fn send(&mut self, msg: &HostToSidecar) -> std::io::Result<()> {
         let mut line = serde_json::to_string(msg)?;
         line.push('\n');
-        self.stdin.write_all(line.as_bytes())?;
-        self.stdin.flush()
+        #[cfg(debug_assertions)]
+        {
+            self.stdin.write_all(line.as_bytes())?;
+            return self.stdin.flush();
+        }
+        #[cfg(not(debug_assertions))]
+        self.child
+            .write(line.as_bytes())
+            .map_err(std::io::Error::other)
     }
 }
 
 /// 开发期 sidecar 启动命令。
 /// 优先使用 sidecar 本地安装的 tsx（`node_modules/.bin/tsx`），
 /// 避免依赖全局 `npx`，提升从 Finder/Dock 启动时的可靠性。
+#[cfg(debug_assertions)]
 fn sidecar_command() -> Command {
     // CARGO_MANIFEST_DIR = <repo>/src-tauri，其父目录即仓库根。
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -86,6 +103,7 @@ fn sidecar_command() -> Command {
 }
 
 /// 拉起 sidecar 子进程并起读线程；失败返回 io::Error（启动期仅打印不阻断）。
+#[cfg(debug_assertions)]
 pub fn spawn(app: &AppHandle) -> std::io::Result<AgentHandle> {
     let mut child = sidecar_command().spawn()?;
     let stdout = child
@@ -104,6 +122,7 @@ pub fn spawn(app: &AppHandle) -> std::io::Result<AgentHandle> {
 }
 
 /// 读 sidecar stdout：按行解析协议并分派；EOF（崩溃/退出）后标记不可用。
+#[cfg(debug_assertions)]
 fn read_loop(app: AppHandle, stdout: ChildStdout) {
     let reader = BufReader::new(stdout);
     for line in reader.lines() {
@@ -114,15 +133,69 @@ fn read_loop(app: AppHandle, stdout: ChildStdout) {
                 break;
             }
         };
-        if line.trim().is_empty() {
-            continue;
-        }
-        match serde_json::from_str::<SidecarToHost>(&line) {
-            Ok(msg) => handle_sidecar_msg(&app, msg),
-            Err(error) => eprintln!("agent: bad protocol line ({error}): {line}"),
-        }
+        handle_sidecar_line(&app, &line);
     }
     on_sidecar_exit(&app);
+}
+
+/// Release mode uses Tauri's external binary support. The bundled Node runtime
+/// receives the bundled, self-contained ESM agent resource as its first arg;
+/// neither the user's PATH nor the source checkout is involved.
+#[cfg(not(debug_assertions))]
+pub fn spawn(app: &AppHandle) -> std::io::Result<AgentHandle> {
+    let resource = app
+        .path()
+        .resource_dir()
+        .map_err(std::io::Error::other)?
+        .join("sidecar")
+        .join("floatnote-agent.mjs");
+    if !resource.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("bundled sidecar resource missing: {}", resource.display()),
+        ));
+    }
+    let command = app
+        .shell()
+        .sidecar("floatnote-node")
+        .map_err(std::io::Error::other)?
+        .arg(resource.to_string_lossy().into_owned());
+    let (mut events, child) = command.spawn().map_err(std::io::Error::other)?;
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut buffer = String::new();
+        while let Some(event) = events.recv().await {
+            match event {
+                CommandEvent::Stdout(bytes) => {
+                    buffer.push_str(&String::from_utf8_lossy(&bytes));
+                    while let Some(newline) = buffer.find('\n') {
+                        let line = buffer[..newline].to_string();
+                        buffer.drain(..=newline);
+                        handle_sidecar_line(&app_handle, &line);
+                    }
+                }
+                CommandEvent::Stderr(bytes) => {
+                    eprintln!("agent: {}", String::from_utf8_lossy(&bytes).trim());
+                }
+                _ => {}
+            }
+        }
+        if !buffer.trim().is_empty() {
+            handle_sidecar_line(&app_handle, &buffer);
+        }
+        on_sidecar_exit(&app_handle);
+    });
+    Ok(AgentHandle { child })
+}
+
+fn handle_sidecar_line(app: &AppHandle, line: &str) {
+    if line.trim().is_empty() {
+        return;
+    }
+    match serde_json::from_str::<SidecarToHost>(line) {
+        Ok(msg) => handle_sidecar_msg(app, msg),
+        Err(error) => eprintln!("agent: bad protocol line ({error}): {line}"),
+    }
 }
 
 /// 分派单条 sidecar 消息。

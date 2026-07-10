@@ -1,6 +1,7 @@
 # sidecar — AI agent sidecar
 
-Separate Node process spawned by the Rust backend (`src-tauri/src/agent.rs`)
+Separate Node process spawned by the Rust backend (`src-tauri/src/agent.rs` and
+its `agent/` submodules)
 to run the Pi coding-agent with note-editing tools. Talks JSONL over stdio.
 Entry: `src/main.ts`.
 
@@ -8,10 +9,9 @@ Entry: `src/main.ts`.
 
 - `main.ts` — stdio loop: decodes `HostToSidecar`, dispatches to `AgentRunner`,
   encodes `SidecarToHost` replies.
-- `agent.ts` — `AgentRunner` (session lifecycle, `prompt`/`cancel` scoped per
-  requestId→conversationId, `getNoteText` rejects on `found=false`), model
-  builder (`buildAgentModel`), event translation (`translateEvent`),
-  `defaultCreateSession`. (Candidate split: model / event-translate / runner.)
+- `agent.ts` — compatibility barrel. `runner.ts` owns session lifecycle,
+  `model.ts` owns provider setup, and `event-translate.ts` owns Pi→protocol
+  translation.
 - `protocol.ts` — `HostToSidecar`/`SidecarToHost` union types + line
   codec (`encodeLine`/`createLineDecoder`). `title` variant is declared but
   not emitted by the sidecar (kept intentionally for now).
@@ -25,4 +25,6 @@ Entry: `src/main.ts`.
 - `skills.ts` — skill directory loading + `formatSkillsForSystemPrompt`.
 - `tutor-prompt.ts` — `TUTOR_SYSTEM_PROMPT`.
 
-Build: `npm run build` (tsc). Tests: `npm test` (vitest).
+Build: `npm run build` (tsc), `npm run bundle` (single ESM runtime bundle),
+and `npm run prepare:tauri` (stage release resource + Node runtime). Tests:
+`npm test`; release smoke: `npm run smoke`.

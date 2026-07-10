@@ -84,10 +84,14 @@ pub fn rename_note(dir: &Path, old_name: &str, new_stem: &str) -> std::io::Resul
 /// vanished externally. Version-history cleanup is the caller's responsibility;
 /// this function only touches the `.md` file itself.
 pub fn delete_note(path: &Path) -> std::io::Result<()> {
+    delete_note_with(path, &crate::trash::SystemTrash)
+}
+
+pub fn delete_note_with(path: &Path, trash: &impl crate::trash::Trash) -> std::io::Result<()> {
     if !path.exists() {
         return Ok(());
     }
-    trash::delete(path).map_err(|error| std::io::Error::other(error.to_string()))
+    trash.move_to_trash(path)
 }
 
 /// 进程级临时文件序号，保证并发写不撞名。
@@ -339,12 +343,19 @@ mod tests {
 
     #[test]
     fn delete_removes_file_and_is_noop_when_missing() {
+        struct RemoveFile;
+        impl crate::trash::Trash for RemoveFile {
+            fn move_to_trash(&self, path: &Path) -> std::io::Result<()> {
+                std::fs::remove_file(path)
+            }
+        }
         let dir = tempdir();
-        std::fs::write(dir.path().join("doomed.md"), "x").unwrap();
-        delete_note(&dir.path().join("doomed.md")).unwrap();
-        assert!(!dir.path().join("doomed.md").exists());
+        let path = dir.path().join("doomed.md");
+        std::fs::write(&path, "x").unwrap();
+        delete_note_with(&path, &RemoveFile).unwrap();
+        assert!(!path.exists());
         // Already gone — no error.
-        delete_note(&dir.path().join("doomed.md")).unwrap();
+        delete_note_with(&path, &RemoveFile).unwrap();
     }
 
     #[test]
@@ -499,5 +510,5 @@ mod tests {
         assert!(!is_safe_image_path(&p));
     }
 
-    use crate::testutil::{tempdir, TempDir};
+    use crate::testutil::tempdir;
 }

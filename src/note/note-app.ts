@@ -1,0 +1,1328 @@
+import "@phosphor-icons/web/regular";
+import "../assistant/styles.css";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
+import { onFileChanged, onNoteUpdated } from "./agent";
+import { EditorView, placeholder } from "@codemirror/view";
+import { createEditor, requestEditorLayout, setDoc } from "./editor";
+import { blockHandleGutter, deleteBlock } from "./blocks/handle-gutter";
+import { cancelBlockDrag, scrollerPositionTheme } from "./blocks/drag";
+import { mountTagBar } from "./tags/bar";
+import { showToast } from "../shared/toast";
+import { tagDecorations } from "./tags/decoration";
+import { tagFilter, setTagFilter } from "./tags/filter";
+import { openBlockTagMenu } from "./tags/picker";
+import { createLayoutController } from "./layout-controller";
+import { createPieceHeader } from "./piece-switcher";
+import { OutlineToggleEffect, outlineMode } from "./outline-mode";
+import { actionTargetForTransition, createTasksPanel } from "./tasks-panel";
+import {
+  createDocument,
+  createNote,
+  createProject,
+  confirmDialog,
+  deleteNote,
+  deleteProject,
+  discardPending,
+  flushAll,
+  getConfig,
+  inboxEntry,
+  isDirty,
+  listPieces,
+  listProjects,
+  loadNote,
+  onConflict,
+  openDocumentFromFile,
+  openExistingProject,
+  renameNote,
+  renameProject,
+  resolveDocuments,
+  resolveProjects,
+  saveImmediate,
+  scheduleSave,
+  setRecentDocuments,
+  setRecentProjects,
+  tasksPath,
+  type NoteEntry,
+  type ProjectEntry,
+} from "./notes-state";
+import { parentDir, pushRecent, removeFromRecent } from "./recent-projects";
+import { initScrollbar } from "./scrollbar";
+import { renderEmptyState } from "./empty-state";
+import {
+  resolveBootstrap,
+  resolveOpenProject,
+  type WindowState,
+} from "./window-state";
+import {
+  renderTitlebar,
+  renderTopbar,
+  setProjectLabel,
+  setTasksToggle,
+  setViewSeg,
+} from "./topbar";
+import { canSplit } from "./split";
+import { buildBindings, installShortcuts, type ShortcutActions } from "./shortcuts";
+import { WINDOW_SHORTCUT_DEFAULTS, type WindowShortcutId } from "../shared/shortcuts";
+import { listVersions, restoreVersion, snapshotNote } from "./versions";
+import { applyFontSize, bumpFont } from "./font-size";
+import { attachQuoteCapture } from "./quote-capture";
+import { attachAutomationToasts } from "./automation-toasts";
+import { createProjectMenuRenderer } from "./project-menu-render";
+import { createAssistantController } from "./assistant-controller";
+import { createNoteSession } from "./note-session";
+
+
+export function startNoteApp() {
+const app = document.querySelector<HTMLElement>("#app")!;
+app.innerHTML = `
+  <div id="titlebar-root"></div>
+  <div id="topbar-root"></div>
+  <div id="note-body">
+    <div id="tag-bar-root"></div>
+    <div id="piece-topbar-root"></div>
+    <div id="left-col"></div>
+    <div id="text-col">
+      <div id="editor-root"></div>
+    </div>
+    <div id="piece-col">
+      <div id="piece-scroll">
+        <div id="piece-doc-header"></div>
+        <div id="piece-editor-root"></div>
+      </div>
+      <div id="piece-empty-root"></div>
+    </div>
+    <div id="assistant-region"></div>
+  </div>
+  <div id="body-empty-root"></div>
+`;
+
+const noteBody = document.querySelector<HTMLElement>("#note-body")!;
+const assistantRegion = document.querySelector<HTMLElement>("#assistant-region")!;
+const bodyEmptyRoot = document.querySelector<HTMLElement>("#body-empty-root")!;
+const pieceEmptyRoot = document.querySelector<HTMLElement>("#piece-empty-root")!;
+
+const DEFAULT_PROJECT_NAME = "未命名项目";
+const DEFAULT_PIECE_TITLE = "未命名作品";
+const DEFAULT_DOCUMENT_TITLE = "未命名文档";
+
+const session = createNoteSession();
+
+/** 当前工作目录（隐式）：bootstrap 时从 config.working_dir 读取；项目新建时由后端
+ * 自动回写，前端在此镜像。无工作目录时为空串——NO_PROJECT 空态的"新建项目"会弹
+ * 目录选择让用户定位，"新建文档"则走保存对话框。用户不感知此概念。 */
+
+
+/** 空态渲染的清理句柄；切换状态前先清掉上一个，避免残留 DOM 与监听。 */
+let cleanupBodyEmpty: (() => void) | null = null;
+let cleanupPieceEmpty: (() => void) | null = null;
+
+/** 清掉所有空态层，恢复到编辑器可见。LOADED 与文档模式都走这里。 */
+function clearEmptyState() {
+  app.classList.remove("state-no-project", "state-path-error", "state-no-piece");
+  cleanupBodyEmpty?.();
+  cleanupBodyEmpty = null;
+  cleanupPieceEmpty?.();
+  cleanupPieceEmpty = null;
+}
+
+/** 按窗口状态渲染对应空态。LOADED 不渲染空态，只清理。文档模式由 openDocument
+ * 自行调 clearEmptyState。 */
+function renderWindowState(state: WindowState) {
+  clearEmptyState();
+  switch (state.kind) {
+    case "NO_PROJECT":
+      assistantHandle?.setScope(null);
+      app.classList.add("state-no-project");
+      setProjectLabel("");
+      cleanupBodyEmpty = renderEmptyState(bodyEmptyRoot, {
+        icon: "✍️",
+        title: "欢迎来到 FloatNote",
+        hint: "还没有项目空间。新建一个项目开始写作，打开已有文件夹，或直接新建一篇独立文档。",
+        primary: { label: "新建项目", action: () => void createDefaultProject() },
+        secondary: { label: "新建文档", action: () => void createStandaloneDocument() },
+        tertiary: { label: "打开现有项目", action: () => void openExistingProjectFlow() },
+      });
+      break;
+    case "PATH_ERROR":
+      assistantHandle?.setScope(null);
+      app.classList.add("state-path-error");
+      setProjectLabel("");
+      cleanupBodyEmpty = renderEmptyState(bodyEmptyRoot, {
+        icon: "⚠️",
+        title: "读取失败",
+        hint: state.error ?? "无法读取项目列表，请稍后重试。",
+        primary: { label: "重试", action: () => void retryBootstrap() },
+      });
+      break;
+    case "NO_PIECE":
+      app.classList.add("state-no-piece");
+      // 空态下无当前作品：清掉残留引用与面包屑/标题，避免上一个项目的作品名泄漏到新空态。
+      session.currentPiece = null;
+      pieceHeader?.setLabel("");
+      session.surface = "piece";
+      cleanupPieceEmpty = renderEmptyState(pieceEmptyRoot, {
+        icon: "📝",
+        title: "这里还没有作品",
+        hint: `在「${state.project.name}」里新建一篇开始写作。`,
+        primary: { label: "新建作品", action: () => void createFirstPiece() },
+      });
+      break;
+    case "LOADED":
+      break;
+  }
+}
+
+/** 最近打开的项目路径（MRU，最近在前，上限 8）。项目可散落在磁盘任意位置，
+ * 此列表是项目切换菜单的唯一数据来源，并持久化到 config.recent_projects。 */
+
+/** 最近打开的独立文档路径（MRU，与 session.recentProjects 平行）。持久化到 config.recent_documents。 */
+
+
+
+/** 当前窗口模式：项目（含采集/写作/双栏）或独立文档（单一编辑器，无滑拨杆）。 */
+
+/** 进入文档模式前行动面板是否开着 —— 独立文档无 _tasks.md，进文档时关掉行动，
+ *  返回项目时按此值恢复，呈现「临时遮挡」语义。仅项目→文档那一刻写入。 */
+
+/** 文档模式下打开的独立文档；项目模式下为 null。复用 pieceEditor 渲染。 */
+
+let menuEl: HTMLElement | null = null;
+/** The project-name button the switcher menu is anchored to (for repositioning). */
+let menuAnchor: HTMLElement | null = null;
+/** 当前打开的二级菜单浮层（项目/文档标题的 `+` 展开），与主菜单同生命周期。 */
+let submenuEl: HTMLElement | null = null;
+/** 二级菜单的触发按钮，用于切换 aria-expanded。 */
+let submenuTrigger: HTMLElement | null = null;
+/** AI 改写热刷新期间置位，避免编辑器变更回灌 autosave。 */
+let applyingRemote = false;
+
+const editorRoot = document.querySelector<HTMLElement>("#editor-root")!;
+// Inbox 是常驻、可直接编辑的 block 面（live preview）。每个 top-level block 在左侧
+// gutter 上有一个句柄：拖拽重排 / 单击弹菜单。无独立卡片视图、无源码切换。
+// 标签：句柄左键菜单直接分配/新建标签；decoration 隐藏注释+给块上底色；filter 折叠不匹配块。
+// tagBar 挂在正文网格顶行，updateListener 经由闭包变量迟到绑定。
+let tagBar: { el: HTMLElement; refresh: () => void } | null = null;
+const editor = createEditor(
+  editorRoot,
+  (doc) => {
+    if (applyingRemote) return;
+    if (session.currentInbox) scheduleSave(session.currentInbox.entry.path, doc);
+  },
+  [
+    blockHandleGutter(
+      {
+        getPieceView: () => pieceEditor,
+        isSplitActive: () => layoutController?.isSplit() ?? false,
+        textColEl: document.querySelector<HTMLElement>("#text-col")!,
+        pieceColEl: document.querySelector<HTMLElement>("#piece-col")!,
+      },
+      (view, range, _index, x, y) => {
+        openBlockTagMenu(view, range, x, y, () => deleteBlock(view, range));
+      },
+    ),
+    tagDecorations(),
+    ...tagFilter(),
+    placeholder("Inbox 还是空的 —— 划线捕获或在这里写点什么"),
+    EditorView.updateListener.of((u) => {
+      if (tagBar && (u.docChanged ||
+        u.transactions.some((t) => t.effects.some((e) => e.is(setTagFilter))))) {
+        tagBar.refresh();
+      }
+    }),
+  ],
+  { noteDirProvider: () => session.currentProject?.path ?? session.currentStartDir },
+);
+// 二级标签栏挂在采集区网格顶行（不在全局顶栏，也不受正文列宽限制）。
+tagBar = mountTagBar(editor);
+document.querySelector<HTMLElement>("#tag-bar-root")!.appendChild(tagBar.el);
+requestAnimationFrame(() => initScrollbar(editorRoot));
+editor.contentDOM.addEventListener("focus", () => publishInboxActive());
+
+// 布局控制器：按窗口宽度分级收缩边距、决定助手嵌入/分离/分屏（init() 里用配置初始化）。
+let layoutController: ReturnType<typeof createLayoutController> | null = null;
+
+// ── 成品 session.surface ──────────────────────────────────────────────────────────
+const pieceEditorRoot = document.querySelector<HTMLElement>("#piece-editor-root")!;
+const pieceCol = document.querySelector<HTMLElement>("#piece-col")!;
+const pieceScroll = document.querySelector<HTMLElement>("#piece-scroll")!;
+
+
+
+
+
+/** 当前装载进 pieceEditor 的文件（项目模式=成品，文档模式=独立文档）。 */
+function activePieceFile(): NoteEntry | null {
+  return session.mode === "document" ? session.currentDocument : session.currentPiece;
+}
+
+// grow:true → 编辑器长到内容高度、不自带内部滚动，于是标题与正文共用 #piece-scroll
+// 这一个外层滚动容器（Notion 式：标题随正文一起滚）。
+const pieceEditor = createEditor(
+  pieceEditorRoot,
+  (doc) => {
+    if (applyingRemote) return;
+    const f = activePieceFile();
+    if (f) scheduleSave(f.path, doc);
+  },
+  [scrollerPositionTheme, ...outlineMode(), placeholder("开始写……")],
+  {
+    grow: true,
+    // pieceEditor is shared by project piece session.mode AND document session.mode. Branch on
+    // session.mode so document images land next to the document file, not the project dir.
+    noteDirProvider: () =>
+      session.mode === "document" && session.currentDocument
+        ? parentDir(session.currentDocument.path)
+        : (session.currentProject?.path ?? session.currentStartDir),
+  },
+);
+// 滑块挂在不滚动的 #piece-col 上，监听真正滚动的 #piece-scroll。
+requestAnimationFrame(() => initScrollbar(pieceCol, pieceScroll));
+
+// 焦点跟随：哪个 session.surface 获得焦点，助手 active_note 就指向它（成品=润色面）。
+pieceEditor.contentDOM.addEventListener("focus", () => {
+  const f = activePieceFile();
+  if (!f) return;
+  const dir = session.mode === "document" ? parentDir(f.path) : session.currentProject?.path;
+  if (!dir) return;
+  void invoke("set_active_note", {
+    dir,
+    noteId: f.name,
+    path: f.path,
+    kind: session.mode === "document" ? "doc" : "piece",
+  });
+});
+
+// 文档头（标题 + 切换箭头）挂在「写作」栏内容区顶部，随正文一起滚。
+let pieceHeader: ReturnType<typeof createPieceHeader> | null = null;
+
+function applyPieceOutlineMode(next: boolean, opts: { user?: boolean } = {}) {
+  if (opts.user) session.pieceOutlineSessionOverride = next;
+  const lineNumber = pieceEditor.state.doc.lineAt(pieceEditor.state.selection.main.from).number;
+  session.pieceOutlineOn = next;
+  pieceEditor.dispatch({ effects: OutlineToggleEffect.of(next) });
+  const line = pieceEditor.state.doc.line(Math.min(lineNumber, pieceEditor.state.doc.lines));
+  pieceEditor.dispatch({
+    selection: { anchor: line.from },
+    scrollIntoView: true,
+  });
+  pieceHeader?.setOutlineMode(next);
+  requestEditorLayout(pieceEditor);
+}
+
+function resetPieceOutlineForOpen() {
+  applyPieceOutlineMode(session.pieceOutlineSessionOverride ?? session.pieceOutlineDefault);
+}
+
+function mountPieceHeader() {
+  const topbar = document.querySelector<HTMLElement>("#piece-topbar-root")!;
+  const titleHost = document.querySelector<HTMLElement>("#piece-doc-header")!;
+  pieceHeader = createPieceHeader({ topbarMount: topbar, titleMount: titleHost, host: {
+    dir: () =>
+      session.mode === "document"
+        ? session.currentDocument
+          ? parentDir(session.currentDocument.path)
+          : ""
+        : session.currentProject?.path ?? "",
+    current: () => activePieceFile(),
+    open: async (entry) => {
+      if (session.mode === "document") {
+        // 文档模式下 open 仅在重命名后被调用：更新当前文档引用并同步 MRU 路径。
+        const oldPath = session.currentDocument?.path;
+        session.currentDocument = entry;
+        pieceHeader?.setLabel(entry.name);
+        if (oldPath && oldPath !== entry.path) {
+          session.recentDocuments = session.recentDocuments.map((p) => (p === oldPath ? entry.path : p));
+          void setRecentDocuments(session.recentDocuments);
+        }
+      } else {
+        await openPiece(entry);
+      }
+    },
+    loadVersions: () => {
+      if (session.mode !== "project" || !session.currentProject || !session.currentPiece)
+        return Promise.resolve([]);
+      return listVersions(session.currentProject.path, session.currentPiece.name);
+    },
+    snapshot: async () => {
+      if (session.mode !== "project" || !session.currentProject || !session.currentPiece) return;
+      await snapshotNote(
+        session.currentProject.path,
+        session.currentPiece.name,
+        pieceEditor.state.doc.toString(),
+        "manual",
+      );
+    },
+    restore: async (v) => {
+      if (session.mode !== "project" || !session.currentProject || !session.currentPiece) return;
+      const restored = await restoreVersion(
+        session.currentProject.path,
+        session.currentPiece.name,
+        session.currentPiece.path,
+        pieceEditor.state.doc.toString(),
+        v,
+      );
+      applyRemoteTo(pieceEditor, restored);
+    },
+    onEmptied: () => {
+      // 当前 piece 被删且项目已无 piece：清掉引用，切到 NO_PIECE 空态。
+      session.currentPiece = null;
+      if (session.currentProject) {
+        renderWindowState({ kind: "NO_PIECE", project: session.currentProject });
+      }
+      session.surface = "piece";
+      applyView();
+    },
+    focusTitle: () => focusPieceTitle(),
+    focusBody: () => {
+      // 标题回车后，焦点落到正文编辑器首行行首。
+      pieceEditor.focus();
+      pieceEditor.dispatch({ selection: { anchor: 0, head: 0 } });
+    },
+    isOutlineMode: () => session.pieceOutlineOn,
+    setOutlineMode: (next) => applyPieceOutlineMode(next, { user: true }),
+  },
+  });
+  pieceHeader.setOutlineMode(session.pieceOutlineOn);
+}
+
+async function openPiece(entry: NoteEntry) {
+  session.currentPiece = entry;
+  pieceHeader?.setLabel(entry.name);
+  applyRemoteTo(pieceEditor, await loadNote(entry.path));
+  resetPieceOutlineForOpen();
+}
+
+/** 打开一个独立文档：切到文档模式，复用 pieceEditor 渲染该文件。 */
+async function openDocument(doc: NoteEntry) {
+  // 独立文档无 _tasks.md：进入文档模式时把行动「临时遮挡」——记下开关并关掉，
+  // 返回项目时按记忆恢复（见 openProject）。
+  const plan = actionTargetForTransition({
+    from: session.mode,
+    to: "document",
+    currentOpen: tasksPanel.isOpen(),
+    rememberedOpen: session.actionDesiredOpen,
+  });
+  if (plan.remember !== null) session.actionDesiredOpen = plan.remember;
+  tasksPanel.setOpen(plan.open);
+  session.mode = "document";
+  session.currentDocument = doc;
+  session.recentDocuments = pushRecent(session.recentDocuments, doc.path);
+  await setRecentDocuments(session.recentDocuments);
+  setProjectLabel(doc.name);
+  clearEmptyState();
+  applyRemoteTo(pieceEditor, await loadNote(doc.path));
+  resetPieceOutlineForOpen();
+  pieceHeader?.setLabel(doc.name);
+  applyView();
+  void invoke("set_active_note", { dir: parentDir(doc.path), noteId: doc.name, path: doc.path, kind: "doc" });
+  assistantHandle.setScope(assistantController.currentScope());
+  // 独立文档不在项目目录内，停掉文件监听以免误刷新（返回项目时再 watch_dir）。
+  void invoke("unwatch_dir");
+}
+
+/** 列举项目内的 piece；失败时返回空数组并把错误上抛由调用方决定回退。 */
+async function loadFirstPiece(): Promise<NoteEntry[]> {
+  const dir = session.currentProject!.path;
+  return listPieces(dir);
+}
+
+function publishInboxActive() {
+  if (!session.currentProject || !session.currentInbox) return;
+  void invoke("set_active_note", {
+    dir: session.currentProject.path,
+    noteId: session.currentInbox.entry.name,
+    path: session.currentInbox.entry.path,
+    kind: "inbox",
+  });
+}
+
+// 单栏可见面（采集/写作）。双栏由 layoutController 持有；session.surface 始终记着「上次的
+// 单栏面」，作为窗口变窄、双栏放不下时的回落目标。
+
+
+function applyView() {
+  const split = layoutController?.isSplit() ?? false;
+  // 文档模式：单一编辑器，无滑拨杆 / 无采集面 / 无行动面板（CSS 经 .doc-session.mode 隐藏）。
+  app.classList.toggle("doc-mode", session.mode === "document");
+  if (session.mode === "document") {
+    app.classList.add("show-piece");
+    app.classList.remove("show-inbox");
+    setViewSeg("piece", false);
+    requestEditorLayout(editor);
+    requestEditorLayout(pieceEditor);
+    return;
+  }
+  // 双栏时采集恒在左、写作恒在右；单栏时按 session.surface 选一个。
+  app.classList.toggle("show-piece", !split && session.surface === "piece");
+  app.classList.toggle("show-inbox", split || session.surface === "inbox");
+  setViewSeg(split ? "split" : session.surface, canSplit(window.innerWidth));
+  requestEditorLayout(editor);
+  requestEditorLayout(pieceEditor);
+}
+
+function selectView(view: "inbox" | "piece" | "split") {
+  if (view === "split") {
+    layoutController?.setSplit(true);
+  } else {
+    session.surface = view;
+    layoutController?.setSplit(false);
+  }
+  applyView();
+  tasksPanel.syncLayout();
+}
+
+const tasksPanel = createTasksPanel(noteBody, {
+  tasksPath: () => (session.currentProject ? tasksPath(session.currentProject.path) : null),
+  // 行动开关与助手开关同等地驱动右栏几何：打开即预留右栏、正文左推。
+  onOpenChange: (open) => {
+    setTasksToggle(open);
+    layoutController?.setActionOpen(open);
+  },
+});
+
+/** 用 AI/外部写入的新内容覆盖编辑器，不触发本地 autosave。 */
+function applyRemoteTo(view: EditorView, content: string) {
+  applyingRemote = true;
+  try {
+    setDoc(view, content);
+  } finally {
+    applyingRemote = false;
+  }
+}
+
+function applyRemoteDoc(content: string) {
+  applyRemoteTo(editor, content);
+}
+
+const assistantController = createAssistantController({
+  region: assistantRegion,
+  session,
+  openProject,
+  openDocument,
+  onChromeStateChange: (open) => {
+    layoutController?.setAssistantOpen(open);
+    tasksPanel.syncLayout();
+  },
+});
+const assistantHandle = assistantController.handle;
+
+async function toggleAssistantFromChrome() {
+  await assistantController.toggleFromChrome();
+}
+
+void onNoteUpdated(async (payload) => {
+  // 与 onFileChanged 对齐：编辑器有未保存的本地修改时跳过 AI 热刷新，
+  // 否则磁盘内容会覆盖用户输入，而 pending 仍持旧内容会在后续 flush 时盖回 AI 结果。
+  if (isDirty(payload.path)) return;
+  // 采集面（项目模式）被 AI 改写。
+  if (session.currentInbox && payload.path === session.currentInbox.entry.path) {
+    applyRemoteDoc(await loadNote(session.currentInbox.entry.path));
+    return;
+  }
+  // 成品 / 独立文档被 AI 改写（文档模式无文件监听，靠这条热刷新）。
+  const f = activePieceFile();
+  if (f && payload.path === f.path) {
+    applyRemoteTo(pieceEditor, await loadNote(f.path));
+  }
+});
+
+// 外部文件修改：Rust watcher 检测到 .md 文件变化后广播，热刷新对应编辑器。
+// 如果编辑器有未保存的本地修改（用户正在输入），跳过刷新以避免丢失输入。
+void onFileChanged(async (changedPath) => {
+  if (isDirty(changedPath)) return;
+
+  // 拖拽进行中若目标文档被外部改写，落点偏移会失效 —— 直接中止拖拽不提交。
+  const activeFile = activePieceFile();
+  if (
+    (session.currentInbox && changedPath === session.currentInbox.entry.path) ||
+    (activeFile && changedPath === activeFile.path)
+  ) {
+    cancelBlockDrag();
+  }
+
+  // Inbox 被外部修改。
+  if (session.currentInbox && changedPath === session.currentInbox.entry.path) {
+    try {
+      applyRemoteDoc(await loadNote(session.currentInbox.entry.path));
+    } catch {
+      // _inbox.md 被外部删除 → 该目录不再是项目空间，回到 bootstrap 重新定位。
+      console.warn("inbox vanished, re-bootstrapping");
+      session.currentInbox = null;
+      session.currentProject = null;
+      await bootstrapProjects(await getConfig());
+    }
+    return;
+  }
+  // 成品（piece）或独立文档被外部修改 / 删除。
+  if (activeFile && changedPath === activeFile.path) {
+    try {
+      applyRemoteTo(pieceEditor, await loadNote(activeFile.path));
+    } catch {
+      // 文件已不存在（外部删除）→ 列剩余 pieces，切下一片或 NO_PIECE。
+      await handleActivePieceGone();
+    }
+    return;
+  }
+  // 行动（_tasks.md）被外部修改。
+  if (session.currentProject && changedPath === tasksPath(session.currentProject.path)) {
+    tasksPanel.reload();
+    return;
+  }
+});
+
+// 保存冲突：磁盘被外部改动而本地有未保存编辑时，由 write_note 的 mtime 守卫触发。
+onConflict(async (path, localContent) => {
+  const keepMine = await confirmDialog(
+    `文件已在外部被修改：\n${path}\n\n「确定」保留我的编辑并覆盖磁盘；「取消」用磁盘版本替换本地。`,
+    "保存冲突",
+  );
+  if (keepMine) {
+    await saveImmediate(path, localContent, { force: true });
+    return;
+  }
+  // 保留磁盘版本：先丢弃本地 pending（清掉 dirty，避免后续重载被跳过），再按路径把
+  // 磁盘内容重新注入对应编辑器。路由必须与 onFileChanged 一致——否则 tasks 文件或
+  // 已切换项目的旧路径会被错误地塞进 pieceEditor 而覆盖 piece 内容。
+  discardPending(path);
+  const activeFile = activePieceFile();
+  if (session.currentInbox && path === session.currentInbox.entry.path) {
+    applyRemoteDoc(await loadNote(path));
+  } else if (activeFile && path === activeFile.path) {
+    applyRemoteTo(pieceEditor, await loadNote(path));
+  } else if (session.currentProject && path === tasksPath(session.currentProject.path)) {
+    tasksPanel.reload();
+  } else {
+    // 路径已失效（如项目已切换）—— 仅刷新 lastKnown，无对应编辑器需要更新。
+    await loadNote(path);
+  }
+});
+
+// 关闭/隐藏前尽量把 pending 写盘（窗口关闭被后端改为隐藏，webview 存活，invoke 可完成）。
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushAll();
+});
+window.addEventListener("pagehide", () => flushAll());
+
+/** 当前装载的 piece / 文档被外部删除后的兜底：项目模式 → 切下一片或 NO_PIECE；
+ * 文档模式 → 回到项目或弹切换菜单。不再兜底建时间戳文件。 */
+async function handleActivePieceGone() {
+  if (session.mode === "document") {
+    const gone = session.currentDocument;
+    session.currentDocument = null;
+    if (gone) {
+      session.recentDocuments = session.recentDocuments.filter((p) => p !== gone.path);
+      await setRecentDocuments(session.recentDocuments);
+    }
+    if (session.currentProject) {
+      try {
+        await openProject(session.currentProject);
+        return;
+      } catch (err) {
+        console.error("return to project failed", err);
+      }
+    }
+    await bootstrapProjects(await getConfig());
+    return;
+  }
+  if (!session.currentProject) return;
+  const remaining = await listPieces(session.currentProject.path).catch(() => []);
+  if (remaining[0]) {
+    session.currentPiece = remaining[0];
+    await openPiece(remaining[0]);
+    renderWindowState({ kind: "LOADED", project: session.currentProject, piece: remaining[0] });
+  } else {
+    session.currentPiece = null;
+    renderWindowState({ kind: "NO_PIECE", project: session.currentProject });
+  }
+  session.surface = "piece";
+  applyView();
+}
+
+function closeMenu() {
+  closeSubmenu();
+  menuEl?.remove();
+  menuEl = null;
+}
+
+/** 收起二级菜单，同步把触发按钮的 aria-expanded 复位。 */
+function closeSubmenu() {
+  if (submenuEl) {
+    submenuEl.remove();
+    submenuEl = null;
+  }
+  if (submenuTrigger) {
+    submenuTrigger.setAttribute("aria-expanded", "false");
+    submenuTrigger = null;
+  }
+}
+
+/** 在 `trigger` 右侧（空间不足则下方）弹出一个二级菜单，`items` 为其条目。
+ * 条目点击后由调用方自行决定是否关闭主菜单。点击子菜单内部不冒泡到主菜单
+ * 的「外部点击关闭」监听；Esc 先收起子菜单。 */
+function openSubmenu(trigger: HTMLElement, items: HTMLElement[]) {
+  closeSubmenu();
+  submenuTrigger = trigger;
+  trigger.setAttribute("aria-expanded", "true");
+
+  const sub = document.createElement("div");
+  sub.className = "switch-submenu";
+  for (const item of items) sub.appendChild(item);
+
+  // 先挂载以测尺寸，再按锚点 + 视口定位。
+  sub.style.visibility = "hidden";
+  document.body.appendChild(sub);
+  const r = trigger.getBoundingClientRect();
+  const w = sub.offsetWidth;
+  const h = sub.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const left = r.right + w > vw ? Math.max(8, r.left - w) : r.right;
+  const top = r.bottom + h > vh ? Math.max(8, r.top - h) : r.bottom;
+  sub.style.left = `${left}px`;
+  sub.style.top = `${top}px`;
+  sub.style.visibility = "";
+
+  // 子菜单内点击不触发主菜单的外部关闭。
+  sub.addEventListener("click", (e) => e.stopPropagation());
+  // Esc：先收起子菜单；不阻止后续事件，主菜单自身不收（保持打开）。
+  sub.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeSubmenu();
+      trigger.focus();
+    }
+  });
+
+  submenuEl = sub;
+
+  // 焦点进子菜单首项，便于键盘操作（Esc 收起、Tab 遍历）。
+  const first = items.find((it) => !(it as HTMLButtonElement).disabled) as HTMLButtonElement | undefined;
+  first?.focus();
+}
+
+/** 构造一个二级菜单条目按钮。`disabled` 时置灰且不响应点击。 */
+const {
+  makeSubmenuItem,
+  sectionHeader,
+  emptySectionHint,
+  makeSwitcherRow,
+  promptRename,
+} = createProjectMenuRenderer({
+  closeMenu,
+  closeSubmenu,
+  openSubmenu,
+  isSubmenuOpenFor: (trigger) => submenuTrigger === trigger,
+});
+
+/** Record a project as most-recently-used and persist the capped MRU list. */
+async function rememberProject(path: string) {
+  session.recentProjects = pushRecent(session.recentProjects, path);
+  await setRecentProjects(session.recentProjects);
+}
+
+/** Record a standalone document as most-recently-used and persist the MRU list. */
+async function rememberDocument(path: string) {
+  session.recentDocuments = pushRecent(session.recentDocuments, path);
+  await setRecentDocuments(session.recentDocuments);
+}
+
+async function openProject(project: ProjectEntry) {
+  // 从文档模式返回项目：按离开项目时记下的开关恢复行动面板。
+  const wasDocument = session.mode === "document";
+  session.mode = "project";
+  session.currentDocument = null;
+  session.currentProject = project;
+  await rememberProject(project.path);
+  const entry = inboxEntry(project);
+  session.currentInbox = { dir: project.path, entry };
+  setProjectLabel(project.name);
+  applyRemoteDoc(await loadNote(entry.path));
+  // 加载第一篇 piece — 不再兜底建时间戳文件；空列表 → NO_PIECE 空态。
+  let pieces: NoteEntry[];
+  try {
+    pieces = await loadFirstPiece();
+  } catch (err) {
+    // 项目目录在打开过程中消失（被外部删除/权限丢失）→ 回到 bootstrap 兜底。
+    console.error("list pieces failed", err);
+    session.currentProject = null;
+    session.currentInbox = null;
+    await bootstrapProjects(await getConfig());
+    return;
+  }
+  const state = resolveOpenProject({ project, pieces });
+  if (state.kind === "LOADED") {
+    await openPiece(state.piece);
+  }
+  renderWindowState(state);
+  tasksPanel.reload();
+  // 文档→项目恢复行动面板：reload 已加载新项目 tasks，setOpen 仅切可见态。
+  // 同模式（项目→项目）时 plan.open === 当前开关，setOpen 的 no-op 守卫不触发副作用。
+  const plan = actionTargetForTransition({
+    from: wasDocument ? "document" : "project",
+    to: "project",
+    currentOpen: tasksPanel.isOpen(),
+    rememberedOpen: session.actionDesiredOpen,
+  });
+  tasksPanel.setOpen(plan.open);
+  applyView();
+  // 发布活动笔记（= 当前项目的 _inbox.md），供独立助手窗 / apply_write 定位。
+  void invoke("set_active_note", { dir: project.path, noteId: entry.name, path: entry.path, kind: "inbox" });
+  assistantHandle.setScope(assistantController.currentScope());
+  // 切换文件监听到新项目目录。
+  void invoke("watch_dir", { dir: project.path });
+}
+
+/** 启动时打开项目：优先 MRU 列表里仍存在的第一个；MRU 为空时扫描工作目录下的
+ * 项目空间。工作目录缺失或不可读则静默降级为 NO_PROJECT（不报错给用户）。MRU 解析
+ * 本身抛错才进 PATH_ERROR。两者都空时进入 NO_PROJECT 欢迎空态（不强制 scaffold）。 */
+async function bootstrapProjects(config: Awaited<ReturnType<typeof getConfig>>) {
+  session.recentProjects = config.recent_projects ?? [];
+  session.recentDocuments = config.recent_documents ?? [];
+  const startDir = config.working_dir ?? "";
+  session.currentStartDir = startDir;
+
+  let recentResolved: ProjectEntry[] = [];
+  let projects: ProjectEntry[] = [];
+  try {
+    recentResolved = await resolveProjects(session.recentProjects);
+  } catch (err) {
+    renderWindowState({ kind: "PATH_ERROR", startDir, error: String(err) });
+    return;
+  }
+  session.recentProjects = recentResolved.map((p) => p.path);
+
+  // MRU 为空时尝试扫描工作目录；工作目录找不到/不可读 → 视为没有工作目录，静默降级。
+  if (recentResolved.length === 0 && startDir) {
+    try {
+      projects = await listProjects(startDir);
+    } catch {
+      // 工作目录不可读：降级到 NO_PROJECT，不向用户暴露"工作目录"概念。
+    }
+  }
+
+  const outcome = resolveBootstrap({ recent: recentResolved, projects, startDir });
+  if (outcome.kind === "OPEN") {
+    await openProject(outcome.project);
+    return;
+  }
+  // NO_PROJECT / PATH_ERROR：terminal 空态，不再自动建项目。
+  renderWindowState(outcome);
+}
+
+/** NO_PROJECT 空态"新建项目"：有工作目录则在目录下直接建默认名项目；无工作目录时
+ * 弹目录选择让用户定位。后端 create_project 会把所选目录记为工作目录，前端镜像到
+ * session.currentStartDir。不预建 piece、不弹输入框——之后可在切换菜单里重命名。 */
+async function createDefaultProject() {
+  let parent = session.currentStartDir;
+  if (!parent) {
+    const picked = await open({ directory: true, multiple: false });
+    if (typeof picked !== "string") return;
+    parent = picked;
+  }
+  const project = await createProject(parent, DEFAULT_PROJECT_NAME);
+  session.currentStartDir = parent;
+  await openProject(project);
+}
+
+/** NO_PROJECT 空态"新建文档"：有工作目录则在目录下直接建；无工作目录时走保存对话框
+ * 让用户选位置（文档不更新工作目录）。载入并聚焦标题栏全选，键入即替换标题。 */
+async function createStandaloneDocument() {
+  const entry = session.currentStartDir
+    ? await createNote(session.currentStartDir, DEFAULT_DOCUMENT_TITLE)
+    : await createDocument();
+  if (!entry) return;
+  await rememberDocument(entry.path);
+  await openDocument(entry);
+  focusPieceTitle();
+}
+
+/** NO_PIECE 空态"新建作品"：默认名建 piece，载入并聚焦标题栏全选。 */
+async function createFirstPiece() {
+  if (!session.currentProject) return;
+  const entry = await createNote(session.currentProject.path, DEFAULT_PIECE_TITLE);
+  await openPiece(entry);
+  renderWindowState({ kind: "LOADED", project: session.currentProject, piece: entry });
+  session.surface = "piece";
+  applyView();
+  focusPieceTitle();
+}
+
+/** 聚焦并全选 piece 标题栏（用于新建后原地改名）。延迟一帧等布局就位。 */
+function focusPieceTitle() {
+  requestAnimationFrame(() => pieceHeader?.focusTitle());
+}
+
+/** PATH_ERROR"重试"：重新跑一次 bootstrap。 */
+async function retryBootstrap() {
+  await bootstrapProjects(await getConfig());
+}
+
+async function showProjectSwitcher(anchor: HTMLElement) {
+  if (menuEl) {
+    closeMenu();
+    return;
+  }
+
+  const [projects, documents] = await Promise.all([
+    resolveProjects(session.recentProjects),
+    resolveDocuments(session.recentDocuments),
+  ]);
+  // 顺手把已不存在的路径从 MRU 里清掉（resolve 已经过滤，这里同步内存列表）。
+  session.recentProjects = projects.map((p) => p.path);
+  session.recentDocuments = documents.map((d) => d.path);
+
+  menuAnchor = anchor;
+  menuEl = document.createElement("div");
+  menuEl.className = "switch-menu";
+  const rect = anchor.getBoundingClientRect();
+  menuEl.style.left = `${rect.left}px`;
+  menuEl.style.top = `${rect.bottom + 2}px`;
+
+  // ── 项目区 ──
+  menuEl.appendChild(
+    sectionHeader("ph-folder", "项目", {
+      ariaLabel: "新建项目",
+      onOpen: (trigger) => openProjectAddSubmenu(trigger),
+    }),
+  );
+  if (projects.length > 0) {
+    for (const project of projects) {
+      menuEl.appendChild(
+        makeSwitcherRow({
+          label: project.name,
+          active: session.mode === "project" && session.currentProject?.path === project.path,
+          onOpen: () => {
+            closeMenu();
+            void openProject(project);
+          },
+          actions: [
+            {
+              label: "重命名",
+              icon: "ph-pencil-simple",
+              onClick: (host) =>
+                void promptRename(host, project.name, async (name) => {
+                  const newPath = await renameProject(project.path, name);
+                  session.recentProjects = session.recentProjects.map((p) => (p === project.path ? newPath : p));
+                  await setRecentProjects(session.recentProjects);
+                  if (session.mode === "project" && session.currentProject?.path === project.path) {
+                    session.currentProject = { name, path: newPath };
+                    setProjectLabel(name);
+                  }
+                }),
+            },
+            {
+              label: "从最近列表移除",
+              icon: "ph-minus-circle",
+              onClick: () => void removeProjectFromRecent(project),
+            },
+            {
+              label: "删除（移到废纸篓）",
+              icon: "ph-trash",
+              danger: true,
+              onClick: () => void deleteProjectFlow(project),
+            },
+          ],
+        }),
+      );
+    }
+  } else {
+    menuEl.appendChild(emptySectionHint("暂无项目"));
+  }
+
+  // ── 文档区 ──
+  menuEl.appendChild(
+    sectionHeader("ph-file", "文档", {
+      ariaLabel: "新建或打开文档",
+      onOpen: (trigger) => openDocumentAddSubmenu(trigger),
+    }),
+  );
+  if (documents.length > 0) {
+    for (const doc of documents) {
+      menuEl.appendChild(
+        makeSwitcherRow({
+          label: doc.name,
+          active: session.mode === "document" && session.currentDocument?.path === doc.path,
+          onOpen: () => {
+            closeMenu();
+            void openDocument(doc);
+          },
+          actions: [
+            {
+              label: "重命名",
+              icon: "ph-pencil-simple",
+              onClick: (host) =>
+                void promptRename(host, doc.name, async (name) => {
+                  const newPath = await renameNote(parentDir(doc.path), doc.name, name);
+                  session.recentDocuments = session.recentDocuments.map((p) => (p === doc.path ? newPath : p));
+                  await setRecentDocuments(session.recentDocuments);
+                  if (session.mode === "document" && session.currentDocument?.path === doc.path) {
+                    session.currentDocument = { name, path: newPath };
+                    setProjectLabel(name);
+                    pieceHeader?.setLabel(name);
+                  }
+                }),
+            },
+            {
+              label: "从最近列表移除",
+              icon: "ph-minus-circle",
+              onClick: () => void removeDocumentFromRecent(doc),
+            },
+            {
+              label: "删除（移到废纸篓）",
+              icon: "ph-trash",
+              danger: true,
+              onClick: () => void deleteDocumentFlow(doc),
+            },
+          ],
+        }),
+      );
+    }
+  } else {
+    menuEl.appendChild(emptySectionHint("暂无文档"));
+  }
+
+  document.body.appendChild(menuEl);
+  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
+}
+
+async function deleteProjectFlow(project: ProjectEntry) {
+  if (!(await confirmDialog(`删除项目「${project.name}」？其下所有文件都会移到废纸篓。`))) return;
+  try {
+    await deleteProject(project.path);
+  } catch (err) {
+    console.error("delete project failed", err);
+    return;
+  }
+  session.recentProjects = session.recentProjects.filter((p) => p !== project.path);
+  await setRecentProjects(session.recentProjects);
+  const wasActive = session.mode === "project" && session.currentProject?.path === project.path;
+  closeMenu();
+  if (wasActive) {
+    session.currentProject = null;
+    session.currentInbox = null;
+    session.currentPiece = null;
+    await bootstrapProjects(await getConfig());
+  }
+}
+
+async function deleteDocumentFlow(doc: NoteEntry) {
+  if (!(await confirmDialog(`删除文档「${doc.name}」？它会被移到废纸篓。`))) return;
+  try {
+    await deleteNote(parentDir(doc.path), doc.name);
+  } catch (err) {
+    console.error("delete document failed", err);
+    return;
+  }
+  session.recentDocuments = session.recentDocuments.filter((p) => p !== doc.path);
+  await setRecentDocuments(session.recentDocuments);
+  const wasActive = session.mode === "document" && session.currentDocument?.path === doc.path;
+  closeMenu();
+  if (wasActive) {
+    session.currentDocument = null;
+    if (session.currentProject) {
+      try {
+        await openProject(session.currentProject);
+        return;
+      } catch (err) {
+        console.error("return to project failed", err);
+      }
+    }
+    await bootstrapProjects(await getConfig());
+  }
+}
+
+/** 从最近列表移除项目（不删磁盘文件、不弹确认）。与 deleteProjectFlow 同构地处理
+ * "移除的是当前打开项"——清状态后回 bootstrap 重定位。被移除的文件夹仍在原地，
+ * 下次「打开现有项目」选同一文件夹即可找回。 */
+async function removeProjectFromRecent(project: ProjectEntry) {
+  session.recentProjects = removeFromRecent(session.recentProjects, project.path);
+  await setRecentProjects(session.recentProjects);
+  const wasActive = session.mode === "project" && session.currentProject?.path === project.path;
+  closeMenu();
+  if (wasActive) {
+    session.currentProject = null;
+    session.currentInbox = null;
+    session.currentPiece = null;
+    await bootstrapProjects(await getConfig());
+  }
+}
+
+/** 从最近列表移除文档（不删磁盘文件、不弹确认）。镜像 removeProjectFromRecent。 */
+async function removeDocumentFromRecent(doc: NoteEntry) {
+  session.recentDocuments = removeFromRecent(session.recentDocuments, doc.path);
+  await setRecentDocuments(session.recentDocuments);
+  const wasActive = session.mode === "document" && session.currentDocument?.path === doc.path;
+  closeMenu();
+  if (wasActive) {
+    session.currentDocument = null;
+    if (session.currentProject) {
+      try {
+        await openProject(session.currentProject);
+        return;
+      } catch (err) {
+        console.error("return to project failed", err);
+      }
+    }
+    await bootstrapProjects(await getConfig());
+  }
+}
+
+/** 「打开现有项目」：选一个已有文件夹；后端无 `_inbox.md` 则自动建空 Inbox，
+ * 再加入 MRU 并打开。working_dir 由后端落盘为该文件夹父目录，前端镜像到
+ * session.currentStartDir 使后续「在当前目录新建」指向新父目录。 */
+async function openExistingProjectFlow() {
+  const picked = await open({ directory: true, multiple: false });
+  if (typeof picked !== "string") return;
+  try {
+    const project = await openExistingProject(picked);
+    session.currentStartDir = parentDir(project.path);
+    await rememberProject(project.path);
+    await openProject(project);
+  } catch (err) {
+    console.error("open existing project failed", err);
+    showToast("无法打开该文件夹：" + String(err));
+  }
+}
+
+/** 在锚点（项目名按钮）下方重建一个空的最小浮层，用于承载命名输入框。
+ * 用于「选择位置新建」等会弹原生对话框、可能令主菜单已被外点击关闭的场景。 */
+function rebuildMenuAtAnchor(): HTMLElement | null {
+  if (!menuAnchor) return null;
+  const m = document.createElement("div");
+  m.className = "switch-menu";
+  const rect = menuAnchor.getBoundingClientRect();
+  m.style.left = `${rect.left}px`;
+  m.style.top = `${rect.bottom + 2}px`;
+  document.body.appendChild(m);
+  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
+  return m;
+}
+
+/** 收起当前菜单，在锚点处开一个只含命名输入框的最小浮层。 */
+function beginNewProjectName(parent: string) {
+  closeMenu();
+  const m = rebuildMenuAtAnchor();
+  if (!m) return;
+  menuEl = m;
+  promptNewProjectName(m, parent);
+}
+
+/** 项目标题 `+` 的二级菜单：在当前目录新建 / 选择位置新建… */
+function openProjectAddSubmenu(trigger: HTMLButtonElement) {
+  const items = [
+    makeSubmenuItem(`<i class="ph ph-plus"></i> 在当前目录新建`, {
+      disabled: !session.currentProject,
+      onClick: () => {
+        if (!session.currentProject) return;
+        beginNewProjectName(parentDir(session.currentProject.path));
+      },
+    }),
+    makeSubmenuItem(`<i class="ph ph-folder-open"></i> 选择位置新建…`, {
+      onClick: async () => {
+        const picked = await open({ directory: true, multiple: false });
+        const parent = typeof picked === "string" ? picked : null;
+        if (!parent) {
+          closeMenu();
+          return;
+        }
+        beginNewProjectName(parent);
+      },
+    }),
+    makeSubmenuItem(`<i class="ph ph-folder-open"></i> 打开现有项目…`, {
+      onClick: async () => {
+        closeSubmenu();
+        closeMenu();
+        await openExistingProjectFlow();
+      },
+    }),
+  ];
+  openSubmenu(trigger, items);
+}
+
+/** 文档标题 `+` 的二级菜单：新建文档 / 打开 Markdown 文件… */
+function openDocumentAddSubmenu(trigger: HTMLButtonElement) {
+  const items = [
+    makeSubmenuItem(`<i class="ph ph-file-plus"></i> 新建文档…`, {
+      onClick: async () => {
+        closeSubmenu();
+        closeMenu();
+        const doc = await createDocument();
+        if (!doc) return;
+        await rememberDocument(doc.path);
+        await openDocument(doc);
+      },
+    }),
+    makeSubmenuItem(`<i class="ph ph-folder-open"></i> 打开 Markdown 文件…`, {
+      onClick: async () => {
+        closeSubmenu();
+        closeMenu();
+        const doc = await openDocumentFromFile();
+        if (!doc) return;
+        await rememberDocument(doc.path);
+        await openDocument(doc);
+      },
+    }),
+  ];
+  openSubmenu(trigger, items);
+}
+
+/** Replace `host` (a menu item) — or append to it, if it is the menu — with an
+ * inline input that creates a project under `parent` on Enter. */
+function promptNewProjectName(host: HTMLElement, parent: string) {
+  const input = document.createElement("input");
+  input.className = "switch-new-input";
+  input.placeholder = "项目名称";
+  if (host === menuEl) host.appendChild(input);
+  else host.replaceWith(input);
+  input.focus();
+  // 阻止"点击外部关闭"在自己的输入框上触发。
+  input.addEventListener("click", (e) => e.stopPropagation());
+
+  let submitting = false;
+  async function confirm() {
+    if (submitting) return;
+    const name = input.value.trim();
+    if (!name) {
+      closeMenu();
+      return;
+    }
+    submitting = true;
+    const project = await createProject(parent, name);
+    // 后端 create_project 已把 working_dir 落盘为 parent；同步内存镜像，使后续
+    // 新建项目/文档默认落在同一目录（"在当前目录新建" 与 "选择位置新建" 共用此路径）。
+    session.currentStartDir = parent;
+    closeMenu();
+    await openProject(project);
+  }
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); void confirm(); }
+    if (e.key === "Escape") { e.preventDefault(); closeMenu(); }
+  });
+}
+
+renderTopbar(document.querySelector("#topbar-root")!, {
+  onToggleProjects: (anchor) => {
+    void showProjectSwitcher(anchor);
+  },
+  onSelectView: (view) => {
+    selectView(view);
+  },
+  onToggleTasks: () => tasksPanel.toggle(),
+});
+
+// #piece-doc-header 已在 app.innerHTML 中就位，挂载文档头到「写作」栏顶部。
+mountPieceHeader();
+
+// 标题栏（第一行）：左侧留给系统红绿灯、可拖拽，最右端助手 icon。
+renderTitlebar(document.querySelector("#titlebar-root")!, {
+  // 单击：开/关整个助手。
+  onAssistantToggle: async () => {
+    await toggleAssistantFromChrome();
+  },
+});
+
+// resize 过渡门控：连续拖拽（事件间隔 <120ms）时关掉过渡保证不卡顿；
+// 离散跳变（双击标题栏放大、开关助手）是孤立事件，保留过渡 → 平滑动画。
+let lastResize = 0;
+let resizeSettle: number | undefined;
+window.addEventListener("resize", () => {
+  const now = performance.now();
+  const continuous = now - lastResize < 120;
+  lastResize = now;
+  noteBody.classList.toggle("resizing", continuous);
+  layoutController?.apply();
+  applyView();
+  tasksPanel.syncLayout();
+  if (resizeSettle) clearTimeout(resizeSettle);
+  resizeSettle = window.setTimeout(() => noteBody.classList.remove("resizing"), 180);
+});
+
+async function init() {
+  const config = await getConfig();
+  applyFontSize(config.font_size);
+  session.pieceOutlineDefault = config.piece_outline_default ?? false;
+  applyPieceOutlineMode(session.pieceOutlineDefault);
+  await bootstrapProjects(config);
+
+  const assistant = await invoke<{ open: boolean }>("get_assistant_state");
+  layoutController = createLayoutController(app, { assistantOpen: assistant.open });
+  layoutController.apply();
+  applyView();
+
+  // ── 窗内快捷键 ──
+  let uninstallShortcuts: (() => void) | null = null;
+
+  async function loadShortcuts() {
+    const ws = await invoke<Record<WindowShortcutId, string>>("get_window_shortcuts");
+    const values: Record<WindowShortcutId, string> = { ...WINDOW_SHORTCUT_DEFAULTS, ...ws };
+    const bindings = buildBindings(values);
+    if (uninstallShortcuts) uninstallShortcuts();
+    uninstallShortcuts = installShortcuts(actions, bindings);
+  }
+
+  const actions: ShortcutActions = {
+    toggleAssistant: async () => {
+      await toggleAssistantFromChrome();
+    },
+    toggleAssistantBubble: async () => {
+      const cur = await invoke<{ open: boolean }>("get_assistant_state");
+      if (!cur.open) {
+        const next = await invoke<{ open: boolean }>("toggle_assistant");
+        layoutController?.setAssistantOpen(next.open);
+        tasksPanel.syncLayout();
+        assistantHandle.setInputOpen(true);
+      } else {
+        assistantHandle.setInputOpen(!assistantHandle.isInputOpen());
+      }
+    },
+    toggleActionPanel: () => tasksPanel.toggle(),
+    quickAddAction: () => tasksPanel.quickAdd(),
+    selectView: (v) => selectView(v),
+    startNewConversation: async () => {
+      const cur = await invoke<{ open: boolean }>("get_assistant_state");
+      if (!cur.open) {
+        const next = await invoke<{ open: boolean }>("toggle_assistant");
+        layoutController?.setAssistantOpen(next.open);
+        tasksPanel.syncLayout();
+      }
+      assistantHandle.startNewConversation();
+    },
+    isAssistantStreaming: () => assistantHandle.isStreaming(),
+    cancelAssistant: () => assistantHandle.cancel(),
+    isActionPanelOpen: () => tasksPanel.isOpen(),
+    closeActionPanel: () => tasksPanel.setOpen(false),
+    isAssistantBubbleOpen: () => assistantHandle.isInputOpen(),
+    collapseAssistantBubble: () => assistantHandle.setInputOpen(false),
+    isHistoryPopoverOpen: () => assistantHandle.isHistoryPopoverOpen(),
+    closeHistoryPopover: () => assistantHandle.closeHistoryPopover(),
+    isPermissionBubbleOpen: () => assistantHandle.isPermissionBubbleOpen(),
+    closePermissionBubble: () => assistantHandle.closePermissionBubble(),
+    isSkillMenuOpen: () => assistantHandle.isSkillMenuOpen(),
+    closeSkillMenu: () => assistantHandle.closeSkillMenu(),
+    isMentionMenuOpen: () => assistantHandle.isMentionMenuOpen(),
+    closeMentionMenu: () => assistantHandle.closeMentionMenu(),
+    canSplit: () => canSplit(window.innerWidth),
+    bumpFont,
+  };
+
+  await loadShortcuts();
+  await listen("window-shortcuts-changed", () => { void loadShortcuts(); });
+
+  // 检查 sidecar 启动状态：若有错误，在助手面板显示提示。
+  const agentStatus = await invoke<{ ready: boolean; error: string | null }>("get_agent_status");
+  if (agentStatus.error) {
+    assistantHandle.showError(agentStatus.error);
+  }
+}
+
+void init();
+
+attachQuoteCapture(editor);
+attachAutomationToasts();
+
+}
+

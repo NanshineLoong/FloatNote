@@ -147,5 +147,5 @@ mod tests {
         purge(dir.path(), "other").unwrap();
     }
 
-    use crate::testutil::{tempdir, TempDir};
+    use crate::testutil::tempdir;
 }
