@@ -1,9 +1,10 @@
 import type { ChatScope } from "../note/chat-history";
+import { createDockDropdown } from "./dock-dropdown.js";
 
 /**
  * Mention picker：输入框任意位置输入 `@` → 弹出当前作用域内文件下拉。
  *
- * 镜像 `skill-picker.ts` 的下拉范式：挂在 `.assistant-dock`（input-wrap 兄弟，
+ * 下拉生命周期复用 `dock-dropdown.ts`（挂在 `.assistant-dock`：input-wrap 兄弟，
  * 避开其 overflow:hidden）+ `[hidden]` 切换 + `replaceChildren` + 外点关闭。
  *
  * 选中后把 `@query` 段替换为 `@<name> `（纯文本提及，不改 sidecar/agent_send 协议）。
@@ -105,10 +106,27 @@ function applyMention(
 export function mountMentionPicker(opts: MentionPickerOptions): MentionPickerHandle {
   const { input, dock, listFiles, getScope, closeSkill } = opts;
   let cache: { scope: ChatScope; files: MentionFile[] } | null = null;
-  let dropdown: HTMLElement | null = null;
-  let open = false;
   // 当前打开下拉时记录的 `@query` 区间；点击选中时用它做替换。每次 openDropdown 更新。
   let activeRange: { start: number; end: number } = { start: 0, end: 0 };
+
+  function close(): void {
+    menu.hide();
+  }
+
+  // 复用共享 dock-dropdown：click 委托 + pointerdown stopPropagation + 外点关闭 + 生命周期。
+  const menu = createDockDropdown({
+    className: "assistant-mention-dropdown",
+    parent: dock,
+    inside: input,
+    selector: "[data-mention-name]",
+    attr: "data-mention-name",
+    onSelect: (name) => {
+      // 替换区间以实时 activeRange 为准（过滤期间会更新）。
+      applyMention(input, name, activeRange.start, activeRange.end);
+      close();
+    },
+    onOutside: close,
+  });
 
   async function ensureFiles(): Promise<MentionFile[] | null> {
     const scope = getScope();
@@ -127,49 +145,25 @@ export function mountMentionPicker(opts: MentionPickerOptions): MentionPickerHan
   }
 
   function openDropdown(files: MentionFile[], query: string, range: { start: number; end: number }): void {
-    if (!dropdown) {
-      dropdown = document.createElement("div");
-      dropdown.className = "assistant-mention-dropdown";
-      dropdown.hidden = true;
-      dropdown.addEventListener("click", (e) => {
-        const target = e.target instanceof Element ? e.target.closest("[data-mention-name]") : null;
-        if (!target) return;
-        const name = target.getAttribute("data-mention-name")!;
-        // 替换区间以实时 activeRange 为准（过滤期间会更新）。
-        applyMention(input, name, activeRange.start, activeRange.end);
-        close();
-      });
-      dropdown.addEventListener("pointerdown", (e) => e.stopPropagation());
-      dock.appendChild(dropdown);
-    }
     activeRange = range;
-    dropdown.replaceChildren(renderFileList(files, query));
-    dropdown.hidden = false;
-    open = true;
-  }
-
-  function closeDropdown(): void {
-    if (dropdown) dropdown.hidden = true;
+    menu.show(renderFileList(files, query));
   }
 
   async function recompute() {
     const range = currentMentionQuery(input);
     if (!range) {
-      closeDropdown();
-      open = false;
+      menu.hide();
       return;
     }
     const files = await ensureFiles();
     if (!files || files.length === 0) {
-      closeDropdown();
-      open = false;
+      menu.hide();
       return;
     }
     // 异步拉取期间 `@query` 可能已变，重新校验区间。
     const latest = currentMentionQuery(input);
     if (!latest) {
-      closeDropdown();
-      open = false;
+      menu.hide();
       return;
     }
     closeSkill(); // 与 skill 下拉互斥
@@ -189,32 +183,15 @@ export function mountMentionPicker(opts: MentionPickerOptions): MentionPickerHan
   input.addEventListener("input", onInput);
   input.addEventListener("keyup", onKeyup);
 
-  function onDocPointerDown(e: PointerEvent) {
-    if (!open || !dropdown || dropdown.hidden) return;
-    const target = e.target;
-    if (target instanceof Node && (dropdown.contains(target) || input.contains(target))) {
-      return;
-    }
-    close();
-  }
-  document.addEventListener("pointerdown", onDocPointerDown);
-
-  function close(): void {
-    closeDropdown();
-    open = false;
-  }
-
   function isOpen(): boolean {
-    return dropdown !== null && !dropdown.hidden;
+    return menu.isOpen();
   }
 
   function destroy(): void {
     close();
     input.removeEventListener("input", onInput);
     input.removeEventListener("keyup", onKeyup);
-    document.removeEventListener("pointerdown", onDocPointerDown);
-    dropdown?.remove();
-    dropdown = null;
+    menu.destroy();
   }
 
   return { destroy, isOpen, close };

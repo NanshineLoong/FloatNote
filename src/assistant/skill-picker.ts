@@ -1,12 +1,13 @@
 import { closeFloating, floatMenuAnchored } from "../note/tags/floating.js";
+import { createDockDropdown } from "./dock-dropdown.js";
 
 /**
  * Skill picker：两种显式入口（spec §4.3）。
  *
  * - 右键 Socrates 小人 → 锚定到小人的 skill 菜单（`floatMenuAnchored`：收起态开在
  *   小人左上方、展开态开在右上方，自带 flip+clamp）。选中后立即展开输入框。
- * - 输入框行首输入 `/` → 在 `.assistant-dock` 上弹出过滤下拉（镜像 assistant.ts 的
- *   history popover：`[hidden]` 切换 + `replaceChildren`，挂在 input-wrap 的兄弟节点
+ * - 输入框行首输入 `/` → 在 `.assistant-dock` 上弹出过滤下拉。下拉生命周期复用
+ *   `dock-dropdown.ts`（`[hidden]` 切换 + `replaceChildren`，挂在 input-wrap 的兄弟节点
  *   以避开其 overflow:hidden）。
  *
  * 选中后把输入框置为 `/skill:<name> ` 前缀，由 Pi 的 `session.prompt` 原生展开。
@@ -87,7 +88,6 @@ function applySkill(input: HTMLTextAreaElement, name: string): void {
 export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
   const { bot, input, inputWrap, listSkills, openInput, closeMention } = opts;
   let cache: SkillSummary[] | null = null;
-  let dropdown: HTMLElement | null = null;
   let open = false;
 
   async function ensureSkills(): Promise<SkillSummary[]> {
@@ -140,49 +140,49 @@ export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
     return rest;
   }
 
-  function openDropdown(skills: SkillSummary[], query: string): void {
-    if (!dropdown) {
-      dropdown = document.createElement("div");
-      dropdown.className = "assistant-skill-dropdown";
-      dropdown.hidden = true;
-      dropdown.addEventListener("click", (e) => {
-        const target = e.target instanceof Element ? e.target.closest("[data-skill-name]") : null;
-        if (!target) return;
-        const name = target.getAttribute("data-skill-name")!;
-        applySkill(input, name);
-        close();
-      });
-      // 下拉内部 pointerdown 不冒泡，避免触发外点关闭与 assistant 的 onDocumentPointerDown。
-      dropdown.addEventListener("pointerdown", (e) => e.stopPropagation());
-      // 挂到 .assistant-dock（input-wrap 的父节点）而非 input-wrap 内部：input-wrap 有
-      // overflow:hidden（用于输入框滑入动画），下拉用 bottom:calc(100%+6px) 定位在其外侧
-      // 上方，挂内部会被裁掉看不见。历史浮层同理挂在 dock 上（assistant.ts 的 history popover）。
-      inputWrap.parentElement?.appendChild(dropdown);
-    }
-    dropdown.replaceChildren(renderSkillList(skills, query));
-    dropdown.hidden = false;
-    open = true;
+  function close(): void {
+    closeFloating();
+    menu.hide();
+    open = false;
   }
 
-  function closeDropdown(): void {
-    if (dropdown) dropdown.hidden = true;
+  // 复用共享 dock-dropdown：click 委托 + pointerdown stopPropagation + 外点关闭 + 生命周期。
+  // 挂到 .assistant-dock（input-wrap 的父节点）而非 input-wrap 内部：input-wrap 有
+  // overflow:hidden（用于输入框滑入动画），下拉用 bottom:calc(100%+6px) 定位在其外侧
+  // 上方，挂内部会被裁掉看不见。历史浮层同理挂在 dock 上（assistant.ts 的 history popover）。
+  const menu = createDockDropdown({
+    className: "assistant-skill-dropdown",
+    parent: inputWrap.parentElement,
+    inside: input,
+    selector: "[data-skill-name]",
+    attr: "data-skill-name",
+    onSelect: (name) => {
+      applySkill(input, name);
+      close();
+    },
+    onOutside: close,
+  });
+
+  function openDropdown(skills: SkillSummary[], query: string): void {
+    menu.show(renderSkillList(skills, query));
+    open = true;
   }
 
   async function onInput() {
     const query = currentSlashQuery();
     if (query === null) {
-      closeDropdown();
+      menu.hide();
       if (!isMenuFloating()) open = false;
       return;
     }
     const skills = await ensureSkills();
     if (skills.length === 0) {
-      closeDropdown();
+      menu.hide();
       return;
     }
     // 输入期间 `/query` 可能已变（异步拉取），重新校验。
     if (currentSlashQuery() === null) {
-      closeDropdown();
+      menu.hide();
       return;
     }
     closeMention?.(); // 与 mention 下拉互斥
@@ -191,38 +191,19 @@ export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
 
   input.addEventListener("input", onInput);
 
-  // 下拉打开时，点下拉/输入框以外的地方关闭。
-  function onDocPointerDown(e: PointerEvent) {
-    if (!open || !dropdown || dropdown.hidden) return;
-    const target = e.target;
-    if (target instanceof Node && (dropdown.contains(target) || input.contains(target))) {
-      return;
-    }
-    close();
-  }
-  document.addEventListener("pointerdown", onDocPointerDown);
-
   function isMenuFloating(): boolean {
     return document.querySelector(".assistant-skill-menu.tag-floating") !== null;
   }
 
-  function close(): void {
-    closeFloating();
-    closeDropdown();
-    open = false;
-  }
-
   function isOpen(): boolean {
-    return open || isMenuFloating() || (dropdown !== null && !dropdown.hidden);
+    return open || isMenuFloating() || menu.isOpen();
   }
 
   function destroy(): void {
     close();
     bot.removeEventListener("contextmenu", onContextMenu);
     input.removeEventListener("input", onInput);
-    document.removeEventListener("pointerdown", onDocPointerDown);
-    dropdown?.remove();
-    dropdown = null;
+    menu.destroy();
   }
 
   return { destroy, isOpen, close };
