@@ -5,7 +5,8 @@ import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemi
 import type { Extension } from "@codemirror/state";
 import { EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { livePreview, attachImageToolbar, setNoteDir } from "./preview";
+import { livePreview, setNoteDir } from "./preview";
+import { attachImageToolbar } from "./image-toolbar";
 import { listKeymap } from "./list-keymap";
 import { tableKeymap } from "./table-keymap";
 import { htmlPasteHandler, imagePasteHandler } from "./paste";

@@ -71,6 +71,12 @@ export async function getConfig(): Promise<Config> {
   return invoke<Config>("get_config");
 }
 
+/** Patch config fields without touching the rest (read-merge-write). */
+export async function updateConfig(patch: Partial<Config>): Promise<void> {
+  const config = await getConfig();
+  await invoke("set_config", { newConfig: { ...config, ...patch } });
+}
+
 export async function listNotes(dir: string): Promise<NoteEntry[]> {
   return invoke<NoteEntry[]>("list_notes", { dir });
 }
@@ -98,14 +104,12 @@ export async function resolveProjects(paths: string[]): Promise<ProjectEntry[]> 
 
 /** Persist the recent-projects MRU list (without touching other config). */
 export async function setRecentProjects(recent: string[]): Promise<void> {
-  const config = await getConfig();
-  await invoke("set_config", { newConfig: { ...config, recent_projects: recent } });
+  await updateConfig({ recent_projects: recent });
 }
 
 /** Persist the recent-documents MRU list (without touching other config). */
 export async function setRecentDocuments(recent: string[]): Promise<void> {
-  const config = await getConfig();
-  await invoke("set_config", { newConfig: { ...config, recent_documents: recent } });
+  await updateConfig({ recent_documents: recent });
 }
 
 export async function createProject(root: string, name: string): Promise<ProjectEntry> {

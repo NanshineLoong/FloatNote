@@ -33,6 +33,14 @@ export function iconCacheStateKey(
   return "empty";
 }
 
+/** Decorator state key for a quote-card's app icon (`"none"` when no bundleId).
+ *  Encapsulates the cache lookups so `iconCache`/`iconFailureAt` stay private. */
+export function iconStateKeyFor(bundleId: string | null | undefined): string {
+  if (!bundleId) return "none";
+  const cached = iconCache.get(bundleId);
+  return iconCacheStateKey(cached !== undefined, cached, iconFailureAt.get(bundleId));
+}
+
 function dispatchIconReady(): void {
   const v = iconView;
   if (v) queueMicrotask(() => v.dispatch({ effects: IconReadyEffect.of(0) }));
@@ -92,5 +100,3 @@ export function ensureIcon(view: EditorView, bundleId: string): string | null {
     });
   return null;
 }
-
-export { iconCache, iconFailureAt };

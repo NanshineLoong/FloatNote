@@ -7,6 +7,18 @@ import { parseImage, type ImageAlign } from "../image-attrs";
 import { imageSrc } from "../image-fs";
 import { ensureIcon } from "./icons";
 
+/** Wire an `<a>` to open `url` via the `open_url` Tauri command: set the real
+ *  href (for status-bar/aria) and intercept click so the webview doesn't try
+ *  (it blocks external navigation by default). Caller sets class/text/title. */
+function wireOpenUrlLink(a: HTMLAnchorElement, url: string): void {
+  a.href = url;
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void invoke("open_url", { url });
+  });
+}
+
 class BulletWidget extends WidgetType {
   toDOM(): HTMLElement {
     const span = document.createElement("span");
@@ -101,14 +113,7 @@ class LinkWidget extends WidgetType {
     a.className = "cm-preview-link";
     a.textContent = this.text;
     a.title = this.url;
-    // Real href for status-bar/aria; navigation is routed through `open_url`
-    // because the webview blocks external navigation by default.
-    a.href = this.url;
-    a.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      void invoke("open_url", { url: this.url });
-    });
+    wireOpenUrlLink(a, this.url);
     return a;
   }
   // Eat clicks on the link so the editor doesn't drop the cursor onto the raw
@@ -249,17 +254,9 @@ class QuoteCardWidget extends WidgetType {
       if (c.kind === "web" && c.url) {
         const a = document.createElement("a");
         a.className = "cm-quote-card-link";
-        // Real href for status-bar/aria; navigation is blocked in the click
-        // handler and routed through the `open_url` Tauri command (the webview
-        // blocks external navigation by default).
-        a.href = c.url;
         a.title = `${c.title}\n${c.url}`;
         a.textContent = c.title;
-        a.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          void invoke("open_url", { url: c.url });
-        });
+        wireOpenUrlLink(a, c.url);
         span.appendChild(a);
       } else {
         const s = document.createElement("span");

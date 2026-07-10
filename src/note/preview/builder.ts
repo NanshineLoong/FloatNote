@@ -15,7 +15,7 @@ import { isSafeUrl } from "../inline";
 import { stripTagMarker } from "@floatnote/note-logic";
 import { olOrdinal } from "../list-indent";
 import { outlineStateField } from "../outline-mode";
-import { IconReadyEffect, iconCache, iconFailureAt, iconCacheStateKey } from "./icons";
+import { IconReadyEffect, iconStateKeyFor } from "./icons";
 import {
   BulletWidget,
   OlNumberWidget,
@@ -494,10 +494,7 @@ function buildDecorations(state: EditorState): DecorationSet {
         const lastLine = doc.line(lastLineNo);
         const blockText = doc.sliceString(titleLine.from, lastLine.to);
         const bundleId = readBidMarker(blockText);
-        const cachedIcon = bundleId ? iconCache.get(bundleId) : undefined;
-        const iconStateKey = bundleId
-          ? iconCacheStateKey(iconCache.has(bundleId), cachedIcon, iconFailureAt.get(bundleId))
-          : "none";
+        const iconStateKey = iconStateKeyFor(bundleId);
         entries.push({
           from: chipStart,
           to: chipStart + chipsStr.length,

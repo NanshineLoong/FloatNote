@@ -3,4 +3,3 @@
 export { livePreview, previewField, rangeTouchesSelection } from "./builder";
 export { setNoteDir } from "./widgets";
 export { iconCacheStateKey, shouldRetryMissingIcon } from "./icons";
-export { attachImageToolbar } from "../image-toolbar";
