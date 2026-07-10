@@ -71,10 +71,11 @@ export function createMenu(opts: MenuOptions = {}): MenuHandle {
       hide();
       onOutside?.();
     };
-    setTimeout(
-      () => document.addEventListener("pointerdown", outsideBound!, { once: true }),
-      0,
-    );
+    // Keep the listener armed until an actual outside interaction. A submenu is
+    // body-hosted, so clicking it does not bubble through `el`; using `{ once:
+    // true }` would consume the listener on that valid inside interaction and
+    // leave the parent menu unable to close afterwards.
+    setTimeout(() => document.addEventListener("pointerdown", outsideBound!), 0);
   }
 
   function clamp(left: number, top: number): { left: number; top: number } {

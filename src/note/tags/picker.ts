@@ -26,8 +26,7 @@ export function openBlockTagMenu(
   const map = parseDefs(doc);
   const currentId = blockTagId(doc.slice(range.from, range.to));
 
-  // createMenu 当容器（.fn-menu，与原 .switch-menu 同构）；tag-picker 类加到
-  // handle.el 保留 .tag-picker .switch-item.active 等祖先选择器样式。
+  // Shared `.fn-menu` owns the surface; `tag-picker` adds tag-specific layout.
   const handle = createMenu();
   handle.el.classList.add("tag-picker", "tag-block-menu");
   const close = (): void => handle.hide();
@@ -40,7 +39,7 @@ export function openBlockTagMenu(
 
   const clear = document.createElement("button");
   clear.type = "button";
-  clear.className = "switch-item tag-picker-clear";
+  clear.className = "fn-menu__item tag-picker-clear";
   if (currentId === null) clear.classList.add("active");
   clear.innerHTML = `<i class="ph ph-x"></i> 无标签`;
   clear.onclick = () => {
@@ -52,7 +51,7 @@ export function openBlockTagMenu(
   for (const def of map.values()) {
     const item = document.createElement("button");
     item.type = "button";
-    item.className = "switch-item tag-picker-item";
+    item.className = "fn-menu__item tag-picker-item";
     if (def.id === currentId) item.classList.add("active");
     const dot = document.createElement("span");
     dot.className = "tag-disc tag-disc-sm";
@@ -69,7 +68,7 @@ export function openBlockTagMenu(
 
   const createToggle = document.createElement("button");
   createToggle.type = "button";
-  createToggle.className = "switch-item tag-create-toggle";
+  createToggle.className = "fn-menu__item tag-create-toggle";
   createToggle.innerHTML = `<i class="ph ph-plus"></i> 新建标签`;
   const divider = document.createElement("div");
   divider.className = "tag-menu-divider";
@@ -81,7 +80,7 @@ export function openBlockTagMenu(
 
   const del = document.createElement("button");
   del.type = "button";
-  del.className = "switch-item tag-context-delete";
+  del.className = "fn-menu__item fn-menu__item--danger tag-context-delete";
   del.innerHTML = `<i class="ph ph-trash"></i> 删除`;
   del.onclick = () => {
     close();
@@ -125,7 +124,7 @@ function buildCreateForm(view: EditorView, range: BlockRange, close: () => void)
   form.appendChild(swatchRow);
 
   const input = document.createElement("input");
-  input.className = "tag-add-input";
+  input.className = "fn-control tag-add-input";
   input.type = "text";
   input.placeholder = firstAvailable ? "标签名" : "颜色已用完";
   input.maxLength = 24;

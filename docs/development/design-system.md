@@ -53,10 +53,11 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 |---|---|---|---|
 | Button | `button.ts` | `.fn-btn[--primary/--secondary/--ghost/--danger/--sm/--icon]`、`.is-on/:disabled` | `.icon-btn`、`.popup-btn*`、`.settings-btn-*`、`.history-icon-btn`、`.empty-state-btn` |
 | Icon | `icon.ts` | `.fn-icon` | Phosphor 字形 + `action-card.ts` 内联 SVG |
-| Menu | `menu.ts` | `.fn-menu[__item/--danger/__separator/__submenu]` | `floating-menu.ts` + `dock-dropdown.ts` + `project-menu-render.ts` 子菜单 |
+| Menu | `menu.ts` | `.fn-menu[__item/--danger/__separator/__submenu]` | `floating-menu.ts` + block 操作菜单 + `project-menu-render.ts` 子菜单 |
+| Popover | `components.css` | `.fn-popover` | assistant history / skill / mention 下拉的共同表面 |
 | Scrollbar | `scrollbar.ts` | `.fn-scroll__thumb[.is-visible]` | 原 note-only `.scroll-thumb`，推广到 history/assistant |
 | Form control | `components.css` | `.fn-control` | settings 的 text/password/select 与 assistant 输入框 |
-| EmptyState | `empty-state.ts` | `.fn-empty*`（旧 `.empty-state-*` 暂保留别名） | `popup.html` 手写 `#popup-empty` |
+| EmptyState | `empty-state.ts` | `.fn-empty*` + `.fn-btn*` actions | 笔记窗口全页 `NO_PROJECT` / `PATH_ERROR` / `NO_PIECE` |
 
 组件按阶段增量接线：Phase 0 修组件（`createButton` iconOnly、`createMenu` 子菜单 Escape/焦点/互斥单浮层）→ icon → button → menu。窗口样式迁移到 `fn-` 类与 token。`src/note/empty-state.ts`、`src/note/scrollbar.ts` 已改为 `src/shared/ui/` 的 re-export，调用方不变。OS 级确认继续用原生 Tauri `confirm`（`notes-state.ts`），不引入 in-DOM modal。
 
@@ -68,7 +69,8 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 - ✅ 历史窗口：工具栏/删除/加载更多切到 `createButton`，清理时间菜单切到 `createMenu`；移除 `.history-icon-btn` / `.history-clear-options` 重复样式。
 - ✅ 弹窗：采集操作切到 `createButton`，移除 `.popup-btn*` 手写按钮体系。
 - ✅ 设置与助手：设置页原生 text/password/select、助手输入框切到 `.fn-control`；助手的新对话与历史入口切到 `createButton`。
-- ⏳ 后续（阶段二）：继续逐调用点切到 `createMenu`/`createButton`/`createIcon`，重点收敛笔记窗口遗留 `.switch-menu` / `.switch-item`、`.icon-btn` 与 EmptyState 的旧别名。
+- ✅ 阶段二（第一批）：笔记窗口的项目/成品/版本/标签/块操作菜单统一 `.fn-menu` / `.fn-menu__item`；全页 EmptyState 统一 `.fn-empty*` 与 `.fn-btn*` actions；assistant 的 history / skill / mention 下拉复用 `.fn-popover` 表面。`createMenu` 外点监听修复为在子菜单交互后仍保持有效，并有回归测试。
+- ⏳ 后续：继续逐调用点切到 `createButton`/`createIcon`，重点收敛笔记窗口遗留 `.icon-btn`；任务面板菜单与编辑器专属控件需保留其定位、拖拽或 CodeMirror 交互，再按行为抽取。
 - 守卫：`src/styles/tokens.test.ts` 断言窗口 CSS 无残留 accent/danger rgba、无 per-window dark `@media` 块、danger 语义 token 存在、组件层不裸用 primitives。
 
 ## 跨平台注记

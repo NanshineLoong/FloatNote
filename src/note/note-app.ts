@@ -826,7 +826,6 @@ async function showProjectSwitcher(anchor: HTMLElement) {
 
   menuAnchor = anchor;
   const handle = createMenu({ onOutside: () => { menuEl = null; } });
-  handle.el.classList.add("switch-menu");
   const items: HTMLElement[] = [];
 
   // ── 项目区 ──
@@ -1041,7 +1040,6 @@ async function openExistingProjectFlow() {
 function rebuildMenuAtAnchor(): MenuHandle | null {
   if (!menuAnchor) return null;
   const handle = createMenu({ onOutside: () => { menuEl = null; } });
-  handle.el.classList.add("switch-menu");
   const rect = menuAnchor.getBoundingClientRect();
   handle.showAt(rect.left, rect.bottom + 2, []);
   return handle;
@@ -1119,7 +1117,7 @@ function openDocumentAddSubmenu(trigger: HTMLButtonElement) {
  * inline input that creates a project under `parent` on Enter. */
 function promptNewProjectName(host: HTMLElement, parent: string) {
   const input = document.createElement("input");
-  input.className = "switch-new-input";
+  input.className = "fn-control switch-new-input";
   input.placeholder = "项目名称";
   if (host === menuEl?.el) host.appendChild(input);
   else host.replaceWith(input);

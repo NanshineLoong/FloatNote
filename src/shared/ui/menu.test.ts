@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { createMenu } from "./menu";
 
 /** createMenu 内部用 el.getBoundingClientRect() 读菜单尺寸来 clamp，jsdom 不布局故 spy。 */
@@ -12,6 +12,7 @@ const original = { iw: window.innerWidth, ih: window.innerHeight };
 const handles: Array<ReturnType<typeof createMenu>> = [];
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const h of handles) h.destroy();
   handles.length = 0;
   Object.defineProperty(window, "innerWidth", { value: original.iw, writable: true, configurable: true });
@@ -32,6 +33,27 @@ describe("createMenu showAt clamp", () => {
     expect(top + 280).toBeLessThanOrEqual(520);
     expect(left).toBeGreaterThanOrEqual(0);
     expect(top).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("createMenu outside-close lifecycle", () => {
+  it("stays armed after a submenu click and closes on the next outside click", () => {
+    vi.useFakeTimers();
+    const handle = createMenu();
+    handles.push(handle);
+    const trigger = document.createElement("button");
+    const submenuItem = document.createElement("button");
+    document.body.appendChild(trigger);
+    handle.show(document.createElement("button"));
+    handle.openSubmenu(trigger, [submenuItem]);
+    vi.runAllTimers();
+
+    submenuItem.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    expect(handle.isOpen()).toBe(true);
+
+    document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    expect(handle.isOpen()).toBe(false);
+    trigger.remove();
   });
 });
 

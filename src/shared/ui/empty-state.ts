@@ -9,9 +9,8 @@
  * The DOM wiring is trivial and covered by手测; the string shape is covered by
  * `empty-state.test.ts`, matching the repo's all-pure test style.
  *
- * Promoted from `src/note/empty-state.ts` (now a re-export) so the popup window
- * can reuse it. Class names `.empty-state-*` are kept this round for test
- * stability; `.fn-empty*` in `components.css` is the future contract.
+ * Promoted from `src/note/empty-state.ts` (now a re-export) so all windows can
+ * use the same `.fn-empty*` contract from `components.css`.
  */
 
 import { escapeHtml } from "../escape";
@@ -36,28 +35,28 @@ export interface EmptyStateProps {
 /** Build the inner HTML for an empty-state card. Pure: no DOM, no I/O. */
 export function emptyStateMarkup(props: EmptyStateProps): string {
   const icon = props.icon
-    ? `<div class="empty-state-icon">${escapeHtml(props.icon)}</div>`
+    ? `<div class="fn-empty__icon">${escapeHtml(props.icon)}</div>`
     : "";
   const hint = props.hint
-    ? `<p class="empty-state-hint">${escapeHtml(props.hint)}</p>`
+    ? `<p class="fn-empty__hint">${escapeHtml(props.hint)}</p>`
     : "";
   const primary = props.primary
-    ? `<button class="empty-state-btn primary" data-action="primary">${escapeHtml(
+    ? `<button class="fn-btn fn-btn--primary" data-action="primary">${escapeHtml(
         props.primary.label,
       )}</button>`
     : "";
   const secondary = props.secondary
-    ? `<button class="empty-state-btn secondary" data-action="secondary">${escapeHtml(
+    ? `<button class="fn-btn fn-btn--secondary" data-action="secondary">${escapeHtml(
         props.secondary.label,
       )}</button>`
     : "";
   const tertiary = props.tertiary
-    ? `<button class="empty-state-btn secondary" data-action="tertiary">${escapeHtml(
+    ? `<button class="fn-btn fn-btn--secondary" data-action="tertiary">${escapeHtml(
         props.tertiary.label,
       )}</button>`
     : "";
-  const actions = primary || secondary || tertiary ? `<div class="empty-state-actions">${primary}${secondary}${tertiary}</div>` : "";
-  return `${icon}<h2 class="empty-state-title">${escapeHtml(
+  const actions = primary || secondary || tertiary ? `<div class="fn-empty__actions">${primary}${secondary}${tertiary}</div>` : "";
+  return `${icon}<h2 class="fn-empty__title">${escapeHtml(
     props.title,
   )}</h2>${hint}${actions}`;
 }
@@ -70,9 +69,9 @@ export function renderEmptyState(
   props: EmptyStateProps,
 ): () => void {
   target.innerHTML = "";
-  target.classList.add("empty-state");
+  target.classList.add("fn-empty");
   const inner = document.createElement("div");
-  inner.className = "empty-state-inner";
+  inner.className = "fn-empty__content";
   inner.innerHTML = emptyStateMarkup(props);
   const wire = (action: "primary" | "secondary" | "tertiary") => {
     const btn = inner.querySelector<HTMLButtonElement>(
@@ -85,7 +84,7 @@ export function renderEmptyState(
   wire("tertiary");
   target.appendChild(inner);
   return () => {
-    target.classList.remove("empty-state");
+    target.classList.remove("fn-empty");
     target.innerHTML = "";
   };
 }

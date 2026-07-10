@@ -117,7 +117,7 @@ function openContextMenu(view: EditorView, def: TagDef, x: number, y: number): v
   const close = (): void => handle.hide();
 
   const input = document.createElement("input");
-  input.className = "tag-add-input";
+  input.className = "fn-control tag-add-input";
   input.type = "text";
   input.value = def.name;
   input.maxLength = 24;
@@ -163,7 +163,7 @@ function openContextMenu(view: EditorView, def: TagDef, x: number, y: number): v
 
   const del = document.createElement("button");
   del.type = "button";
-  del.className = "switch-item tag-context-delete";
+  del.className = "fn-menu__item fn-menu__item--danger tag-context-delete";
   del.innerHTML = `<i class="ph ph-trash"></i> 删除`;
   del.onclick = () => {
     const doc = view.state.doc.toString();

@@ -220,12 +220,11 @@ export function createPieceHeader(args: {
     if (!host.current()) return;
     const entries = await host.loadVersions();
     const handle = createMenu({ anchor: versionBtn, placement: "down-right" });
-    handle.el.classList.add("version-menu");
     const items: HTMLElement[] = [];
 
     // 顶部一行：手动记录当前版本（与成品切换菜单顶部的「新建」行同构）。
     const snap = document.createElement("button");
-    snap.className = "version-item version-snap-row";
+    snap.className = "fn-menu__item version-item version-snap-row";
     snap.append(createIcon({ phosphor: "ph ph-camera", size: 12 }), document.createTextNode("记录当前版本"));
     snap.onclick = async (e) => {
       e.stopPropagation();
@@ -242,7 +241,7 @@ export function createPieceHeader(args: {
     }
     for (const entry of [...entries].reverse()) {
       const item = document.createElement("button");
-      item.className = "version-item";
+      item.className = "fn-menu__item version-item";
       item.textContent = formatVersionLabel(entry);
       item.onclick = () => {
         closeVersionMenu();
@@ -267,12 +266,11 @@ export function createPieceHeader(args: {
     if (!dir) return;
     const pieces = await listPieces(dir);
     const handle = createMenu();
-    handle.el.classList.add("switch-menu");
     const items: HTMLElement[] = [];
 
     // 顶部：新建图标行。
     const newItem = document.createElement("button");
-    newItem.className = "switch-item piece-new-row";
+    newItem.className = "fn-menu__item piece-new-row";
     newItem.append(createIcon({ phosphor: "ph ph-plus", size: 13 }), document.createTextNode("新建"));
     newItem.onclick = async (e) => {
       e.stopPropagation();

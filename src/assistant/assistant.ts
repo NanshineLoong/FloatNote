@@ -107,7 +107,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     </div>
     <div class="assistant-dock">
       <button class="assistant-bot" type="button" aria-label="展开输入框">${socratesSvg}</button>
-      <div class="assistant-history-popover" hidden></div>
+      <div class="fn-popover assistant-history-popover" hidden></div>
       <div class="assistant-perm-region"></div>
       <div class="assistant-input-wrap">
         <textarea class="fn-control assistant-input" rows="1" placeholder="说点什么…"></textarea>

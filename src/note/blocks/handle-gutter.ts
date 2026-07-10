@@ -3,6 +3,7 @@ import { type BlockInfo, EditorView, gutter, GutterMarker } from "@codemirror/vi
 import { blockRanges, removeBlockChanges, type BlockRange } from "@floatnote/note-logic";
 import { startBlockDrag, type DragContext } from "./drag";
 import { createIcon } from "../../shared/ui/icon";
+import { createMenu, type MenuHandle } from "../../shared/ui/menu";
 
 /**
  * A block action is one entry in the handle's click menu. The list is the
@@ -64,34 +65,31 @@ function buildMarkers(view: EditorView) {
 }
 
 // ── click menu ─────────────────────────────────────────────────────────────
-let menuEl: HTMLElement | null = null;
+let menuHandle: MenuHandle | null = null;
 
 function closeMenu() {
-  menuEl?.remove();
-  menuEl = null;
+  menuHandle?.hide();
+  menuHandle = null;
 }
 
 function openMenu(view: EditorView, range: BlockRange, index: number, x: number, y: number) {
   closeMenu();
-  const menu = document.createElement("div");
-  menu.className = "switch-menu block-menu";
-  menu.style.left = `${x}px`;
-  menu.style.top = `${y}px`;
-
-  for (const action of ACTIONS) {
+  const handle = createMenu({ onOutside: () => { menuHandle = null; } });
+  handle.el.classList.add("block-menu");
+  const items = ACTIONS.map((action) => {
     const item = document.createElement("button");
-    item.className = "switch-item";
+    item.type = "button";
+    item.className = "fn-menu__item";
     item.append(createIcon({ phosphor: `ph ${action.icon}`, size: 13 }), document.createTextNode(action.label));
     item.onclick = () => {
       closeMenu();
       action.run(view, range, index);
     };
-    menu.appendChild(item);
-  }
+    return item;
+  });
 
-  menuEl = menu;
-  document.body.appendChild(menu);
-  setTimeout(() => document.addEventListener("pointerdown", closeMenu, { once: true }), 0);
+  menuHandle = handle;
+  handle.showAt(x, y, items);
 }
 
 const gutterTheme = EditorView.theme({

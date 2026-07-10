@@ -153,7 +153,7 @@ export function mountSkillPicker(opts: SkillPickerOptions): SkillPickerHandle {
   // overflow:hidden（用于输入框滑入动画），下拉用 bottom:calc(100%+6px) 定位在其外侧
   // 上方，挂内部会被裁掉看不见。历史浮层同理挂在 dock 上（assistant.ts 的 history popover）。
   const menu = createDockDropdown({
-    className: "assistant-skill-dropdown",
+    className: "fn-popover assistant-skill-dropdown",
     parent: inputWrap.parentElement,
     inside: input,
     selector: "[data-skill-name]",

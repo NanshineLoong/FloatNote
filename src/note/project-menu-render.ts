@@ -31,12 +31,12 @@ export function createProjectMenuRenderer(deps: ProjectMenuRendererDeps) {
   ): HTMLElement {
     const item = document.createElement("button");
     item.type = "button";
-    item.className = "switch-submenu-item";
+    item.className = "fn-menu__item switch-submenu-item";
     item.innerHTML = label;
     if (opts.ariaLabel) item.setAttribute("aria-label", opts.ariaLabel);
     if (opts.disabled) {
       item.disabled = true;
-      item.classList.add("disabled");
+      item.classList.add("disabled", "is-disabled");
     } else if (opts.onClick) {
       item.onclick = (event) => {
         event.stopPropagation();
@@ -94,7 +94,7 @@ export function createProjectMenuRenderer(deps: ProjectMenuRendererDeps) {
           action.onClick(row);
         },
       });
-      if (action.danger) item.classList.add("danger");
+      if (action.danger) item.classList.add("danger", "fn-menu__item--danger");
       return item;
     });
   }
@@ -142,7 +142,7 @@ export function createProjectMenuRenderer(deps: ProjectMenuRendererDeps) {
 
   function promptRename(host: HTMLElement, currentName: string, commit: (name: string) => Promise<void>) {
     const input = document.createElement("input");
-    input.className = "switch-new-input";
+    input.className = "fn-control switch-new-input";
     input.value = currentName;
     host.replaceWith(input);
     input.focus();

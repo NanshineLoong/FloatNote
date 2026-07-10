@@ -426,54 +426,8 @@ body {
 
 
 
-.switch-menu {
-  position: fixed;
-  min-width: 160px;
-  max-width: 260px;
-  max-height: 280px;
-  overflow: auto;
-  padding: 4px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-lg);
-  z-index: 100;
-}
-
-.switch-item {
-  display: block;
-  width: 100%;
-  padding: 6px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
-}
-
-.switch-item:hover {
-  background: var(--color-hover);
-}
-
-.switch-item.active {
-  font-weight: 600;
-}
-
-.switch-item.switch-new {
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px solid var(--color-divider);
-  color: var(--color-accent);
-}
-
-/* 第二个新建项紧跟第一个，不再重复分隔线。 */
-.switch-item.switch-new + .switch-item.switch-new {
-  margin-top: 0;
-  padding-top: 6px;
-  border-top: none;
-}
+/* Switcher menus use the shared `.fn-menu` / `.fn-menu__item` surface.
+   The following rules only describe project-specific rows and controls. */
 
 .switch-new-input {
   display: block;
@@ -528,53 +482,14 @@ body {
   color: var(--color-text-muted);
 }
 
-/* 二级菜单浮层：复用主菜单外观，层级更高。 */
-.switch-submenu {
-  position: fixed;
-  min-width: 160px;
-  max-width: 240px;
-  padding: 4px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-lg);
-  z-index: 110;
-}
-
-.switch-submenu-item {
-  display: block;
-  width: 100%;
-  padding: 6px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
-}
-
-.switch-submenu-item:hover {
-  background: var(--color-hover);
-}
-
+/* Project submenu items compose the shared menu-item with disabled state. */
 .switch-submenu-item.disabled,
 .switch-submenu-item:disabled {
-  color: var(--color-text-subtle);
   cursor: not-allowed;
 }
 
 .switch-submenu-item:disabled:hover {
   background: transparent;
-}
-
-/* 危险操作（删除）项：红色文字，hover 红底。 */
-.switch-submenu-item.danger {
-  color: var(--color-danger);
-}
-
-.switch-submenu-item.danger:hover {
-  background: var(--color-danger-fill);
 }
 
 /* kebab 按钮：沿用 .switch-row-action 基础样式，仅微调命中区域。 */
@@ -707,37 +622,13 @@ body {
   min-height: 16px;
   color: var(--color-danger);
 }
-.version-menu {
-  position: fixed;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  box-shadow: var(--shadow-md);
-  padding: 4px;
-  min-width: 160px;
-  max-height: 280px;
-  overflow-y: auto;
-  z-index: 50;
-}
 .version-item,
 .version-empty {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: none;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  color: var(--color-text);
-  cursor: pointer;
-}
-.version-item:hover {
-  background: var(--color-hover);
+  font-size: var(--fs-sm);
 }
 .version-empty {
+  padding: var(--space-2) var(--space-4);
   color: var(--color-text-subtle);
-  cursor: default;
 }
 
 /* 版本菜单顶部的「记录当前版本」行：图标 + 文案，与下方列表用分隔线隔开。 */
@@ -1000,7 +891,7 @@ body {
 }
 
 /* 下拉顶部的「新建」行：图标 + 文案，与下方列表用分隔线隔开。 */
-.switch-item.piece-new-row {
+.piece-new-row {
   margin-bottom: 4px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--color-divider);
@@ -1785,7 +1676,7 @@ body {
   font-weight: 600;
   color: var(--color-text-subtle);
 }
-.tag-picker .switch-item.active {
+.tag-picker .fn-menu__item.active {
   background: var(--color-hover);
   color: var(--color-text);
 }
@@ -1795,7 +1686,7 @@ body {
   background: var(--color-divider);
 }
 .tag-context-delete {
-  color: var(--color-danger);
+  /* The shared danger variant supplies color and hover fill. */
 }
 .tag-create-form {
   display: grid;
@@ -1853,11 +1744,6 @@ body {
   width: 160px;
   margin: 4px 6px 6px;
   padding: 4px 6px;
-  font-size: 13px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-surface);
-  color: var(--color-text);
 }
 .tag-add-ok {
   font-size: 12px;
@@ -1914,73 +1800,4 @@ body {
   width: 100%;
 }
 
-.empty-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  width: 100%;
-  padding: 32px;
-}
-
-.empty-state-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 10px;
-  max-width: 420px;
-}
-
-.empty-state-icon {
-  font-size: 40px;
-  line-height: 1;
-  opacity: 0.85;
-}
-
-.empty-state-title {
-  margin: 4px 0 0;
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.empty-state-hint {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--color-text-muted);
-}
-
-.empty-state-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.empty-state-btn {
-  padding: 7px 16px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-
-.empty-state-btn:hover {
-  background: var(--color-hover);
-}
-
-.empty-state-btn.primary {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-text-on-accent);
-}
-
-.empty-state-btn.primary:hover {
-  background: var(--color-accent-hover);
-}
+/* Full-window empty states use the shared `.fn-empty*` component contract. */

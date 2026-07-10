@@ -115,7 +115,7 @@ export function mountMentionPicker(opts: MentionPickerOptions): MentionPickerHan
 
   // 复用共享 dock-dropdown：click 委托 + pointerdown stopPropagation + 外点关闭 + 生命周期。
   const menu = createDockDropdown({
-    className: "assistant-mention-dropdown",
+    className: "fn-popover assistant-mention-dropdown",
     parent: dock,
     inside: input,
     selector: "[data-mention-name]",

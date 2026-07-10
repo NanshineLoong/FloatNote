@@ -10,11 +10,11 @@ describe("emptyStateMarkup", () => {
       primary: { label: "新建项目", action: () => {} },
       secondary: { label: "新建文档", action: () => {} },
     });
-    expect(html).toContain('class="empty-state-icon"');
+    expect(html).toContain('class="fn-empty__icon"');
     expect(html).toContain(">✍️<");
-    expect(html).toContain('class="empty-state-title"');
+    expect(html).toContain('class="fn-empty__title"');
     expect(html).toContain("欢迎来到 FloatNote");
-    expect(html).toContain('class="empty-state-hint"');
+    expect(html).toContain('class="fn-empty__hint"');
     expect(html).toContain("还没有项目空间。");
     expect(html).toContain('data-action="primary"');
     expect(html).toContain("新建项目");
@@ -24,9 +24,9 @@ describe("emptyStateMarkup", () => {
 
   it("omits icon, hint, and actions when not provided", () => {
     const html = emptyStateMarkup({ title: "仅标题" });
-    expect(html).not.toContain("empty-state-icon");
-    expect(html).not.toContain("empty-state-hint");
-    expect(html).not.toContain("empty-state-actions");
+    expect(html).not.toContain("fn-empty__icon");
+    expect(html).not.toContain("fn-empty__hint");
+    expect(html).not.toContain("fn-empty__actions");
     expect(html).toContain("仅标题");
   });
 
