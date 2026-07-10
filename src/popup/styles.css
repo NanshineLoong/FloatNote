@@ -88,65 +88,10 @@ body {
   transform: translateY(0) scale(1);
 }
 
-/* ── Buttons ── */
-.popup-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 11px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--popup-text);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-/* Phosphor icon (font glyph) — sized via font-size. */
-.popup-btn-icon {
-  font-size: 17px;
-  line-height: 1;
-  display: inline-block;
-}
-
-.popup-btn-label {
-  line-height: 1;
-}
-
-/* Primary: blue accent text + tinted fill on hover/active (matches .icon-btn.on). */
-.popup-btn-primary {
-  color: var(--popup-accent);
-}
-
-.popup-btn-primary:not(:disabled):hover {
-  background: var(--popup-accent-fill);
-}
-
-.popup-btn-primary:not(:disabled):active {
-  background: var(--popup-accent-fill);
-}
-
-/* Ghost: neutral, subtle hover fill (matches .topbar button / .icon-btn). */
-.popup-btn-ghost:not(:disabled):hover {
-  background: var(--popup-hover);
-}
-
-.popup-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-/* ── Dividers between buttons ── */
-.popup-divider {
-  width: 1px;
-  align-self: stretch;
-  margin: 6px 0;
-  background: var(--popup-divider);
-  flex: 0 0 auto;
+/* Actions use the shared `.fn-btn` primary treatment. The popup retains only
+   its compact bar container and enter animation. */
+.popup-bar .fn-btn {
+  min-height: 32px;
 }
 
 @media (prefers-reduced-motion: reduce) {

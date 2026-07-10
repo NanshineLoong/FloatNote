@@ -9,12 +9,20 @@ import {
 import { formatHistoryTime } from "../platform/chat-history-format";
 import { createIcon } from "../shared/ui/icon";
 import { createButton } from "../shared/ui/button";
+import { createMenu } from "../shared/ui/menu";
 
-/** 加载更多：createButton secondary 出骨架，附加 .history-more 供查询与全宽布局。 */
+function buttonMarkup(
+  className: string,
+  options: Parameters<typeof createButton>[0],
+): string {
+  const button = createButton(options);
+  button.classList.add(className);
+  return button.outerHTML;
+}
+
+/** 加载更多：共享 secondary 按钮，附加布局钩子。 */
 function createHistoryMoreButton(): string {
-  const btn = createButton({ variant: "secondary", label: "加载更多" });
-  btn.classList.add("history-more");
-  return btn.outerHTML;
+  return buttonMarkup("history-more", { variant: "secondary", label: "加载更多" });
 }
 
 const PAGE_SIZE = 60;
@@ -25,18 +33,20 @@ app.innerHTML = `
     <nav class="history-toolbar" aria-label="对话历史工具栏">
       <span class="history-mark" aria-hidden="true">${createIcon({ phosphor: "ph ph-clock-counter-clockwise", size: 17 }).outerHTML}</span>
       <div class="history-spacer"></div>
-      <button class="history-icon-btn history-reload" type="button" aria-label="刷新" title="刷新">
-        ${createIcon({ phosphor: "ph ph-arrow-clockwise" }).outerHTML}
-      </button>
-      <div class="history-clear-menu">
-        <button class="history-icon-btn history-clear-trigger" type="button" aria-label="清理旧对话" title="清理旧对话">
-          ${createIcon({ phosphor: "ph ph-broom" }).outerHTML}
-        </button>
-        <div class="history-clear-options" hidden>
-          <button type="button" data-days="7">7 天前</button>
-          <button type="button" data-days="30">30 天前</button>
-        </div>
-      </div>
+      ${buttonMarkup("history-reload", {
+        variant: "secondary",
+        icon: "ph-arrow-clockwise",
+        iconOnly: true,
+        label: "刷新",
+        title: "刷新",
+      })}
+      ${buttonMarkup("history-clear-trigger", {
+        variant: "secondary",
+        icon: "ph-broom",
+        iconOnly: true,
+        label: "清理旧对话",
+        title: "清理旧对话",
+      })}
     </nav>
     <section class="history-list" aria-label="对话历史"></section>
     ${createHistoryMoreButton()}
@@ -47,7 +57,7 @@ const listEl = app.querySelector<HTMLElement>(".history-list")!;
 const moreBtn = app.querySelector<HTMLButtonElement>(".history-more")!;
 const reloadBtn = app.querySelector<HTMLButtonElement>(".history-reload")!;
 const clearTrigger = app.querySelector<HTMLButtonElement>(".history-clear-trigger")!;
-const clearOptions = app.querySelector<HTMLElement>(".history-clear-options")!;
+const clearMenu = createMenu({ anchor: clearTrigger, placement: "down-right", inside: [clearTrigger] });
 let cursor = 0;
 let loading = false;
 
@@ -62,26 +72,15 @@ reloadBtn.addEventListener("click", () => {
 });
 
 clearTrigger.addEventListener("click", () => {
-  clearOptions.hidden = !clearOptions.hidden;
-});
-
-clearOptions.addEventListener("click", (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLButtonElement)) return;
-  const days = Number(target.dataset.days);
-  if (!Number.isFinite(days)) return;
-  clearOptions.hidden = true;
-  void clearBeforeDays(days);
-});
-
-document.addEventListener("pointerdown", (event) => {
-  const target = event.target;
-  if (target instanceof Node && app.querySelector(".history-clear-menu")?.contains(target)) return;
-  clearOptions.hidden = true;
+  if (clearMenu.isOpen()) {
+    clearMenu.hide();
+    return;
+  }
+  clearMenu.show([createClearMenuItem(7), createClearMenuItem(30)]);
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") clearOptions.hidden = true;
+  if (event.key === "Escape") clearMenu.hide();
 });
 
 async function reload() {
@@ -145,12 +144,14 @@ function renderRow(conversation: ChatConversation): HTMLElement {
   meta.append(scope, time);
   main.append(title, meta);
 
-  const del = document.createElement("button");
-  del.type = "button";
-  del.className = "history-icon-btn history-delete";
-  del.setAttribute("aria-label", "删除");
-  del.title = "删除";
-  del.append(createIcon({ phosphor: "ph ph-trash" }));
+  const del = createButton({
+    variant: "ghost",
+    icon: "ph-trash",
+    iconOnly: true,
+    label: "删除",
+    title: "删除",
+  });
+  del.classList.add("history-delete");
   del.addEventListener("click", async () => {
     if (!confirm(`删除「${conversation.title}」？`)) return;
     await chatDelete(conversation.id);
@@ -159,4 +160,16 @@ function renderRow(conversation: ChatConversation): HTMLElement {
 
   row.append(main, del);
   return row;
+}
+
+function createClearMenuItem(days: number): HTMLButtonElement {
+  const item = document.createElement("button");
+  item.type = "button";
+  item.className = "fn-menu__item";
+  item.textContent = `${days} 天前`;
+  item.addEventListener("click", () => {
+    clearMenu.hide();
+    void clearBeforeDays(days);
+  });
+  return item;
 }

@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalPosition, currentMonitor } from "@tauri-apps/api/window";
 import { clampToScreen, type Rect } from "./clamp";
 import { showToast } from "../shared/toast";
+import { createButton } from "../shared/ui/button";
 
 const POPUP_W = 256;
 const POPUP_H = 46;
@@ -18,7 +19,14 @@ interface PopupPayload {
 const root = document.querySelector<HTMLElement>("#popup")!;
 const emptyEl = document.querySelector<HTMLElement>("#popup-empty")!;
 const actionsEl = document.querySelector<HTMLElement>("#popup-actions")!;
-const captureBtn = document.querySelector<HTMLButtonElement>("#btn-capture")!;
+const captureBtn = createButton({
+  variant: "primary",
+  icon: "ph-quotes",
+  label: "采集",
+  title: "采集",
+});
+captureBtn.id = "btn-capture";
+actionsEl.appendChild(captureBtn);
 
 let hideTimer: number | null = null;
 

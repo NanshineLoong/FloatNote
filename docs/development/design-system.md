@@ -55,6 +55,7 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 | Icon | `icon.ts` | `.fn-icon` | Phosphor 字形 + `action-card.ts` 内联 SVG |
 | Menu | `menu.ts` | `.fn-menu[__item/--danger/__separator/__submenu]` | `floating-menu.ts` + `dock-dropdown.ts` + `project-menu-render.ts` 子菜单 |
 | Scrollbar | `scrollbar.ts` | `.fn-scroll__thumb[.is-visible]` | 原 note-only `.scroll-thumb`，推广到 history/assistant |
+| Form control | `components.css` | `.fn-control` | settings 的 text/password/select 与 assistant 输入框 |
 | EmptyState | `empty-state.ts` | `.fn-empty*`（旧 `.empty-state-*` 暂保留别名） | `popup.html` 手写 `#popup-empty` |
 
 组件按阶段增量接线：Phase 0 修组件（`createButton` iconOnly、`createMenu` 子菜单 Escape/焦点/互斥单浮层）→ icon → button → menu。窗口样式迁移到 `fn-` 类与 token。`src/note/empty-state.ts`、`src/note/scrollbar.ts` 已改为 `src/shared/ui/` 的 re-export，调用方不变。OS 级确认继续用原生 Tauri `confirm`（`notes-state.ts`），不引入 in-DOM modal。
@@ -64,7 +65,10 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 - ✅ token 地基 + `index.css` 载入 + 起步组件 + 主色 hex（`#2563eb`/`#60a5fa`/`#1d4ed8`/`#3b82f6`）→ token + popup 别名 + 滚动条统一 + CM 主题桥接。
 - ✅ 窗口样式全量对齐 popup 模板：accent rgba 色阶（hover/选中/焦点环）→ `--color-hover`/`--color-selected`/`--color-focus-ring`/`--color-accent-fill`；中性 hex → `--color-surface*`/`--color-text*`/`--color-border*`；各窗口 `@media (prefers-color-scheme: dark)` 块与窗口级 reset 删除，dark 统一由 `semantic.css` 兜底；`base.css` 上移 `body` 背景色与 `button/input` 字体继承。`accent.ts` 常量桥接保留（CM 静态编译限制）。
 - ✅ 新增 danger 语义 token 组（`--color-danger`/`--color-danger-hover`/`--color-danger-fill`/`--color-danger-fill-strong`，light+dark，与 accent 对称）+ `--color-success` + chat 气泡 token（`--color-bubble-user-*`/`--color-bubble-ai-bg`）。`primitives.css` 补 `--danger-400`。`components.css` 的 `.fn-btn--danger`/`.fn-menu__item--danger` 改用语义 token。
-- ⏳ 后续（阶段二）：逐调用点切到 `createMenu`/`createButton`/`createIcon` 替换 floating-menu 与各窗口手写控件；窗口级 `.switch-menu`/`.popup-btn` 等类迁移到 `.fn-*`。
+- ✅ 历史窗口：工具栏/删除/加载更多切到 `createButton`，清理时间菜单切到 `createMenu`；移除 `.history-icon-btn` / `.history-clear-options` 重复样式。
+- ✅ 弹窗：采集操作切到 `createButton`，移除 `.popup-btn*` 手写按钮体系。
+- ✅ 设置与助手：设置页原生 text/password/select、助手输入框切到 `.fn-control`；助手的新对话与历史入口切到 `createButton`。
+- ⏳ 后续（阶段二）：继续逐调用点切到 `createMenu`/`createButton`/`createIcon`，重点收敛笔记窗口遗留 `.switch-menu` / `.switch-item`、`.icon-btn` 与 EmptyState 的旧别名。
 - 守卫：`src/styles/tokens.test.ts` 断言窗口 CSS 无残留 accent/danger rgba、无 per-window dark `@media` 块、danger 语义 token 存在、组件层不裸用 primitives。
 
 ## 跨平台注记

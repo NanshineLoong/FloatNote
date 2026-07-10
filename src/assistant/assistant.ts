@@ -16,6 +16,7 @@ import {
   reduceEvents,
 } from "./render";
 import { reconcileMessages } from "./blocks";
+import { createButton } from "../shared/ui/button";
 
 /**
  * 与挂载点无关的助手组件。挂在笔记窗内的 `#assistant-region`，inline/floating 共用同一份。
@@ -83,9 +84,25 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   let state: ChatState = emptyChat();
 
   root.classList.add("assistant");
+  const newConversationButton = createButton({
+    variant: "secondary",
+    icon: "ph-plus",
+    iconOnly: true,
+    label: "新对话",
+    title: "新对话",
+  });
+  newConversationButton.classList.add("assistant-new");
+  const historyButton = createButton({
+    variant: "primary",
+    icon: "ph-clock-counter-clockwise",
+    iconOnly: true,
+    label: "查看项目对话历史",
+    title: "查看项目对话历史",
+  });
+  historyButton.classList.add("assistant-send");
   root.innerHTML = `
     <div class="assistant-card">
-      <button class="assistant-new" type="button" aria-label="新对话" title="新对话"><i class="ph ph-plus"></i></button>
+      ${newConversationButton.outerHTML}
       <div class="assistant-scroll"></div>
     </div>
     <div class="assistant-dock">
@@ -93,8 +110,8 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       <div class="assistant-history-popover" hidden></div>
       <div class="assistant-perm-region"></div>
       <div class="assistant-input-wrap">
-        <textarea class="assistant-input" rows="1" placeholder="说点什么…"></textarea>
-        <button class="assistant-send" type="button" aria-label="查看项目对话历史" title="查看项目对话历史"><i class="ph ph-clock-counter-clockwise"></i></button>
+        <textarea class="fn-control assistant-input" rows="1" placeholder="说点什么…"></textarea>
+        ${historyButton.outerHTML}
       </div>
     </div>
   `;

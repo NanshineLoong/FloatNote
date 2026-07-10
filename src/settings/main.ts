@@ -111,7 +111,7 @@ async function render() {
 
         <div class="settings-row">
           <label class="settings-label">划词悬浮窗自动触发</label>
-          <select id="auto-popup-mode" class="settings-select">
+          <select id="auto-popup-mode" class="fn-control settings-select">
             <option value="off" ${(config.auto_popup_mode ?? "off") === "off" ? "selected" : ""}>关闭</option>
             <option value="every" ${config.auto_popup_mode === "every" ? "selected" : ""}>每次选中弹出</option>
             <option value="modifier" ${config.auto_popup_mode === "modifier" ? "selected" : ""}>按住 ⌥ 选中时弹出</option>
@@ -148,7 +148,7 @@ async function render() {
 
         <div class="settings-row">
           <label class="settings-label">服务商</label>
-          <select id="ai-provider" class="settings-select">
+          <select id="ai-provider" class="fn-control settings-select">
             <option value="">未配置</option>
             <option value="anthropic" ${config.ai_provider === "anthropic" ? "selected" : ""}>Anthropic</option>
             <option value="openai" ${config.ai_provider === "openai" ? "selected" : ""}>OpenAI</option>
@@ -158,21 +158,21 @@ async function render() {
 
         <div class="settings-row" id="ai-model-row">
           <label class="settings-label">模型</label>
-          <input id="ai-model" type="text"
+          <input id="ai-model" class="fn-control" type="text"
             placeholder="${modelPlaceholder(config.ai_provider)}"
             value="${escapeHtml(config.ai_model)}" />
         </div>
 
         <div class="settings-row" id="ai-key-row">
           <label class="settings-label">API 密钥</label>
-          <input id="ai-api-key" type="password"
+          <input id="ai-api-key" class="fn-control" type="password"
             placeholder="sk-..."
             value="${escapeHtml(config.ai_api_key)}" />
         </div>
 
         <div class="settings-row" id="base-url-row">
           <label class="settings-label">自定义地址</label>
-          <input id="ai-base-url" type="text"
+          <input id="ai-base-url" class="fn-control" type="text"
             placeholder="${baseUrlPlaceholder(config.ai_provider)}"
             value="${escapeHtml(config.ai_base_url)}" />
         </div>
