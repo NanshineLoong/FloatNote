@@ -17,11 +17,6 @@ const blockMaps = new WeakMap<HTMLElement, Map<string, HTMLElement>>();
 /** 滚动粘底阈值：距底小于此值时才自动滚底（用户上滚阅读时不抢滚动）。 */
 const STICK_TO_BOTTOM_PX = 120;
 
-export interface ReconcileDom {
-  scroll: HTMLElement;
-  map: Map<string, HTMLElement>;
-}
-
 /** rerender 入口：定向增量更新消息列表。 */
 export function reconcileMessages(scroll: HTMLElement, messages: ChatMessage[], map: Map<string, HTMLElement>): void {
   const stickToBottom = isNearBottom(scroll);

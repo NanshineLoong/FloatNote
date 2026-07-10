@@ -1,4 +1,5 @@
 import { renderInline } from "../note/inline";
+import { escapeHtml } from "../shared/escape";
 
 /**
  * 助手气泡的轻量 Markdown 渲染。
@@ -110,7 +111,7 @@ export function renderMarkdown(text: string): string {
       out.push(renderProse(text.slice(last, m.index)));
     }
     const code = m[2].replace(/\n$/, "");
-    out.push(`<pre class="chat-codeblock"><code>${escapeForHtml(code)}</code></pre>`);
+    out.push(`<pre class="chat-codeblock"><code>${escapeHtml(code)}</code></pre>`);
     last = fence.lastIndex;
   }
   if (last < text.length) {
@@ -119,19 +120,9 @@ export function renderMarkdown(text: string): string {
   return out.join("");
 }
 
-/** 转义 HTML 特殊字符（代码块内容虽用 textContent 更佳，但此处内联进 <code> 需冗余转义保安全）。 */
-function escapeForHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 /**
  * 把一段 markdown 文本渲染进一个容器节点：用 innerHTML 设置 renderMarkdown 产物。
- * 代码块内容会经 renderMarkdown 内的 escapeForHtml 转义后内联进 <code>；
+ * 代码块内容会经 renderMarkdown 内的 escapeHtml 转义后内联进 <code>；
  * 由于整体经 renderInline/escape，安全。
  */
 export function fillMarkdown(el: HTMLElement, text: string): void {

@@ -8,7 +8,7 @@ import {
   serializeTasks,
   toggleTask,
   type TaskLine,
-} from "@floatnote/note-logic";
+} from "./tasks";
 
 export interface TasksPanelHost {
   /** 当前项目的 _tasks.md 路径，无项目时 null。 */
@@ -358,7 +358,7 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
         }
         if (active && dragState) updateDrag(ev);
       };
-      const onUp = (ev: PointerEvent) => {
+      const onUp = (_ev: PointerEvent) => {
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onUp);
         if (active && dragState) {
@@ -366,7 +366,6 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
           // 拖拽产生的 pointerup 之后会跟一个 click；吞掉它。
           suppressClick = true;
         }
-        void ev;
       };
 
       document.addEventListener("pointermove", onMove);
@@ -404,18 +403,14 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
     // 指针下方的行；找不到则落在最后一行之后。
     let target: HTMLElement | null = null;
     let half: "before" | "after" = "after";
+    // 中点落点判定（与 blocks/drag.ts 一致）：指针在某行上半 → before 该行；
+    // 一旦越过某行中点，该行即成 after 候选。无半行高重叠区，边界与列表密度无关。
     for (const r of rows) {
       const rect = r.getBoundingClientRect();
-      if (ev.clientY < rect.top - rect.height / 2) {
+      const mid = rect.top + rect.height / 2;
+      if (ev.clientY < mid) {
         target = r;
         half = "before";
-        break;
-      }
-      if (ev.clientY >= rect.top - rect.height / 2 && ev.clientY < rect.bottom + rect.height / 2) {
-        // 在该行范围内：上半 before，下半 after。
-        target = r;
-        const mid = rect.top + rect.height / 2;
-        half = ev.clientY < mid ? "before" : "after";
         break;
       }
       target = r;

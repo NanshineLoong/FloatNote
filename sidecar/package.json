@@ -7,8 +7,7 @@
   "scripts": {
     "dev": "tsx src/main.ts",
     "build": "tsc",
-    "test": "vitest run",
-    "harness": "tsx test/harness.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.79.4",

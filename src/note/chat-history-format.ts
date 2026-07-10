@@ -29,18 +29,6 @@ export function formatHistoryTime(timestamp: number, now = Date.now()): string {
   return `${date.getFullYear()}/${pad2(date.getMonth() + 1)}/${pad2(date.getDate())}`;
 }
 
-export function formatTrayConversationLabel(title: string, scopeLabel: string): string {
-  const cleanTitle = compact(title.trim() || "新对话", 18);
-  const cleanScope = compact(scopeLabel.trim(), 14);
-  return cleanScope ? `${cleanTitle} (${cleanScope})` : cleanTitle;
-}
-
-export function compact(text: string, maxChars: number): string {
-  const chars = [...text];
-  if (chars.length <= maxChars) return text;
-  return `${chars.slice(0, maxChars).join("")}…`;
-}
-
 function startOfLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }

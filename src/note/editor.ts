@@ -193,7 +193,3 @@ export function insertAtPos(view: EditorView, pos: number, text: string) {
     scrollIntoView: true,
   });
 }
-
-export function insertAtCaret(view: EditorView, text: string) {
-  insertAtPos(view, view.state.selection.main.from, text);
-}

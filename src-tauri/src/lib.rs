@@ -6,17 +6,22 @@ mod commands;
 mod config;
 mod cursor;
 mod notes;
+mod paths;
 mod popup;
 mod project;
 mod selection_monitor;
 mod shortcuts;
 mod source;
+mod state;
 mod tray;
 mod versions;
 mod watcher;
 mod windows;
 
-use commands::AppState;
+#[cfg(test)]
+mod testutil;
+
+use state::AppState;
 use std::sync::Mutex;
 use tauri::{Manager, WindowEvent};
 
@@ -171,7 +176,6 @@ pub fn run() {
             commands::chat_get_for_scope,
             commands::chat_create,
             commands::chat_list_for_scope,
-            commands::chat_list_recent,
             commands::chat_list_all,
             commands::chat_open,
             commands::chat_update_title,

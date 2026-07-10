@@ -52,7 +52,7 @@ impl Default for PopupCache {
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::commands::AppState;
+use crate::state::AppState;
 
 /// Payload emitted to the `selection-popup` window on capture.
 #[derive(serde::Serialize, Clone)]

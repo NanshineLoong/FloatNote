@@ -1,19 +1,5 @@
 export type Align = "left" | "right" | "center" | "none";
 
-export interface ParsedTable {
-  aligns: Align[];
-  header: string[];
-  rows: string[][];
-}
-
-function splitRow(line: string): string[] {
-  return line
-    .replace(/^\s*\|/, "")
-    .replace(/\|\s*$/, "")
-    .split("|")
-    .map((c) => c.trim());
-}
-
 function parseAlign(cell: string): Align {
   const t = cell.trim();
   const left = t.startsWith(":");
@@ -26,19 +12,6 @@ function parseAlign(cell: string): Align {
 
 function isDelimiter(cell: string): boolean {
   return /^:?-+:?$/.test(cell.trim());
-}
-
-/** Parse a GFM pipe table. Returns null if `src` is not a valid table
- *  (e.g. missing the delimiter row). Does not support escaped `\|`. */
-export function parseGfmTable(src: string): ParsedTable | null {
-  const lines = src.trim().split("\n").map((l) => l.trim());
-  if (lines.length < 2) return null;
-  const header = splitRow(lines[0]);
-  const delim = splitRow(lines[1]);
-  if (!delim.every(isDelimiter)) return null;
-  const aligns = delim.map(parseAlign);
-  const rows = lines.slice(2).map(splitRow);
-  return { aligns, header, rows };
 }
 
 // ── Offset-aware parse (for WYSIWYG cell editing) ──────────────────────────
@@ -64,10 +37,10 @@ export interface ParsedTableOffsets {
 }
 
 /**
- * Parse a row line into cells with source spans. Mirrors `splitRow`'s
- * pipe-handling (optional leading/trailing pipe, split on `|`, per-cell trim)
- * but preserves each cell's content range. `lineStart` is the offset of the
- * line's first character within `src`.
+ * Parse a row line into cells with source spans. Pipe-handling: optional
+ * leading/trailing pipe, split on `|`, per-cell trim — but preserves each
+ * cell's content range. `lineStart` is the offset of the line's first
+ * character within `src`.
  */
 function rowCells(line: string, lineStart: number): CellRange[] {
   // Drop an optional leading pipe (and any whitespace before it).
@@ -99,11 +72,11 @@ function rowCells(line: string, lineStart: number): CellRange[] {
   return cells;
 }
 
-/** Like `parseGfmTable` but every cell carries its source span, for cell-level
- *  WYSIWYG editing. Returns null if `src` is not a valid table. Offsets are
- *  relative to `src`; add the table node's `node.from` for doc offsets.
- *  Does not support escaped `\|` (an escaped pipe splits like a normal one,
- *  matching `parseGfmTable`). */
+/** Parse a GFM pipe table where every cell carries its source span, for
+ *  cell-level WYSIWYG editing. Returns null if `src` is not a valid table.
+ *  Offsets are relative to `src`; add the table node's `node.from` for doc
+ *  offsets. Does not support escaped `\|` (an escaped pipe splits like a
+ *  normal one). */
 export function parseGfmTableOffsets(src: string): ParsedTableOffsets | null {
   // Compute line starts over the raw src (do NOT trim src — offsets must map
   // to the exact bytes the caller passes). A trailing empty line (if node.to

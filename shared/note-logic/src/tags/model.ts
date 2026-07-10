@@ -91,6 +91,15 @@ export function buildMarker(id: string): string {
   return `<!-- floatnote:tag=${id} -->`;
 }
 
+/** Count how many per-block markers reference tag `id` in `doc`. The id is a
+ *  slug (`[a-z0-9-]+`) but is regex-escaped anyway so a malformed id can't
+ *  craft a pattern. */
+export function countMarkers(doc: string, id: string): number {
+  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`<!-- floatnote:tag=${escaped} -->`, "g");
+  return (doc.match(re) || []).length;
+}
+
 /** Remove every `floatnote:tag=` marker from `s` (used before chip parsing). */
 export function stripTagMarker(s: string): string {
   return s.replace(MARKER_RE, "");

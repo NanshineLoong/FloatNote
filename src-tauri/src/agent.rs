@@ -5,7 +5,7 @@
 //! `get_note_text` 时分派到对应处理函数（Task 5 实装真实逻辑），再把
 //! `apply_edit_result`/`note_text` 回传 sidecar。
 
-use crate::{commands::AppState, versions};
+use crate::{state::AppState, versions};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -260,15 +260,8 @@ pub struct EditOutcome {
 #[derive(Debug, Clone)]
 pub struct PendingEdit {
     pub call_id: String,
-    /// 暂存以备日志/调试，当前 resolve_permission 不读取。
-    #[allow(dead_code)]
-    pub conversation_id: String,
     pub old_content: String,
     pub new_content: String,
-    /// 默认写入模式（暂存时的初值 "direct"）；实际生效的 write_mode 由
-    /// `resolve_permission` 的前端入参决定，此字段仅作记录，暂不读取。
-    #[allow(dead_code)]
-    pub write_mode: String,
     pub dir: PathBuf,
     pub note_id: String,
     pub path: String,
@@ -522,10 +515,8 @@ fn handle_apply_edit(
                 request_id,
                 PendingEdit {
                     call_id,
-                    conversation_id,
                     old_content,
                     new_content,
-                    write_mode: "direct".into(),
                     dir,
                     note_id,
                     path: path.to_string_lossy().to_string(),
@@ -621,8 +612,8 @@ fn resolve_skill_paths(app: &AppHandle) -> Vec<String> {
         }
     }
 
-    if let Some(home) = crate::chat_history::user_home_dir() {
-        let user_skills = home.join(".floatnote").join("skills");
+    if let Some(floatnote) = crate::paths::floatnote_home() {
+        let user_skills = floatnote.join("skills");
         if user_skills.is_dir() {
             paths.push(user_skills.to_string_lossy().into_owned());
         }
@@ -1052,7 +1043,7 @@ mod tests {
     #[test]
     fn resolve_target_none_falls_back_to_active_note_kind() {
         // 直接构造 AppState 验证 resolve_target 的 None 分支与 kind 回传。
-        use crate::commands::AppState;
+        use crate::state::AppState;
         use std::sync::Mutex;
 
         fn make_state(active: Option<ActiveNote>) -> AppState {
@@ -1172,31 +1163,5 @@ mod tests {
         assert!(res.error.unwrap().contains("已变更"));
     }
 
-    fn tempdir() -> TempDir {
-        static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let mut path = std::env::temp_dir();
-        path.push(format!(
-            "floatnote-agent-{}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
-            NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&path).unwrap();
-        TempDir(path)
-    }
-
-    struct TempDir(std::path::PathBuf);
-    impl TempDir {
-        fn path(&self) -> &std::path::Path {
-            &self.0
-        }
-    }
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
+    use crate::testutil::{tempdir, TempDir};
 }

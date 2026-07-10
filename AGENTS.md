@@ -3,13 +3,31 @@
 ## Project Structure & Module Organization
 
 FloatNote is a Tauri 2 desktop app with a Vanilla TypeScript/Vite frontend.
+Four components, each with its own `AGENTS.md`:
 
-- `src/` contains frontend code. Note-window modules live in `src/note/`; settings UI code lives in `src/settings/`; shared styles are in `src/styles.css`.
-- `src-tauri/` contains the Rust backend, Tauri commands, tray/window wiring, shortcuts, note file handling, and app configuration. `src-tauri/src/notes.rs` is the key module for listing project spaces and reading/writing note files.
-- A **project space** is a subfolder inside the working directory. Each project space holds up to three kinds of Markdown files: `_inbox.md` (block-style drafts), `_tasks.md` (checklist), and one or more **piece** files (any `.md` without a `_` prefix, defaulting to `piece.md`). The `_` prefix is the sole convention distinguishing system files from pieces — no other metadata is used. Loose `.md` files at the working-directory root are legacy flat notes and co-exist with project spaces.
-- `index.html` and `settings.html` are the two Vite entry pages configured by `vite.config.ts`.
-- `docs/` stores design and planning notes.
-- `dist/` and `src-tauri/target/` are generated build artifacts; avoid editing them by hand.
+- `src/` — frontend. Note window in `src/note/` (see `src/note/AGENTS.md`),
+  assistant UI in `src/assistant/`, plus `src/history/`, `src/popup/`,
+  `src/settings/`, `src/shared/` (`escape`, `shortcuts`, `toast`), and
+  `src/styles.css`. Entry pages: `index.html`, `settings.html`, `popup.html`,
+  `history.html` (configured by `vite.config.ts`).
+- `src-tauri/` — Rust backend. `src-tauri/src/` (see its `AGENTS.md`):
+  `state.rs` (managed `AppState`), `commands.rs` (thin command layer),
+  `agent.rs` (sidecar orchestration), `notes.rs`/`project.rs`/`versions.rs`
+  (note file ops + history), `chat_history.rs`, `paths.rs`, `watcher.rs`,
+  `source.rs` (macOS), `testutil.rs`, and window/tray/shortcut wiring.
+- `shared/note-logic/` — workspace package `@floatnote/note-logic`: pure
+  logic shared by frontend + sidecar (`blocks/ranges`, `tags/model`,
+  `tags/palette`). See its `AGENTS.md`.
+- `sidecar/` — Node AI-agent process over stdio JSONL (`agent.ts`,
+  `note-tools.ts`, `protocol.ts`, `matching.ts`, `skills.ts`). See its
+  `AGENTS.md`.
+- A **project space** is a subfolder inside the working directory holding up
+  to three Markdown kinds: `_inbox.md` (block drafts), `_tasks.md`
+  (checklist), and one or more **piece** files (any `.md` without a `_`
+  prefix, defaulting to `piece.md`). The `_` prefix alone distinguishes
+  system files from pieces. Loose root `.md` files are legacy flat notes.
+- `docs/` stores design and planning notes. `dist/` and `src-tauri/target/`
+  are generated artifacts; avoid editing them by hand.
 
 ## Build, Test, and Development Commands
 

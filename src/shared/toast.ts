@@ -10,7 +10,7 @@ let styleInjected = false;
 let toastEl: HTMLElement | null = null;
 let dismissTimer: number | null = null;
 
-export const TOAST_STYLE = `
+const TOAST_STYLE = `
 .toast {
   position: fixed;
   left: 50%;

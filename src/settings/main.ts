@@ -8,6 +8,7 @@ import {
   findAllConflicts,
   type WindowShortcutId,
 } from "../shared/shortcuts";
+import { escapeHtml } from "../shared/escape";
 
 interface Config {
   working_dir: string | null;
@@ -35,13 +36,6 @@ interface Config {
 }
 
 const app = document.querySelector<HTMLElement>("#app")!;
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (ch) => {
-    const map: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" };
-    return map[ch];
-  });
-}
 
 async function render() {
   const config = await invoke<Config>("get_config");

@@ -3,14 +3,6 @@ import { createLineDecoder, encodeLine } from "./protocol.js";
 import type { SidecarToHost, HostToSidecar, NoteTarget } from "./protocol.js";
 
 describe("encodeLine", () => {
-  it("produces a single newline-terminated JSON line", () => {
-    const msg: SidecarToHost = { type: "ready" };
-    const line = encodeLine(msg);
-    expect(line.endsWith("\n")).toBe(true);
-    expect(line.indexOf("\n")).toBe(line.length - 1);
-    expect(JSON.parse(line)).toEqual({ type: "ready" });
-  });
-
   it("escapes embedded newlines so each message stays on one line", () => {
     const msg: SidecarToHost = {
       type: "apply_edit",

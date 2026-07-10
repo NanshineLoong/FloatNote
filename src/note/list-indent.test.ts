@@ -4,7 +4,6 @@ import { syntaxTree } from "@codemirror/language";
 import { describe, expect, it } from "vitest";
 import {
   canDemote,
-  indentLine,
   isListItemLine,
   lineDepth,
   olOrdinal,
@@ -38,10 +37,7 @@ describe("lineDepth", () => {
   });
 });
 
-describe("indentLine / outdentLine", () => {
-  it("indent adds 4 spaces", () => {
-    expect(indentLine("- a")).toBe("    - a");
-  });
+describe("outdentLine", () => {
   it("outdent removes up to 4 leading spaces", () => {
     expect(outdentLine("    - a")).toBe("- a");
     expect(outdentLine("        - a")).toBe("    - a");

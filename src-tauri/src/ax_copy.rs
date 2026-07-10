@@ -60,8 +60,13 @@ struct CfStr(*const c_void);
 impl CfStr {
     fn new(s: &str) -> Option<Self> {
         let cs = std::ffi::CString::new(s).ok()?;
-        let p =
-            unsafe { CFStringCreateWithCString(std::ptr::null(), cs.as_ptr() as *const u8, KCF_STRING_ENCODING_UTF8) };
+        let p = unsafe {
+            CFStringCreateWithCString(
+                std::ptr::null(),
+                cs.as_ptr() as *const u8,
+                KCF_STRING_ENCODING_UTF8,
+            )
+        };
         if p.is_null() {
             None
         } else {
@@ -107,7 +112,8 @@ pub fn copy_via_menu() -> Result<(), Box<dyn std::error::Error>> {
     let menubar_attr = CfStr::new("AXMenuBar").ok_or("CFString AXMenuBar null")?;
     let children_attr = CfStr::new("AXChildren").ok_or("CFString AXChildren null")?;
     let cmd_char_attr = CfStr::new("AXMenuItemCmdChar").ok_or("CFString AXMenuItemCmdChar null")?;
-    let cmd_mod_attr = CfStr::new("AXMenuItemCmdModifiers").ok_or("CFString AXMenuItemCmdModifiers null")?;
+    let cmd_mod_attr =
+        CfStr::new("AXMenuItemCmdModifiers").ok_or("CFString AXMenuItemCmdModifiers null")?;
     let press_action = CfStr::new("AXPress").ok_or("CFString AXPress null")?;
 
     let mut menubar: *mut c_void = std::ptr::null_mut();
@@ -157,28 +163,28 @@ pub fn copy_via_menu() -> Result<(), Box<dyn std::error::Error>> {
             }
             // 惰性读 modifiers：只有命中 ⌘c 才读，省一次 AX IPC。
             let mut mod_val: *mut c_void = std::ptr::null_mut();
-            let mods: i64 = if unsafe {
-                AXUIElementCopyAttributeValue(item, cmd_mod_attr.ptr(), &mut mod_val)
-            } != AX_SUCCESS
-                || mod_val.is_null()
-            {
-                0 // 无 modifiers 属性 → 视为纯 ⌘C
-            } else {
-                let _drop_mod = CfDrop(mod_val);
-                if unsafe { CFGetTypeID(mod_val) } == unsafe { CFNumberGetTypeID() } {
-                    let mut v: i64 = 0;
-                    unsafe {
-                        CFNumberGetValue(
-                            mod_val,
-                            KCF_NUMBER_SINT64_TYPE,
-                            &mut v as *mut i64 as *mut c_void,
-                        );
-                    }
-                    v
+            let mods: i64 =
+                if unsafe { AXUIElementCopyAttributeValue(item, cmd_mod_attr.ptr(), &mut mod_val) }
+                    != AX_SUCCESS
+                    || mod_val.is_null()
+                {
+                    0 // 无 modifiers 属性 → 视为纯 ⌘C
                 } else {
-                    0 // 非 CFNumber，按 0 处理
-                }
-            };
+                    let _drop_mod = CfDrop(mod_val);
+                    if unsafe { CFGetTypeID(mod_val) } == unsafe { CFNumberGetTypeID() } {
+                        let mut v: i64 = 0;
+                        unsafe {
+                            CFNumberGetValue(
+                                mod_val,
+                                KCF_NUMBER_SINT64_TYPE,
+                                &mut v as *mut i64 as *mut c_void,
+                            );
+                        }
+                        v
+                    } else {
+                        0 // 非 CFNumber，按 0 处理
+                    }
+                };
             match best {
                 None => best = Some((item, mods)),
                 Some((_, m)) if mods < m => best = Some((item, mods)),

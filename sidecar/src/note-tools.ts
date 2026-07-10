@@ -1,9 +1,12 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import {
-  replaceOnce, findBlockByAnchor, setBlockTagChange, addTagDefChange,
-  deleteTagChanges, parseDefs, stripTagMarker,
+  setBlockTagChange, addTagDefChange,
+  deleteTagChanges, parseDefs, stripTagMarker, countMarkers,
+  applyChange, applyChanges,
+  freeColors,
 } from "@floatnote/note-logic";
+import { replaceOnce, findBlockByAnchor } from "./matching.js";
 import type { NoteTarget, EditPreview } from "./protocol.js";
 
 export interface WriteResult { ok: boolean; version?: number; denied?: boolean; error?: string; }
@@ -13,12 +16,6 @@ export interface NoteToolDeps {
   requestWrite: (args: { target?: NoteTarget; toolName: string; oldContent: string; newContent: string; preview: EditPreview }) => Promise<WriteResult>;
   /** Return a loaded skill's full SKILL.md text by name, or null if unknown. */
   readSkillBody: (name: string) => string | null;
-}
-
-const PALETTE = ["#e5484d", "#f5a524", "#15b395", "#4c9eeb", "#a78bfa", "#ec4899"];
-
-function freeColors(used: Set<string>): string[] {
-  return PALETTE.filter((c) => !used.has(c.toLowerCase()));
 }
 
 export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
@@ -98,6 +95,9 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     }),
     promptSnippet: "set_tag — 给块打标签",
     async execute(_id, params: { anchor: string; tagId?: string; target?: NoteTarget }) {
+      if (params.target?.kind && params.target.kind !== "inbox") {
+        return { content: [{ type: "text" as const, text: `set_tag 仅支持 inbox 目标，收到 kind="${params.target.kind}"` }], details: {} };
+      }
       const target: NoteTarget = { kind: "inbox", ...(params.target?.name ? { name: params.target.name } : {}) };
       const old = await deps.getNoteText(target);
       const r = findBlockByAnchor(old, params.anchor);
@@ -125,16 +125,20 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     }),
     promptSnippet: "tag_create — 新建标签",
     async execute(_id, params: { name: string; color: string; target?: NoteTarget }) {
+      if (params.target?.kind && params.target.kind !== "inbox") {
+        return { content: [{ type: "text" as const, text: `tag_create 仅支持 inbox 目标，收到 kind="${params.target.kind}"` }], details: {} };
+      }
       const target: NoteTarget = { kind: "inbox", ...(params.target?.name ? { name: params.target.name } : {}) };
       const old = await deps.getNoteText(target);
-      const map = parseDefs(old);
-      const used = new Set([...map.values()].map((d) => d.color.toLowerCase()));
-      const free = freeColors(used);
+      const free = freeColors(new Set([...parseDefs(old).values()].map((d) => d.color.toLowerCase())));
+      // addTagDefChange only rejects colors already in use, not off-palette
+      // colors — guard palette membership here so non-palette values like
+      // "#000000" are rejected with a helpful "available colors" list.
       if (!free.map((c) => c.toLowerCase()).includes(params.color.toLowerCase())) {
         return { content: [{ type: "text" as const, text: `颜色 ${params.color} 不可用；可用：${JSON.stringify(free)}` }], details: {} };
       }
       const r = addTagDefChange(old, params.name, params.color);
-      if (!r.id) return { content: [{ type: "text", text: `建标签失败：颜色 ${params.color} 已被占用；可用：${JSON.stringify(freeColors(new Set([...parseDefs(old).values()].map((d) => d.color.toLowerCase()))))}` }], details: {} };
+      if (!r.id) return { content: [{ type: "text" as const, text: `建标签失败：颜色 ${params.color} 已被占用；可用：${JSON.stringify(free)}` }], details: {} };
       const newContent = r.change ? applyChange(old, r.change) : old;
       const preview: EditPreview = { tool: "tag_create", summary: `新建标签「${params.name}」`, detail: { kind: "tag_create", tagName: params.name, tagColor: params.color } };
       const res = await deps.requestWrite({ target, toolName: "tag_create", oldContent: old, newContent, preview });
@@ -152,6 +156,9 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     }),
     promptSnippet: "tag_delete — 删标签",
     async execute(_id, params: { tagId: string; target?: NoteTarget }) {
+      if (params.target?.kind && params.target.kind !== "inbox") {
+        return { content: [{ type: "text" as const, text: `tag_delete 仅支持 inbox 目标，收到 kind="${params.target.kind}"` }], details: {} };
+      }
       const target: NoteTarget = { kind: "inbox", ...(params.target?.name ? { name: params.target.name } : {}) };
       const old = await deps.getNoteText(target);
       const changes = deleteTagChanges(old, params.tagId);
@@ -195,18 +202,6 @@ function writeResultText(res: WriteResult) {
   };
 }
 
-function applyChange(doc: string, c: { from: number; to: number; insert: string }): string {
-  return doc.slice(0, c.from) + c.insert + doc.slice(c.to);
-}
-function applyChanges(doc: string, cs: { from: number; to: number; insert: string }[]): string {
-  let out = doc;
-  for (const c of [...cs].sort((a, b) => b.from - a.from)) out = applyChange(out, c);
-  return out;
-}
-function countMarkers(doc: string, id: string): number {
-  const re = new RegExp(`<!-- floatnote:tag=${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} -->`, "g");
-  return (doc.match(re) || []).length;
-}
 function unifiedDiff(a: string, b: string): string {
   // 轻量 diff：按行比对，足够气泡展示。首版用简单逐行 unified 形式。
   const la = a.split("\n"), lb = b.split("\n");

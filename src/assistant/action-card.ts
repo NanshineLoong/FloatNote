@@ -1,6 +1,7 @@
 import { TOOL_LABEL, type EditPreviewDetail } from "./permission-bubble";
 import { fillMarkdown } from "./markdown";
 import type { Block } from "./render";
+import { escapeHtml } from "../shared/escape";
 
 /**
  * 流内动作卡（只读，Phase 1）。
@@ -63,7 +64,7 @@ export function buildActionCard(block: Extract<Block, { kind: "action" }>): HTML
 
   const header = document.createElement("div");
   header.className = "chat-action-header";
-  header.innerHTML = `${toolIcon(block.tool)}<span class="chat-action-title">${escapeText(titleFor(block.tool))}</span>`;
+  header.innerHTML = `${toolIcon(block.tool)}<span class="chat-action-title">${escapeHtml(titleFor(block.tool))}</span>`;
   el.appendChild(header);
 
   if (isReadonly(block.tool)) {
@@ -222,8 +223,8 @@ function renderEditDiff(
   const rightCol = document.createElement("div");
   rightCol.className = "chat-diff-col chat-diff-new";
   for (const r of useRows) {
-    leftCol.appendChild(diffRow(r.left, r.kind === "del"));
-    rightCol.appendChild(diffRow(r.right, r.kind === "add"));
+    leftCol.appendChild(diffRow(r.left, r.kind === "del" || r.kind === "mod"));
+    rightCol.appendChild(diffRow(r.right, r.kind === "add" || r.kind === "mod"));
   }
   const labels = document.createElement("div");
   labels.className = "chat-diff-labels";
@@ -232,7 +233,7 @@ function renderEditDiff(
   return wrap;
 }
 
-type AlignedRow = { left: string; right: string; kind: "ctx" | "add" | "del" };
+type AlignedRow = { left: string; right: string; kind: "ctx" | "add" | "del" | "mod" };
 
 function alignDiffHunks(hunks: string): AlignedRow[] {
   const rows: AlignedRow[] = [];
@@ -253,7 +254,9 @@ function splitFallback(oldContent: string, newContent: string): AlignedRow[] {
   const n = Math.max(la.length, lb.length);
   const rows: AlignedRow[] = [];
   for (let i = 0; i < n; i++) {
-    rows.push({ left: la[i] ?? "", right: lb[i] ?? "", kind: la[i] === lb[i] ? "ctx" : "ctx" });
+    // Line-by-line fallback (no hunk alignment). Differing lines are "mod" so
+    // both the old (left) and new (right) sides highlight, like a real diff.
+    rows.push({ left: la[i] ?? "", right: lb[i] ?? "", kind: la[i] === lb[i] ? "ctx" : "mod" });
   }
   return rows;
 }
@@ -297,8 +300,4 @@ function renderTagDelete(d: Extract<EditPreviewDetail, { kind: "tag_delete" }>):
   row.className = "chat-tag-row";
   row.textContent = `删除标签「${d.tagName}」，${d.markerCount} 处标记将清除`;
   return row;
-}
-
-function escapeText(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

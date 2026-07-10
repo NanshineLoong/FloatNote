@@ -45,10 +45,6 @@ export function chatListForScope(scope: ChatScope): Promise<ChatConversation[]> 
   });
 }
 
-export function chatListRecent(limit: number): Promise<ChatConversation[]> {
-  return invoke<ChatConversation[]>("chat_list_recent", { limit });
-}
-
 export function chatListAll(cursor: number, limit: number): Promise<ChatConversation[]> {
   return invoke<ChatConversation[]>("chat_list_all", { cursor, limit });
 }

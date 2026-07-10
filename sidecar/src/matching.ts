@@ -1,4 +1,4 @@
-import { blockRanges, stripTagMarker, type BlockRange } from "./index.js";
+import { blockRanges, stripTagMarker, type BlockRange } from "@floatnote/note-logic";
 
 export type ReplaceResult =
   | { ok: true; newContent: string }

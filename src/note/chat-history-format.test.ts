@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   deriveTitleFromFirstMessage,
   formatHistoryTime,
-  formatTrayConversationLabel,
 } from "./chat-history-format";
 
 describe("chat history display formatting", () => {
@@ -27,10 +26,5 @@ describe("chat history display formatting", () => {
     expect(formatHistoryTime(new Date("2026-07-07T22:00:00+08:00").getTime(), now)).toBe("昨天");
     expect(formatHistoryTime(new Date("2026-07-05T12:00:00+08:00").getTime(), now)).toBe("07/05");
     expect(formatHistoryTime(new Date("2025-12-31T12:00:00+08:00").getTime(), now)).toBe("2025/12/31");
-  });
-
-  it("weakens the tray project label with parentheses and no middle dot", () => {
-    expect(formatTrayConversationLabel("生成周报草稿", "FloatNote")).toBe("生成周报草稿 (FloatNote)");
-    expect(formatTrayConversationLabel("生成周报草稿", "")).toBe("生成周报草稿");
   });
 });

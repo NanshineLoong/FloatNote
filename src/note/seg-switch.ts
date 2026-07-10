@@ -14,10 +14,6 @@ export function viewToIdx(view: ViewSeg): SegIdx {
   return ORDER.indexOf(view) as SegIdx;
 }
 
-export function idxToView(idx: SegIdx): ViewSeg {
-  return ORDER[idx];
-}
-
 /** 窄窗（放不下两栏）时双栏不可达，钮最多拨到写作(1)。 */
 export function maxReachableIdx(reach: Reach): SegIdx {
   return reach === "narrow" ? 1 : 2;

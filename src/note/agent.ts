@@ -40,15 +40,6 @@ export interface NoteUpdated {
   version: number;
 }
 
-/** 配置 sidecar 的 provider / model / key。 */
-export function agentConfigure(
-  provider: string,
-  model: string,
-  apiKey?: string,
-): Promise<void> {
-  return invoke<void>("agent_configure", { provider, model, apiKey });
-}
-
 /** 发一条用户消息给 tutor，返回 requestId。 */
 export function agentSend(args: {
   conversationId: string;

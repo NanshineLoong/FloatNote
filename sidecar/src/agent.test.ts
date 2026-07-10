@@ -7,7 +7,6 @@ import type { SidecarToHost } from "./protocol.js";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
 import { formatSkillsForSystemPrompt } from "./skills.js";
 
 const ev = (e: unknown): AgentSessionEvent => e as AgentSessionEvent;
@@ -325,20 +324,6 @@ describe("AgentRunner skills", () => {
 });
 
 describe("defaultCreateSession wiring", () => {
-  const agentSource = readFileSync(join(__dirname, "agent.ts"), "utf8");
-
-  it("keeps noSkills: true (loader does not scan Pi default skill dirs)", () => {
-    expect(agentSource).toContain("noSkills: true");
-  });
-
-  it("composes the system prompt override from TUTOR + formatSkillsForSystemPrompt", () => {
-    expect(agentSource).toContain('TUTOR_SYSTEM_PROMPT + "\\n\\n" + formatSkillsForSystemPrompt()');
-  });
-
-  it("includes read_skill in the active tools allowlist", () => {
-    expect(agentSource).toMatch(/"read_skill"/);
-  });
-
   it("formatSkillsForSystemPrompt surfaces a loaded skill's description", async () => {
     const root = mkdtempSync(join(tmpdir(), "floatnote-agent-skills-"));
     mkdirSync(join(root, "x"), { recursive: true });

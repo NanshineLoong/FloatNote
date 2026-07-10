@@ -1,7 +1,5 @@
 import type { SyntaxNode } from "@lezer/common";
 
-const INDENT = "    "; // 4 spaces
-
 export function isListItemLine(line: string): boolean {
   return /^\s*([-*+]|\d+\.)\s/.test(line);
 }
@@ -11,10 +9,6 @@ export function isListItemLine(line: string): boolean {
 export function lineDepth(line: string): number {
   const m = /^(\s*)/.exec(line);
   return Math.floor((m ? m[1].length : 0) / 4);
-}
-
-export function indentLine(line: string): string {
-  return INDENT + line;
 }
 
 export function outdentLine(line: string): string {

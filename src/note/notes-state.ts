@@ -40,9 +40,7 @@ export function tasksPath(projectPath: string): string {
 /** Join a project folder path with its `_inbox.md`, choosing the separator from
  * the folder path so it stays correct on both Windows (`\\`) and POSIX (`/`). */
 export function inboxPath(projectPath: string): string {
-  const sep = projectPath.includes("\\") ? "\\" : "/";
-  const trimmed = projectPath.replace(/[\\/]+$/, "");
-  return `${trimmed}${sep}${INBOX_FILE}`;
+  return projectFilePath(projectPath, INBOX_FILE);
 }
 
 /** The editor binds to a project's Inbox file. Expose it as a `NoteEntry` named

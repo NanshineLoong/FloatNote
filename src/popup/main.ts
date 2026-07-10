@@ -41,6 +41,9 @@ async function dismiss(): Promise<void> {
 
 function renderState(hasText: boolean): void {
   if (hasText) {
+    // A prior empty-state render may have armed a 3s auto-dismiss timer;
+    // clear it so it doesn't fire and hide the popup while the user views actions.
+    clearHideTimer();
     emptyEl.hidden = true;
     actionsEl.hidden = false;
     captureBtn.disabled = false;

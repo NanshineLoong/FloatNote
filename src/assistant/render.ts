@@ -418,16 +418,6 @@ function lastIndex<T>(items: T[], pred: (item: T) => boolean): number {
   return -1;
 }
 
-/** 把状态铺成消息列表 DOM（初次挂载/历史入口用；流式增量走 blocks.ts 的 reconcile）。 */
-export function renderMessages(state: ChatState): HTMLElement {
-  const list = document.createElement("div");
-  list.className = "chat-messages";
-  for (const message of state.messages) {
-    list.appendChild(renderMessage(message));
-  }
-  return list;
-}
-
 /**
  * 在气泡下方挂载复制按钮（hover 浮出）。一次性挂载：节点稳定，
  * 不随 token delta 重建。复制原始 markdown 文本（非渲染后纯文本）。
@@ -457,7 +447,7 @@ function attachCopyButton(textEl: HTMLElement, rawText: string, align: "left" | 
 }
 
 /** 复制文本：优先 navigator.clipboard，降级 execCommand 临时 textarea。 */
-export function copyText(text: string): Promise<boolean> {
+function copyText(text: string): Promise<boolean> {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     return navigator.clipboard
       .writeText(text)

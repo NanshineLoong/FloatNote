@@ -1,17 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { viewToIdx, idxToView, maxReachableIdx, type Reach } from "./seg-switch";
+import { viewToIdx, maxReachableIdx, type Reach } from "./seg-switch";
 
 const FULL: Reach = "full";
 const NARROW: Reach = "narrow";
 
-describe("viewToIdx / idxToView", () => {
-  it("round-trips the three segments in order 采集 → 写作 → 双栏", () => {
+describe("viewToIdx", () => {
+  it("maps the three segments in order 采集 → 写作 → 双栏", () => {
     expect(viewToIdx("inbox")).toBe(0);
     expect(viewToIdx("piece")).toBe(1);
     expect(viewToIdx("split")).toBe(2);
-    expect(idxToView(0)).toBe("inbox");
-    expect(idxToView(1)).toBe("piece");
-    expect(idxToView(2)).toBe("split");
   });
 });
 

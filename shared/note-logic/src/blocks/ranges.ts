@@ -19,6 +19,20 @@ export interface ChangeOp {
   insert: string;
 }
 
+/** Apply a single change op to a document string, returning the new text. */
+export function applyChange(doc: string, c: ChangeOp): string {
+  return doc.slice(0, c.from) + c.insert + doc.slice(c.to);
+}
+
+/** Apply a batch of change ops to a document string. Ops are applied from
+ *  highest `from` to lowest so earlier offsets stay valid as later spans are
+ *  removed/inserted. */
+export function applyChanges(doc: string, cs: ChangeOp[]): string {
+  let out = doc;
+  for (const c of [...cs].sort((a, b) => b.from - a.from)) out = applyChange(out, c);
+  return out;
+}
+
 const TODO_RE = /^- \[[ xX]\]/;
 
 /** Compute the char-range of every top-level block, in document order. */

@@ -1,6 +1,7 @@
 import { markdownLanguage } from "@codemirror/lang-markdown";
 import { Autolink, MarkdownParser, Strikethrough } from "@lezer/markdown";
 import type { SyntaxNode } from "@lezer/common";
+import { escapeHtml } from "../shared/escape";
 
 // Configure a parser that also understands ~~strike~~ so strikethrough in
 // table cells parses the same way it does in the editor (GFM enabled in
@@ -13,15 +14,6 @@ const inlineParser = (markdownLanguage.parser as MarkdownParser).configure([
   Strikethrough,
   Autolink,
 ]);
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 /** Allowlist URL schemes/relative forms. Returns "" for
  *  anything that could execute script (javascript:, data:, vbscript:, …). */

@@ -173,6 +173,7 @@ export class AgentRunner {
   private readonly factory: SessionFactory;
   private cfg?: AgentConfig;
   private readonly sessions = new Map<string, SessionLike>();
+  private readonly activeConversations = new Map<string, string>();
   private writeSeq = 0;
   private textSeq = 0;
   private readonly pendingEdits = new Map<string, (r: WriteResult) => void>();
@@ -229,10 +230,12 @@ export class AgentRunner {
       }
       this.send(msg);
     });
+    this.activeConversations.set(req.requestId, req.conversationId);
     try {
       await session.prompt(req.userText);
     } finally {
       unsubscribe();
+      this.activeConversations.delete(req.requestId);
     }
   }
 
@@ -254,8 +257,13 @@ export class AgentRunner {
     }
   }
 
-  async cancel(_requestId?: string): Promise<void> {
-    await Promise.all([...this.sessions.values()].map((session) => session.abort()));
+  /** Cancel the in-flight prompt for `requestId`. Scoped to that request's
+   *  conversation only — other conversations keep streaming. No-op when the
+   *  request is unknown (already finished or never started). */
+  async cancel(requestId?: string): Promise<void> {
+    const conversationId = requestId ? this.activeConversations.get(requestId) : undefined;
+    if (!conversationId) return;
+    await this.sessions.get(conversationId)?.abort();
   }
 
   private async installSession(conversationId: string, sessionManager: PiSessionManager): Promise<void> {
@@ -291,8 +299,17 @@ export class AgentRunner {
       // target 缺省=当前活动笔记；仅当调用方给出时携带，由 Rust 解析。
       ...(target ? { target } : {}),
     };
-    return new Promise<string>((resolve) => {
-      this.pendingTexts.set(callId, (r) => resolve(r.content));
+    return new Promise<string>((resolve, reject) => {
+      this.pendingTexts.set(callId, (r) => {
+        // `found === false` means the target note does not exist on disk.
+        // Reject so tools surface a clear "note not found" error instead of
+        // silently operating on (and writing back) an empty document.
+        if (!r.found) {
+          reject(new Error("目标笔记不存在"));
+          return;
+        }
+        resolve(r.content);
+      });
       this.send(msg);
     });
   }

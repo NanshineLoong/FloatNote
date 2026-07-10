@@ -58,10 +58,9 @@ pub struct ChatHistoryStore {
 
 impl ChatHistoryStore {
     pub fn default_for_user() -> io::Result<Self> {
-        let home = user_home_dir().ok_or_else(|| {
+        let floatnote = crate::paths::floatnote_home().ok_or_else(|| {
             io::Error::new(io::ErrorKind::NotFound, "user home directory not found")
         })?;
-        let floatnote = home.join(".floatnote");
         try_hide_on_windows(&floatnote);
         Ok(Self::new_at(floatnote.join("chat-history")))
     }
@@ -302,17 +301,6 @@ fn next_conversation_id(now: u64) -> String {
     )
 }
 
-pub(crate) fn user_home_dir() -> Option<PathBuf> {
-    #[cfg(target_os = "windows")]
-    {
-        std::env::var_os("USERPROFILE").map(PathBuf::from)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        std::env::var_os("HOME").map(PathBuf::from)
-    }
-}
-
 fn try_hide_on_windows(path: &Path) {
     #[cfg(target_os = "windows")]
     {
@@ -392,33 +380,5 @@ mod tests {
         assert!(store.open(&entry.id).unwrap().is_none());
     }
 
-    fn tempdir() -> TempDir {
-        static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let mut path = std::env::temp_dir();
-        path.push(format!(
-            "floatnote-chat-history-{}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
-            NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&path).unwrap();
-        TempDir(path)
-    }
-
-    struct TempDir(std::path::PathBuf);
-
-    impl TempDir {
-        fn path(&self) -> &std::path::Path {
-            &self.0
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
+    use crate::testutil::{tempdir, TempDir};
 }

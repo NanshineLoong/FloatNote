@@ -10,6 +10,8 @@
  * `empty-state.test.ts`, matching the repo's all-pure test style.
  */
 
+import { escapeHtml } from "../shared/escape";
+
 export interface EmptyStateAction {
   label: string;
   action: () => void;
@@ -25,22 +27,6 @@ export interface EmptyStateProps {
   primary?: EmptyStateAction;
   secondary?: EmptyStateAction;
   tertiary?: EmptyStateAction;
-}
-
-function escapeHtml(input: string): string {
-  return input.replace(
-    /[&<>"']/g,
-    (c) =>
-      (
-        ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;",
-        }) as Record<string, string>
-      )[c],
-  );
 }
 
 /** Build the inner HTML for an empty-state card. Pure: no DOM, no I/O. */

@@ -30,7 +30,6 @@ type Command = (view: EditorView) => boolean;
 
 export const OutlineToggleEffect = StateEffect.define<boolean>();
 export const OutlineFoldEffect = StateEffect.define<{ id: string; folded: boolean }>();
-export const OutlineAssetReadyEffect = StateEffect.define<void>();
 
 const outlineInitialOn = Facet.define<boolean, boolean>({
   combine: (values) => values[values.length - 1] ?? false,
@@ -308,8 +307,6 @@ export const outlineStateField = StateField.define<OutlineModeState>({
       } else if (effect.is(OutlineFoldEffect)) {
         if (effect.value.folded) folded.add(effect.value.id);
         else folded.delete(effect.value.id);
-        mustRebuild = true;
-      } else if (effect.is(OutlineAssetReadyEffect)) {
         mustRebuild = true;
       }
     }

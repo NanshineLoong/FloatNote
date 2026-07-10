@@ -26,11 +26,11 @@ mod cg {
 
     // CGEventTapLocation
     pub const KCG_SESSION_EVENT_TAP: i32 = 1; // kCGSessionEventTap
-    // CGEventTapPlacement
+                                              // CGEventTapPlacement
     pub const KCG_HEAD_INSERT_EVENT_TAP: i32 = 0;
     // CGEventTapOptions
     pub const KCG_EVENT_TAP_OPTION_LISTEN: u32 = 1; // 只听不改
-    // CGEventType
+                                                    // CGEventType
     pub const KCG_LEFT_MOUSE_DOWN: u32 = 1;
     pub const KCG_LEFT_MOUSE_UP: u32 = 2;
     // CGEventMask = 1 << eventType。同时听 down+up：down 记起点，up 算位移判断真选区。
@@ -159,7 +159,7 @@ fn handle_mouse_event(type_: u32, event: *mut c_void) {
 
     // 廉价地在 run loop 线程上读模式 + 修饰键。
     let mode = app
-        .try_state::<crate::commands::AppState>()
+        .try_state::<crate::state::AppState>()
         .and_then(|s| s.config.lock().ok().map(|c| c.auto_popup_mode.clone()))
         .unwrap_or_default();
     if mode != "every" && mode != "modifier" {
@@ -246,9 +246,7 @@ fn install_macos(app: AppHandle) {
     };
     if port.is_null() {
         // 多半是缺少「输入监控」权限；复用既有横幅提示用户去系统设置授权。
-        eprintln!(
-            "[selection_monitor] CGEventTapCreate 返回 NULL —— 可能未授予「输入监控」权限"
-        );
+        eprintln!("[selection_monitor] CGEventTapCreate 返回 NULL —— 可能未授予「输入监控」权限");
         let _ = app.emit_to("main", "accessibility-needed", ());
         return;
     }

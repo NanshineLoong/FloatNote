@@ -1,24 +1,13 @@
 /**
- * Curated tag color palette + tint derivation. Block backgrounds use a
- * translucent tint of the tag's hex color so text stays readable.
+ * Tag color palette + tint derivation. Block backgrounds use a translucent
+ * tint of the tag's hex color so text stays readable.
+ *
+ * The canonical `PALETTE` (and `freeColors`) lives in `@floatnote/note-logic`
+ * so the sidecar agent's tag tools see the exact same color set the user sees
+ * in this picker. Only the DOM-facing `tint`/`hexToRgb` helpers live here.
  */
 
-export interface Swatch {
-  id: string;
-  color: string;
-}
-
-/** Eight curated swatches spanning the common hues. */
-export const PALETTE: Swatch[] = [
-  { id: "red", color: "#e5484d" },
-  { id: "orange", color: "#f5a623" },
-  { id: "amber", color: "#f2c744" },
-  { id: "green", color: "#3cb371" },
-  { id: "teal", color: "#0d9488" },
-  { id: "blue", color: "#3b82f6" },
-  { id: "violet", color: "#8b5cf6" },
-  { id: "pink", color: "#ec4899" },
-];
+export { PALETTE, type Swatch } from "@floatnote/note-logic";
 
 /** Parse a `#rgb` / `#rrggbb` / `#rrggbbaa` hex color into r,g,b (0–255). */
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
