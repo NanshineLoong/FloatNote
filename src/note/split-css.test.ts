@@ -8,7 +8,8 @@ const editorSource = readFileSync(resolve(process.cwd(), "src/note/editor.ts"), 
 const tagDecorationSource = readFileSync(resolve(process.cwd(), "src/note/tags/decoration.ts"), "utf8");
 const pieceSwitcherSource = readFileSync(resolve(process.cwd(), "src/note/piece-switcher.ts"), "utf8");
 const assistantCss = readFileSync(resolve(process.cwd(), "src/assistant/styles.css"), "utf8");
-const assistantBubbleColor = assistantCss.match(/\.chat-block-text\s*{[^}]*background:\s*(#[0-9a-fA-F]{6});/s)?.[1];
+const semanticCss = readFileSync(resolve(process.cwd(), "src/styles/semantic.css"), "utf8");
+const assistantBubbleColor = semanticCss.match(/--color-bubble-ai-bg:\s*(#[0-9a-fA-F]{6});/s)?.[1];
 
 describe("split view CSS placement", () => {
   it("pins both editor columns below the tag bar row in split mode", () => {
@@ -111,21 +112,20 @@ describe("split view CSS placement", () => {
   });
 
   it("gives the floating assistant a soft background without bubble borders", () => {
+    // 浮层卡片：磨砂半透背景 + 阴影，无边框（气泡自身有底，卡片不重复边框）。
     expect(css).toMatch(
-      /#app\.mode-floating\s+#assistant-region\s+\.assistant-card\s*{[^}]*background:\s*rgba\([^;]+;[^}]*backdrop-filter:\s*blur\([^}]+;[^}]*box-shadow:/s,
+      /#app\.mode-floating\s+#assistant-region\s+\.assistant-card\s*{[^}]*background:\s*var\(--color-overlay\);[^}]*backdrop-filter:\s*blur\([^}]+;[^}]*box-shadow:/s,
     );
     expect(css).not.toMatch(
       /#app\.mode-floating\s+#assistant-region\s+\.assistant-card::before\s*{/,
     );
+    // AI 气泡底色走语义 token（light/dark 由 semantic.css 统一切换），
+    // assistant 窗口不再保留 per-window dark @media 块。
     expect(assistantCss).toMatch(
-      /#app\.mode-floating\s+\.chat-block-text\s*{[^}]*background:\s*#[0-9a-fA-F]{6};/s,
+      /\.chat-block-text\s*{[^}]*background:\s*var\(--color-bubble-ai-bg\);/s,
     );
-    expect(assistantCss.match(/#app\.mode-floating\s+\.chat-block-text\s*{[^}]*background:\s*(#[0-9a-fA-F]{6});/s)?.[1]).toBe(
-      assistantBubbleColor,
-    );
-    expect(css).toMatch(
-      /@media\s*\(prefers-color-scheme:\s*dark\)\s*{[\s\S]*#app\.mode-floating\s+#assistant-region\s+\.assistant-card\s*{[^}]*background:\s*rgba\([^;]+;[^}]*box-shadow:/s,
-    );
+    expect(assistantBubbleColor).toBe("#f3f1ec");
+    expect(assistantCss).not.toMatch(/@media\s*\(prefers-color-scheme:\s*dark\)/s);
   });
 
   it("renders streaming with a caret (::after) instead of cancelling entrance animation", () => {

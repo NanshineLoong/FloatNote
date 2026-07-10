@@ -72,11 +72,11 @@
   background: var(--color-accent-pressed);
 }
 .fn-btn--danger {
-  background: var(--danger-600);
-  color: var(--gray-0);
+  background: var(--color-danger);
+  color: var(--color-text-on-accent);
 }
 .fn-btn--danger:not(:disabled):hover {
-  background: var(--danger-700);
+  background: var(--color-danger-hover);
 }
 .fn-btn--icon {
   width: 32px;
@@ -144,10 +144,10 @@
   cursor: default;
 }
 .fn-menu__item--danger {
-  color: var(--danger-600);
+  color: var(--color-danger);
 }
 .fn-menu__item--danger:not(.is-disabled):hover {
-  background: rgba(239, 68, 68, 0.14);
+  background: var(--color-danger-fill-strong);
 }
 .fn-menu__separator {
   height: 1px;

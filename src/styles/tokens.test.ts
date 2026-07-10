@@ -39,6 +39,66 @@ describe("design tokens", () => {
     );
   });
 
+  it("exposes the danger semantic tokens (mirroring accent, light + dark)", () => {
+    const s = readFileSync(resolve(root, "src/styles/semantic.css"), "utf8");
+    for (const tok of [
+      "--color-danger:",
+      "--color-danger-hover:",
+      "--color-danger-fill:",
+      "--color-danger-fill-strong:",
+    ]) {
+      expect(s).toMatch(new RegExp(tok));
+    }
+    // Dark block re-points danger text to the lighter shade.
+    expect(s).toMatch(
+      /@media \(prefers-color-scheme: dark\)[\s\S]*--color-danger:\s*var\(--danger-500\)/,
+    );
+    // primitives back the dark lighter shade.
+    const p = readFileSync(resolve(root, "src/styles/primitives.css"), "utf8");
+    expect(p).toContain("--danger-400:");
+  });
+
+  it("has no residual accent/danger rgba literals in window CSS", () => {
+    // After migration, hover/selected/focus-ring/danger fills in window
+    // styles go through semantic tokens — no raw rgba(37,99,235)/danger ramps.
+    const banned = [
+      "rgba(37, 99, 235",
+      "rgba(96, 165, 250",
+      "rgba(59, 130, 246",
+      "rgba(220, 38, 38",
+      "rgba(239, 68, 68",
+      "rgba(248, 113, 113",
+    ];
+    for (const f of tokenizedCss) {
+      const css = readFileSync(resolve(root, f), "utf8").replace(
+        /\/\*[\s\S]*?\*\//g,
+        "",
+      );
+      for (const lit of banned) {
+        expect(css).not.toMatch(new RegExp(lit.replace(/[()]/g, "\\$&")));
+      }
+    }
+  });
+
+  it("has no per-window dark @media block (dark is centralized in semantic.css)", () => {
+    for (const f of tokenizedCss) {
+      const css = readFileSync(resolve(root, f), "utf8").replace(
+        /\/\*[\s\S]*?\*\//g,
+        "",
+      );
+      expect(css).not.toMatch(/@media\s*\(prefers-color-scheme:\s*dark\)/);
+    }
+  });
+
+  it("component layer never consumes primitives directly", () => {
+    const c = readFileSync(resolve(root, "src/styles/components.css"), "utf8").replace(
+      /\/\*[\s\S]*?\*\//g,
+      "",
+    );
+    expect(c).not.toMatch(/var\(--indigo-/);
+    expect(c).not.toMatch(/var\(--danger-/);
+  });
+
   it("has no raw #2563eb accent literal in tokenized CSS (comments stripped)", () => {
     for (const f of tokenizedCss) {
       const css = readFileSync(resolve(root, f), "utf8").replace(

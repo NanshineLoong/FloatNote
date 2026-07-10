@@ -40,6 +40,20 @@
   --color-hover-strong: rgba(0, 0, 0, 0.06);
   --color-selected:     var(--indigo-accent-fill-light);
 
+  /* ── Danger (interaction states, mirrors accent) ── */
+  --color-danger:             var(--danger-600);
+  --color-danger-hover:       var(--danger-700);
+  --color-danger-fill:        rgba(220, 38, 38, 0.08);
+  --color-danger-fill-strong: rgba(220, 38, 38, 0.14);
+
+  /* ── Success (status text only) ── */
+  --color-success: #059669;
+
+  /* ── Chat bubbles (user vs AI surfaces, not neutral) ── */
+  --color-bubble-user-bg:   #e8f0fe;
+  --color-bubble-user-text: #1b3a6b;
+  --color-bubble-ai-bg:     #f3f1ec;
+
   /* ── Shadows (consolidates ~15 ad-hoc one-offs) ── */
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -103,6 +117,17 @@
     --color-hover:        rgba(255, 255, 255, 0.08);
     --color-hover-strong: rgba(255, 255, 255, 0.10);
     --color-selected:     var(--indigo-accent-fill-dark);
+
+    --color-danger:             var(--danger-500);
+    --color-danger-hover:       var(--danger-400);
+    --color-danger-fill:        rgba(248, 113, 113, 0.14);
+    --color-danger-fill-strong: rgba(248, 113, 113, 0.22);
+
+    --color-success: #34d399;
+
+    --color-bubble-user-bg:   #2d3a52;
+    --color-bubble-user-text: #cfe0ff;
+    --color-bubble-ai-bg:     #2c2c2e;
 
     --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.30);
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);

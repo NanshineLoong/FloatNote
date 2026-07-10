@@ -127,7 +127,7 @@ body {
 }
 
 .popup-btn-primary:not(:disabled):active {
-  background: rgba(37, 99, 235, 0.18);
+  background: var(--popup-accent-fill);
 }
 
 /* Ghost: neutral, subtle hover fill (matches .topbar button / .icon-btn). */

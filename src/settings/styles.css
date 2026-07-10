@@ -8,11 +8,9 @@
   gap: 0;
   padding: 20px 24px 16px;
   font-size: 13px;
-  font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
-  color: #202124;
+  color: var(--color-text);
   overflow-y: auto;
   height: 100vh;
-  box-sizing: border-box;
 }
 
 /* ── Sections ── */
@@ -20,7 +18,7 @@
 .settings-section {
   padding-bottom: 16px;
   margin-bottom: 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--color-divider);
 }
 
 .settings-section:last-of-type {
@@ -35,13 +33,13 @@
   margin-bottom: 14px;
   font-size: 13px;
   font-weight: 600;
-  color: #202124;
+  color: var(--color-text);
   letter-spacing: 0.01em;
 }
 
 .settings-section-header i {
   font-size: 16px;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 /* ── Rows ── */
@@ -65,7 +63,7 @@
 
 .settings-label {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-weight: 500;
 }
 
@@ -86,7 +84,7 @@
   text-align: center;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 /* ── Text & password inputs ── */
@@ -95,10 +93,10 @@
 .settings-page input[type="password"],
 .settings-page input:not([type]) {
   padding: 6px 8px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: #fff;
-  color: #202124;
+  background: var(--color-surface);
+  color: var(--color-text);
   font-size: 13px;
   font-family: inherit;
   outline: none;
@@ -111,7 +109,7 @@
 }
 
 .settings-page input[readonly] {
-  background: #f8f8f7;
+  background: var(--color-surface-2);
   cursor: default;
 }
 
@@ -123,7 +121,7 @@
   height: 4px;
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(0, 0, 0, 0.12);
+  background: var(--color-border);
   border-radius: 2px;
   outline: none;
 }
@@ -135,17 +133,17 @@
   border-radius: 50%;
   background: var(--color-accent);
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ── Select dropdown ── */
 
 .settings-select {
   padding: 6px 8px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: #fff;
-  color: #202124;
+  background: var(--color-surface);
+  color: var(--color-text);
   font-size: 13px;
   font-family: inherit;
   outline: none;
@@ -177,7 +175,7 @@
   width: 36px;
   height: 20px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--color-border);
   position: relative;
   transition: background 180ms ease;
 }
@@ -190,8 +188,8 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
   transition: transform 180ms ease;
 }
 
@@ -212,18 +210,18 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: #fff;
-  color: #6b7280;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
   cursor: pointer;
   font-size: 16px;
   transition: background 120ms ease, border-color 120ms ease;
 }
 
 .settings-btn-secondary:hover {
-  background: #f8f8f7;
-  border-color: rgba(0, 0, 0, 0.25);
+  background: var(--color-surface-2);
+  border-color: var(--color-border-strong);
 }
 
 /* ── Primary button (save) ── */
@@ -233,7 +231,7 @@
   border: none;
   border-radius: 6px;
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-text-on-accent);
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;
@@ -258,9 +256,9 @@
   justify-content: center;
   min-height: 34px;
   padding: 4px 12px;
-  border: 1.5px dashed rgba(0, 0, 0, 0.2);
+  border: 1.5px dashed var(--color-border-strong);
   border-radius: 6px;
-  background: #fafafa;
+  background: var(--color-surface-2);
   cursor: pointer;
   transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
   user-select: none;
@@ -268,27 +266,27 @@
 }
 
 .key-recorder:hover {
-  border-color: rgba(0, 0, 0, 0.35);
+  border-color: var(--color-border-strong);
 }
 
 .key-recorder.recording {
   border-style: solid;
   border-color: var(--color-accent);
-  background: rgba(37, 99, 235, 0.06);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  background: var(--color-hover);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
   cursor: default;
 }
 
 .key-recorder.has-value {
   border-style: solid;
-  border-color: rgba(0, 0, 0, 0.15);
-  background: #fff;
+  border-color: var(--color-border);
+  background: var(--color-surface);
 }
 
 .key-recorder-label {
   font-size: 13px;
-  font-family: "SF Mono", "Menlo", "Consolas", monospace;
-  color: #374151;
+  font-family: var(--font-mono);
+  color: var(--color-text);
   letter-spacing: 0.02em;
 }
 
@@ -298,7 +296,7 @@
 
 .key-recorder-hint {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--color-text-subtle);
 }
 
 /* ── Footer ── */
@@ -319,115 +317,9 @@
 }
 
 .settings-status.error {
-  color: #b91c1c;
+  color: var(--color-danger);
 }
 
 .settings-status.success {
-  color: #059669;
-}
-
-/* ── Dark mode ── */
-
-@media (prefers-color-scheme: dark) {
-  .settings-page {
-    color: #e5e5e5;
-    background: #1e1e1e;
-  }
-
-  .settings-section {
-    border-bottom-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .settings-section-header {
-    color: #e5e5e5;
-  }
-
-  .settings-section-header i {
-    color: #9ca3af;
-  }
-
-  .settings-label {
-    color: #9ca3af;
-  }
-
-  .settings-page input[type="text"],
-  .settings-page input[type="password"],
-  .settings-page input:not([type]) {
-    border-color: rgba(255, 255, 255, 0.15);
-    background: #2a2a2a;
-    color: #e5e5e5;
-  }
-
-  .settings-page input[readonly] {
-    background: #333;
-  }
-
-  .settings-page input[type="range"] {
-    background: rgba(255, 255, 255, 0.15);
-  }
-
-  .settings-select {
-    border-color: rgba(255, 255, 255, 0.15);
-    background: #2a2a2a;
-    color: #e5e5e5;
-  }
-
-  .settings-toggle-track {
-    background: rgba(255, 255, 255, 0.2);
-  }
-
-  .settings-btn-secondary {
-    border-color: rgba(255, 255, 255, 0.15);
-    background: #2a2a2a;
-    color: #9ca3af;
-  }
-
-  .settings-btn-secondary:hover {
-    background: #333;
-    border-color: rgba(255, 255, 255, 0.25);
-  }
-
-  .settings-value {
-    color: #9ca3af;
-  }
-
-  .key-recorder {
-    border-color: rgba(255, 255, 255, 0.2);
-    background: #2a2a2a;
-  }
-
-  .key-recorder:hover {
-    border-color: rgba(255, 255, 255, 0.35);
-  }
-
-  .key-recorder.recording {
-    border-color: var(--color-accent);
-    background: rgba(96, 165, 250, 0.1);
-    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
-  }
-
-  .key-recorder.has-value {
-    border-color: rgba(255, 255, 255, 0.15);
-    background: #2a2a2a;
-  }
-
-  .key-recorder-label {
-    color: #d1d5db;
-  }
-
-  .key-recorder.recording .key-recorder-label {
-    color: var(--color-accent);
-  }
-
-  .key-recorder-hint {
-    color: #6b7280;
-  }
-
-  .settings-status.error {
-    color: #f87171;
-  }
-
-  .settings-status.success {
-    color: #34d399;
-  }
+  color: var(--color-success);
 }

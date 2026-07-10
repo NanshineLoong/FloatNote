@@ -29,6 +29,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Default window surface. Transparent overlay windows (e.g. popup) override
+   `background` to `transparent` in their own stylesheet. */
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
 /* Global focus ring — fixes the keyboard-a11y gap. Components must NOT override
    `outline` (they may set `border-radius: inherit` only). */
 :where(button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {

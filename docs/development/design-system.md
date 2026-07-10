@@ -63,7 +63,10 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 ## 迁移状态
 
 - ✅ token 地基 + `index.css` 载入 + 起步组件 + 主色 hex（`#2563eb`/`#60a5fa`/`#1d4ed8`/`#3b82f6`）→ token + popup 别名 + 滚动条统一 + CM 主题桥接。
-- ⏳ 后续：逐调用点切到 `createButton`/`createIcon`/`createMenu`/`openModal`；剩余 accent rgba 色阶（hover/选中/焦点环的 `rgba(37,99,235,*)`、`rgba(96,165,250,*)`、`rgba(59,130,246,*)`）按语义映射到 `--color-hover`/`--color-selected`/`--color-focus-ring`；窗口级 `.switch-menu`/`.popup-btn` 等迁移到 `.fn-*`。
+- ✅ 窗口样式全量对齐 popup 模板：accent rgba 色阶（hover/选中/焦点环）→ `--color-hover`/`--color-selected`/`--color-focus-ring`/`--color-accent-fill`；中性 hex → `--color-surface*`/`--color-text*`/`--color-border*`；各窗口 `@media (prefers-color-scheme: dark)` 块与窗口级 reset 删除，dark 统一由 `semantic.css` 兜底；`base.css` 上移 `body` 背景色与 `button/input` 字体继承。`accent.ts` 常量桥接保留（CM 静态编译限制）。
+- ✅ 新增 danger 语义 token 组（`--color-danger`/`--color-danger-hover`/`--color-danger-fill`/`--color-danger-fill-strong`，light+dark，与 accent 对称）+ `--color-success` + chat 气泡 token（`--color-bubble-user-*`/`--color-bubble-ai-bg`）。`primitives.css` 补 `--danger-400`。`components.css` 的 `.fn-btn--danger`/`.fn-menu__item--danger` 改用语义 token。
+- ⏳ 后续（阶段二）：逐调用点切到 `createMenu`/`openModal`/`createButton`/`createIcon` 替换 floating-menu 与各窗口手写控件；窗口级 `.switch-menu`/`.popup-btn` 等类迁移到 `.fn-*`。
+- 守卫：`src/styles/tokens.test.ts` 断言窗口 CSS 无残留 accent/danger rgba、无 per-window dark `@media` 块、danger 语义 token 存在、组件层不裸用 primitives。
 
 ## 跨平台注记
 
