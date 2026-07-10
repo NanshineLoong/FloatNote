@@ -1,6 +1,11 @@
 //! Narrow boundary for OS integrations. Domain code depends on these traits so
 //! headless tests can provide deterministic fakes instead of touching macOS or
 //! Windows services.
+//!
+//! Only `UrlOpener` is wired into domain code today; the remaining traits are
+//! the planned boundary and will be connected as their call sites land. Allow
+//! dead code until then.
+#![allow(dead_code)]
 
 use std::path::Path;
 
