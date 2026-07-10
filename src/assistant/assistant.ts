@@ -93,7 +93,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       <div class="assistant-history-popover" hidden></div>
       <div class="assistant-perm-region"></div>
       <div class="assistant-input-wrap">
-        <textarea class="assistant-input" rows="1" placeholder="和助手说点什么…"></textarea>
+        <textarea class="assistant-input" rows="1" placeholder="说点什么…"></textarea>
         <button class="assistant-send" type="button" aria-label="查看项目对话历史" title="查看项目对话历史"><i class="ph ph-clock-counter-clockwise"></i></button>
       </div>
     </div>

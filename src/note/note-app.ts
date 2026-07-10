@@ -224,7 +224,7 @@ const editor = createEditor(
     ),
     tagDecorations(),
     ...tagFilter(),
-    placeholder("Inbox 还是空的 —— 划线捕获或在这里写点什么"),
+    placeholder("在这里写点什么…"),
     EditorView.updateListener.of((u) => {
       if (tagBar && (u.docChanged ||
         u.transactions.some((t) => t.effects.some((e) => e.is(setTagFilter))))) {
@@ -266,7 +266,7 @@ const pieceEditor = createEditor(
     const f = activePieceFile();
     if (f) scheduleSave(f.path, doc);
   },
-  [scrollerPositionTheme, ...outlineMode(), placeholder("开始写……")],
+  [scrollerPositionTheme, ...outlineMode(), placeholder("开始写…")],
   {
     grow: true,
     // pieceEditor is shared by project piece session.mode AND document session.mode. Branch on
@@ -914,12 +914,12 @@ async function showProjectSwitcher(anchor: HTMLElement) {
                 }),
             },
             {
-              label: "从最近列表移除",
+              label: "移除",
               icon: "ph-minus-circle",
               onClick: () => void removeProjectFromRecent(project),
             },
             {
-              label: "删除（移到废纸篓）",
+              label: "删除",
               icon: "ph-trash",
               danger: true,
               onClick: () => void deleteProjectFlow(project),
@@ -966,12 +966,12 @@ async function showProjectSwitcher(anchor: HTMLElement) {
                 }),
             },
             {
-              label: "从最近列表移除",
+              label: "移除",
               icon: "ph-minus-circle",
               onClick: () => void removeDocumentFromRecent(doc),
             },
             {
-              label: "删除（移到废纸篓）",
+              label: "删除",
               icon: "ph-trash",
               danger: true,
               onClick: () => void deleteDocumentFlow(doc),
@@ -1325,4 +1325,3 @@ attachQuoteCapture(editor);
 attachAutomationToasts();
 
 }
-

@@ -54,6 +54,10 @@ FloatNote ships on both Windows and macOS, so develop with both targets in mind.
 
 When you are unsure about a Tauri, plugin, or other library API — or need to confirm current behavior, configuration, or migration details — use Context7 to pull the official, up-to-date documentation instead of relying on memory. Prefer this over guesswork whenever an API's exact signature, capability, or version-specific behavior matters.
 
+## Documentation Updates
+
+When a change affects the system's documented surface — module structure, Tauri commands/events or DTOs, project-space file conventions, build/test commands, or cross-platform behavior — update the related docs (`CLAUDE.md`/`AGENTS.md`, and the relevant files under `docs/architecture/`, `docs/development/`, or `docs/adr/`) in the same change. Do not regenerate stable docs wholesale; make focused edits that keep them consistent with the current code.
+
 ## Testing Guidelines
 
 Frontend tests use Vitest and are named `*.test.ts` next to the code they cover, for example `src/note/append.test.ts`. Prefer focused tests for pure helpers and state transitions. Run `npm test` before submitting TypeScript behavior changes.

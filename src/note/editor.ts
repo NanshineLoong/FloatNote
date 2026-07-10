@@ -6,6 +6,7 @@ import type { Extension } from "@codemirror/state";
 import { EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { livePreview, setNoteDir } from "./preview";
+import { listFold } from "./list-fold";
 import { attachImageToolbar } from "./image-toolbar";
 import { listKeymap } from "./list-keymap";
 import { tableKeymap } from "./table-keymap";
@@ -152,6 +153,7 @@ export function createEditor(
         },
       ),
       ...livePreview(),
+      ...listFold(),
       listKeymap(),
       tableKeymap(),
       // imagePasteHandler must come BEFORE htmlPasteHandler so the image check

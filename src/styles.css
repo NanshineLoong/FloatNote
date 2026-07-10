@@ -1860,6 +1860,38 @@ input {
   font-size: 12px;
 }
 
+/* 列表折叠（编辑区常驻）：交互语言与 outline 折叠一致——三角平时隐，
+   行 hover 或聚焦时显现，点击切换折叠。 */
+.cm-list-fold-toggle {
+  margin-right: 1px;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: #9a9a96;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  vertical-align: middle;
+}
+.cm-line:hover .cm-list-fold-toggle,
+.cm-list-fold-toggle:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+.cm-list-fold-toggle:hover {
+  color: #333;
+}
+.cm-list-fold-summary {
+  margin: 3px 0 5px calc(var(--list-fold-indent, 0px) + 18px);
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: #8a8a86;
+  background: rgba(0, 0, 0, 0.035);
+  font-size: 12px;
+}
+
 .cm-outline-card-chip {
   display: flex;
   align-items: center;
@@ -2187,6 +2219,16 @@ input {
     color: #f3f4f6;
   }
   .cm-outline-fold-summary {
+    color: #a1a1aa;
+    background: rgba(255, 255, 255, 0.07);
+  }
+  .cm-list-fold-toggle {
+    color: #9ca3af;
+  }
+  .cm-list-fold-toggle:hover {
+    color: #f3f4f6;
+  }
+  .cm-list-fold-summary {
     color: #a1a1aa;
     background: rgba(255, 255, 255, 0.07);
   }
