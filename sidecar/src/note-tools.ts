@@ -74,7 +74,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     async execute(_id, params: { old_string: string; new_string: string; target?: NoteTarget }) {
       const old = await deps.getNoteText(params.target);
       const r = replaceOnce(old, params.old_string, params.new_string);
-      if (!r.ok) return { content: [{ type: "text", text: `替换失败：${r.error}` }], details: {} };
+      if (!r.ok) return errorResult(`替换失败：${r.error}`);
       const preview: EditPreview = { tool: "edit_note", summary: "编辑文本", detail: { kind: "diff", hunks: unifiedDiff(old, r.newContent) } };
       const res = await deps.requestWrite({ target: params.target, toolName: "edit_note", oldContent: old, newContent: r.newContent, preview });
       return writeResultText(res);

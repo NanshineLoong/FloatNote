@@ -168,7 +168,7 @@ export class AgentRunner {
     const tools = createNoteTools({
       getNoteText: (target) => this.getNoteText(conversationId, target),
       requestWrite: (args) => this.requestWrite(conversationId, args),
-      readSkillBody: (name) => readSkillBody(name),
+      readSkillBody,
     });
     const session = await this.factory(this.cfg, tools, sessionManager);
     this.sessions.set(conversationId, session);
