@@ -147,19 +147,27 @@ describe("listFoldField decorations", () => {
     // `- b` has no children → no widget at its marker
     const b = byText(st.field(listFoldField).items, "b");
     expect(decos.some((d) => d.from === b.from && d.to === b.from && d.spec.widget)).toBe(false);
-    // nothing folded yet → no block replace
-    expect(decos.some((d) => d.spec.block === true)).toBe(false);
+    // nothing folded yet → no hidden lines
+    expect(decos.some((d) => typeof d.spec.class === "string" && d.spec.class.includes("cm-list-fold-hidden"))).toBe(false);
   });
 
-  it("replaces the nested subtree with a block widget when folded", () => {
+  it("hides the nested subtree lines when folded (no summary block)", () => {
     let st = foldState("- a\n  - a1\n  - a2\n    - a2x\n");
     const a = byText(st.field(listFoldField).items, "a");
     st = st.update({ effects: ListFoldEffect.of({ id: a.id, folded: true }) }).state;
     const decos = decorations(st.field(listFoldField).decorations);
-    const summary = decos.find((d) => d.spec.block === true && d.spec.widget);
-    expect(summary).toBeTruthy();
-    expect(summary!.from).toBe(a.childFrom);
-    expect(summary!.to).toBe(a.childTo);
+    // no block-replace summary widget
+    expect(decos.some((d) => d.spec.block === true && d.spec.widget)).toBe(false);
+    // child lines are hidden via line decorations covering [childFrom, childTo)
+    const hidden = decos.filter((d) => typeof d.spec.class === "string" && d.spec.class.includes("cm-list-fold-hidden"));
+    expect(hidden.length).toBeGreaterThan(0);
+    const doc = st.doc.toString();
+    for (const h of hidden) {
+      expect(h.from).toBeGreaterThanOrEqual(a.childFrom);
+      expect(h.from).toBeLessThan(a.childTo);
+      // line decoration sits at a line start
+      expect(doc[h.from - 1]).toBe("\n");
+    }
     expect(st.field(listFoldField).folded.has(a.id)).toBe(true);
   });
 
@@ -169,7 +177,7 @@ describe("listFoldField decorations", () => {
     st = st.update({ effects: ListFoldEffect.of({ id: a.id, folded: true }) }).state;
     st = st.update({ effects: ListFoldEffect.of({ id: a.id, folded: false }) }).state;
     expect(st.field(listFoldField).folded.has(a.id)).toBe(false);
-    expect(decorations(st.field(listFoldField).decorations).some((d) => d.spec.block === true)).toBe(false);
+    expect(decorations(st.field(listFoldField).decorations).some((d) => typeof d.spec.class === "string" && d.spec.class.includes("cm-list-fold-hidden"))).toBe(false);
   });
 
   it("defers to outline mode (no decorations while outline is on)", () => {
@@ -181,9 +189,9 @@ describe("listFoldField decorations", () => {
     // folded set preserved, but decorations suppressed
     expect(st.field(listFoldField).folded.has(a.id)).toBe(true);
     expect(decorations(st.field(listFoldField).decorations).some((d) => d.spec.widget)).toBe(false);
-    // turning outline off restores the fold
+    // turning outline off restores the fold (hidden lines reappear)
     st = st.update({ effects: OutlineToggleEffect.of(false) }).state;
-    expect(decorations(st.field(listFoldField).decorations).some((d) => d.spec.block === true)).toBe(true);
+    expect(decorations(st.field(listFoldField).decorations).some((d) => typeof d.spec.class === "string" && d.spec.class.includes("cm-list-fold-hidden"))).toBe(true);
   });
 
   it("carries fold state across an edit (remap)", () => {
@@ -195,6 +203,6 @@ describe("listFoldField decorations", () => {
     const aNew = byText(st.field(listFoldField).items, "a");
     expect(aNew.from).toBe("intro\n".length);
     expect(st.field(listFoldField).folded.has(aNew.id)).toBe(true);
-    expect(decorations(st.field(listFoldField).decorations).some((d) => d.spec.block === true)).toBe(true);
+    expect(decorations(st.field(listFoldField).decorations).some((d) => typeof d.spec.class === "string" && d.spec.class.includes("cm-list-fold-hidden"))).toBe(true);
   });
 });

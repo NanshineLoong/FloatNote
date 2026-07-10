@@ -148,14 +148,18 @@ function buildDecorations(
       }),
     });
     if (folded.has(it.id)) {
-      entries.push({
-        from: it.childFrom,
-        to: it.childTo,
-        deco: Decoration.replace({
-          block: true,
-          widget: new ListFoldSummaryWidget(it.text, it.depth),
-        }),
-      });
+      // 折叠：不显示摘要块，仅把子树各行收成零高度隐藏；折叠标识由父项
+      // toggle 上的 ▸（常驻）承担。镜像 outline 的 .cm-outline-blank 做法。
+      const startLine = state.doc.lineAt(it.childFrom).number;
+      const endLine = state.doc.lineAt(Math.max(it.childFrom, it.childTo - 1)).number;
+      for (let n = startLine; n <= endLine; n++) {
+        const line = state.doc.line(n);
+        entries.push({
+          from: line.from,
+          to: line.from,
+          deco: Decoration.line({ class: "cm-list-fold-hidden" }),
+        });
+      }
     }
   }
   entries.sort((a, b) => (a.from !== b.from ? a.from - b.from : a.to - b.to));
@@ -226,7 +230,7 @@ class ListFoldToggleWidget extends WidgetType {
   toDOM(): HTMLElement {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "cm-list-fold-toggle";
+    b.className = "cm-list-fold-toggle" + (this.folded ? " cm-list-fold-toggle-folded" : "");
     b.dataset.listFoldId = this.id;
     b.title = this.folded ? "展开" : "折叠";
     b.setAttribute("aria-label", this.folded ? "展开子项" : "折叠子项");
@@ -237,29 +241,6 @@ class ListFoldToggleWidget extends WidgetType {
 
   ignoreEvent(): boolean {
     return false;
-  }
-}
-
-/** 折叠子树摘要：纯展示，吞事件（与 outline FoldSummaryWidget 一致）。 */
-class ListFoldSummaryWidget extends WidgetType {
-  constructor(readonly text: string, readonly depth: number) {
-    super();
-  }
-
-  eq(o: ListFoldSummaryWidget): boolean {
-    return o.text === this.text && o.depth === this.depth;
-  }
-
-  toDOM(): HTMLElement {
-    const d = document.createElement("div");
-    d.className = "cm-list-fold-summary";
-    d.style.setProperty("--list-fold-indent", `${Math.max(0, this.depth) * 18}px`);
-    d.textContent = `▸ ${this.text || "未命名"}`;
-    return d;
-  }
-
-  ignoreEvent(): boolean {
-    return true;
   }
 }
 
