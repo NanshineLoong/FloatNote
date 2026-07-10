@@ -9,6 +9,7 @@ import {
 } from "./notes-state";
 import { formatVersionLabel, type VersionEntry } from "./versions";
 import { createIcon } from "../shared/ui/icon";
+import { createMenu, type MenuHandle } from "../shared/ui/menu";
 
 export interface PieceHeaderHost {
   /** 当前项目文件夹路径。 */
@@ -57,7 +58,7 @@ export function createPieceHeader(args: {
   host: PieceHeaderHost;
 }) {
   const { topbarMount, titleMount, host } = args;
-  let menuEl: HTMLElement | null = null;
+  let menuEl: MenuHandle | null = null;
   let renaming = false;
 
   const crumb = document.createElement("button");
@@ -201,13 +202,13 @@ export function createPieceHeader(args: {
   }
 
   function closeMenu() {
-    menuEl?.remove();
+    menuEl?.hide();
     menuEl = null;
   }
 
-  let versionMenuEl: HTMLElement | null = null;
+  let versionMenuEl: MenuHandle | null = null;
   function closeVersionMenu() {
-    versionMenuEl?.remove();
+    versionMenuEl?.hide();
     versionMenuEl = null;
   }
 
@@ -218,9 +219,9 @@ export function createPieceHeader(args: {
     }
     if (!host.current()) return;
     const entries = await host.loadVersions();
-    const menu = document.createElement("div");
-    versionMenuEl = menu;
-    menu.className = "version-menu";
+    const handle = createMenu({ anchor: versionBtn, placement: "down-right" });
+    handle.el.classList.add("version-menu");
+    const items: HTMLElement[] = [];
 
     // 顶部一行：手动记录当前版本（与成品切换菜单顶部的「新建」行同构）。
     const snap = document.createElement("button");
@@ -231,13 +232,13 @@ export function createPieceHeader(args: {
       closeVersionMenu();
       await host.snapshot();
     };
-    menu.appendChild(snap);
+    items.push(snap);
 
     if (entries.length === 0) {
       const empty = document.createElement("div");
       empty.className = "version-empty";
       empty.textContent = "暂无版本";
-      menu.appendChild(empty);
+      items.push(empty);
     }
     for (const entry of [...entries].reverse()) {
       const item = document.createElement("button");
@@ -250,14 +251,11 @@ export function createPieceHeader(args: {
           host.restore(entry.v);
         })();
       };
-      menu.appendChild(item);
+      items.push(item);
     }
 
-    const rect = versionBtn.getBoundingClientRect();
-    menu.style.top = `${rect.bottom + 4}px`;
-    menu.style.right = `${window.innerWidth - rect.right}px`;
-    document.body.appendChild(menu);
-    setTimeout(() => document.addEventListener("click", closeVersionMenu, { once: true }), 0);
+    versionMenuEl = handle;
+    handle.show(items);
   }
 
   async function openMenu() {
@@ -268,11 +266,9 @@ export function createPieceHeader(args: {
     const dir = host.dir();
     if (!dir) return;
     const pieces = await listPieces(dir);
-    menuEl = document.createElement("div");
-    menuEl.className = "switch-menu";
-    const rect = crumb.getBoundingClientRect();
-    menuEl.style.left = `${rect.left}px`;
-    menuEl.style.top = `${rect.bottom + 4}px`;
+    const handle = createMenu();
+    handle.el.classList.add("switch-menu");
+    const items: HTMLElement[] = [];
 
     // 顶部：新建图标行。
     const newItem = document.createElement("button");
@@ -285,7 +281,7 @@ export function createPieceHeader(args: {
       await host.open(entry);
       host.focusTitle?.();
     };
-    menuEl.appendChild(newItem);
+    items.push(newItem);
 
     const cur = host.current();
     for (const piece of pieces) {
@@ -335,11 +331,12 @@ export function createPieceHeader(args: {
       actions.appendChild(del);
       row.appendChild(label);
       row.appendChild(actions);
-      menuEl.appendChild(row);
+      items.push(row);
     }
 
-    document.body.appendChild(menuEl);
-    setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
+    const rect = crumb.getBoundingClientRect();
+    menuEl = handle;
+    handle.showAt(rect.left, rect.bottom + 4, items);
   }
 
   return { setLabel, focusTitle, closeMenu, closeVersionMenu, setOutlineMode: syncOutlineMode };

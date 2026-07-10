@@ -84,4 +84,21 @@ describe("createMenu anchored placement", () => {
     const top = parseFloat(handle.el.style.top);
     expect(top).toBeGreaterThanOrEqual(56); // 翻到下方：菜单顶边在 anchor 底边之下
   });
+
+  it("down-right places the menu below the anchor with right edges aligned", () => {
+    Object.defineProperty(window, "innerWidth", { value: 1000, writable: true, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 600, writable: true, configurable: true });
+    // 版本入口贴窗口右上角：left 940..980, top 40..80
+    const handle = createMenu({
+      anchor: { width: 40, height: 40, left: 940, top: 40, right: 980, bottom: 80, x: 940, y: 40, toJSON: () => {} } as DOMRect,
+      placement: "down-right",
+    });
+    handles.push(handle);
+    spySize(handle, 200, 150);
+    handle.show(document.createElement("div"));
+    const left = parseFloat(handle.el.style.left);
+    const top = parseFloat(handle.el.style.top);
+    expect(top).toBeGreaterThanOrEqual(80); // 下方
+    expect(left + 200).toBeLessThanOrEqual(980 + 1); // 右边对齐 anchor 右边（不溢出右侧）
+  });
 });

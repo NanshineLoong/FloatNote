@@ -11,6 +11,7 @@ import { cancelBlockDrag, scrollerPositionTheme } from "./blocks/drag";
 import { mountTagBar } from "./tags/bar";
 import { showToast } from "../shared/toast";
 import { createIcon } from "../shared/ui/icon";
+import { createMenu, type MenuHandle } from "../shared/ui/menu";
 import { tagDecorations } from "./tags/decoration";
 import { tagFilter, setTagFilter } from "./tags/filter";
 import { openBlockTagMenu } from "./tags/picker";
@@ -189,13 +190,9 @@ function renderWindowState(state: WindowState) {
 
 /** 文档模式下打开的独立文档；项目模式下为 null。复用 pieceEditor 渲染。 */
 
-let menuEl: HTMLElement | null = null;
+let menuEl: MenuHandle | null = null;
 /** The project-name button the switcher menu is anchored to (for repositioning). */
 let menuAnchor: HTMLElement | null = null;
-/** 当前打开的二级菜单浮层（项目/文档标题的 `+` 展开），与主菜单同生命周期。 */
-let submenuEl: HTMLElement | null = null;
-/** 二级菜单的触发按钮，用于切换 aria-expanded。 */
-let submenuTrigger: HTMLElement | null = null;
 /** AI 改写热刷新期间置位，避免编辑器变更回灌 autosave。 */
 let applyingRemote = false;
 
@@ -642,69 +639,21 @@ async function handleActivePieceGone() {
 }
 
 function closeMenu() {
-  closeSubmenu();
-  menuEl?.remove();
+  menuEl?.hide();
   menuEl = null;
 }
 
-/** 收起二级菜单，同步把触发按钮的 aria-expanded 复位。 */
+/** 收起二级菜单（委托给 createMenu 的 closeSubmenu：移除子菜单 + 复位 aria-expanded）。 */
 function closeSubmenu() {
-  if (submenuEl) {
-    submenuEl.remove();
-    submenuEl = null;
-  }
-  if (submenuTrigger) {
-    submenuTrigger.setAttribute("aria-expanded", "false");
-    submenuTrigger = null;
-  }
+  menuEl?.closeSubmenu();
 }
 
-/** 在 `trigger` 右侧（空间不足则下方）弹出一个二级菜单，`items` 为其条目。
- * 条目点击后由调用方自行决定是否关闭主菜单。点击子菜单内部不冒泡到主菜单
- * 的「外部点击关闭」监听；Esc 先收起子菜单。 */
+/** 在 `trigger` 右侧（空间不足则左侧/上方）弹出二级菜单。委托给 createMenu.openSubmenu：
+ * 其内部对齐旧 note-app 的 flip 逻辑、Esc 收子菜单、焦点进首项。 */
 function openSubmenu(trigger: HTMLElement, items: HTMLElement[]) {
-  closeSubmenu();
-  submenuTrigger = trigger;
-  trigger.setAttribute("aria-expanded", "true");
-
-  const sub = document.createElement("div");
-  sub.className = "switch-submenu";
-  for (const item of items) sub.appendChild(item);
-
-  // 先挂载以测尺寸，再按锚点 + 视口定位。
-  sub.style.visibility = "hidden";
-  document.body.appendChild(sub);
-  const r = trigger.getBoundingClientRect();
-  const w = sub.offsetWidth;
-  const h = sub.offsetHeight;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const left = r.right + w > vw ? Math.max(8, r.left - w) : r.right;
-  const top = r.bottom + h > vh ? Math.max(8, r.top - h) : r.bottom;
-  sub.style.left = `${left}px`;
-  sub.style.top = `${top}px`;
-  sub.style.visibility = "";
-
-  // 子菜单内点击不触发主菜单的外部关闭。
-  sub.addEventListener("click", (e) => e.stopPropagation());
-  // Esc：先收起子菜单；不阻止后续事件，主菜单自身不收（保持打开）。
-  sub.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      closeSubmenu();
-      trigger.focus();
-    }
-  });
-
-  submenuEl = sub;
-
-  // 焦点进子菜单首项，便于键盘操作（Esc 收起、Tab 遍历）。
-  const first = items.find((it) => !(it as HTMLButtonElement).disabled) as HTMLButtonElement | undefined;
-  first?.focus();
+  menuEl?.openSubmenu(trigger, items);
 }
 
-/** 构造一个二级菜单条目按钮。`disabled` 时置灰且不响应点击。 */
 const {
   makeSubmenuItem,
   sectionHeader,
@@ -715,7 +664,7 @@ const {
   closeMenu,
   closeSubmenu,
   openSubmenu,
-  isSubmenuOpenFor: (trigger) => submenuTrigger === trigger,
+  isSubmenuOpenFor: (trigger) => menuEl?.isSubmenuOpenFor(trigger) ?? false,
 });
 
 /** Record a project as most-recently-used and persist the capped MRU list. */
@@ -876,14 +825,12 @@ async function showProjectSwitcher(anchor: HTMLElement) {
   session.recentDocuments = documents.map((d) => d.path);
 
   menuAnchor = anchor;
-  menuEl = document.createElement("div");
-  menuEl.className = "switch-menu";
-  const rect = anchor.getBoundingClientRect();
-  menuEl.style.left = `${rect.left}px`;
-  menuEl.style.top = `${rect.bottom + 2}px`;
+  const handle = createMenu({ onOutside: () => { menuEl = null; } });
+  handle.el.classList.add("switch-menu");
+  const items: HTMLElement[] = [];
 
   // ── 项目区 ──
-  menuEl.appendChild(
+  items.push(
     sectionHeader("ph-folder", "项目", {
       ariaLabel: "新建项目",
       onOpen: (trigger) => openProjectAddSubmenu(trigger),
@@ -891,7 +838,7 @@ async function showProjectSwitcher(anchor: HTMLElement) {
   );
   if (projects.length > 0) {
     for (const project of projects) {
-      menuEl.appendChild(
+      items.push(
         makeSwitcherRow({
           label: project.name,
           active: session.mode === "project" && session.currentProject?.path === project.path,
@@ -930,11 +877,11 @@ async function showProjectSwitcher(anchor: HTMLElement) {
       );
     }
   } else {
-    menuEl.appendChild(emptySectionHint("暂无项目"));
+    items.push(emptySectionHint("暂无项目"));
   }
 
   // ── 文档区 ──
-  menuEl.appendChild(
+  items.push(
     sectionHeader("ph-file", "文档", {
       ariaLabel: "新建或打开文档",
       onOpen: (trigger) => openDocumentAddSubmenu(trigger),
@@ -942,7 +889,7 @@ async function showProjectSwitcher(anchor: HTMLElement) {
   );
   if (documents.length > 0) {
     for (const doc of documents) {
-      menuEl.appendChild(
+      items.push(
         makeSwitcherRow({
           label: doc.name,
           active: session.mode === "document" && session.currentDocument?.path === doc.path,
@@ -982,11 +929,12 @@ async function showProjectSwitcher(anchor: HTMLElement) {
       );
     }
   } else {
-    menuEl.appendChild(emptySectionHint("暂无文档"));
+    items.push(emptySectionHint("暂无文档"));
   }
 
-  document.body.appendChild(menuEl);
-  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
+  const rect = anchor.getBoundingClientRect();
+  menuEl = handle;
+  handle.showAt(rect.left, rect.bottom + 2, items);
 }
 
 async function deleteProjectFlow(project: ProjectEntry) {
@@ -1090,16 +1038,13 @@ async function openExistingProjectFlow() {
 
 /** 在锚点（项目名按钮）下方重建一个空的最小浮层，用于承载命名输入框。
  * 用于「选择位置新建」等会弹原生对话框、可能令主菜单已被外点击关闭的场景。 */
-function rebuildMenuAtAnchor(): HTMLElement | null {
+function rebuildMenuAtAnchor(): MenuHandle | null {
   if (!menuAnchor) return null;
-  const m = document.createElement("div");
-  m.className = "switch-menu";
+  const handle = createMenu({ onOutside: () => { menuEl = null; } });
+  handle.el.classList.add("switch-menu");
   const rect = menuAnchor.getBoundingClientRect();
-  m.style.left = `${rect.left}px`;
-  m.style.top = `${rect.bottom + 2}px`;
-  document.body.appendChild(m);
-  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
-  return m;
+  handle.showAt(rect.left, rect.bottom + 2, []);
+  return handle;
 }
 
 /** 收起当前菜单，在锚点处开一个只含命名输入框的最小浮层。 */
@@ -1108,7 +1053,7 @@ function beginNewProjectName(parent: string) {
   const m = rebuildMenuAtAnchor();
   if (!m) return;
   menuEl = m;
-  promptNewProjectName(m, parent);
+  promptNewProjectName(m.el, parent);
 }
 
 /** 项目标题 `+` 的二级菜单：在当前目录新建 / 选择位置新建… */
@@ -1176,7 +1121,7 @@ function promptNewProjectName(host: HTMLElement, parent: string) {
   const input = document.createElement("input");
   input.className = "switch-new-input";
   input.placeholder = "项目名称";
-  if (host === menuEl) host.appendChild(input);
+  if (host === menuEl?.el) host.appendChild(input);
   else host.replaceWith(input);
   input.focus();
   // 阻止"点击外部关闭"在自己的输入框上触发。

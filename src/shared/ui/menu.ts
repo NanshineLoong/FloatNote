@@ -14,7 +14,7 @@
  * matching the old `closeFloating()` global sweep (docked menus are exempt).
  */
 
-export type MenuPlacement = "up" | "up-left" | "up-right" | "free";
+export type MenuPlacement = "up" | "up-left" | "up-right" | "down-right" | "free";
 
 /**
  * Mutual-exclusion invariant (mirrors the old `closeFloating()` global sweep):
@@ -104,14 +104,23 @@ export function createMenu(opts: MenuOptions = {}): MenuHandle {
     const rect = anchor instanceof HTMLElement ? anchor.getBoundingClientRect() : anchor;
     const gap = 6;
     const { height, width } = el.getBoundingClientRect();
-    let top = rect.top - gap - height;
-    if (top < 8) top = rect.bottom + gap;
-    let left =
-      placement === "up-right"
-        ? rect.right + gap
-        : placement === "up-left"
-          ? rect.left - gap - width
-          : rect.left;
+    let top: number;
+    let left: number;
+    if (placement === "down-right") {
+      // 下方右对齐：菜单顶边在 anchor 底边之下，右边对齐 anchor 右边
+      // （如版本菜单挂在右上角的版本入口下方，向左展开）。
+      top = rect.bottom + gap;
+      left = rect.right - width;
+    } else {
+      top = rect.top - gap - height;
+      if (top < 8) top = rect.bottom + gap;
+      left =
+        placement === "up-right"
+          ? rect.right + gap
+          : placement === "up-left"
+            ? rect.left - gap - width
+            : rect.left;
+    }
     const c = clamp(left, top);
     el.style.left = `${c.left}px`;
     el.style.top = `${c.top}px`;
@@ -167,9 +176,19 @@ export function createMenu(opts: MenuOptions = {}): MenuHandle {
     for (const it of items) submenu.appendChild(it);
     document.body.appendChild(submenu);
     const r = trigger.getBoundingClientRect();
-    const c = clamp(r.right + 6, r.top);
-    submenu.style.left = `${c.left}px`;
-    submenu.style.top = `${c.top}px`;
+    const { width: w, height: h } = submenu.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // 右侧空间不足则翻到 trigger 左侧；下方不足则翻到 trigger 上方
+    // （对齐旧 note-app 子菜单的 flip 逻辑，避免与主菜单重叠）。
+    const left =
+      Number.isFinite(vw) && r.right + 6 + w > vw
+        ? Math.max(8, r.left - 6 - w)
+        : r.right + 6;
+    const top =
+      Number.isFinite(vh) && r.bottom + h > vh ? Math.max(8, r.top - h) : r.bottom;
+    submenu.style.left = `${left}px`;
+    submenu.style.top = `${top}px`;
     // Esc closes only the submenu; the main menu stays open (mirrors the old
     // note-app submenu keydown handler).
     submenu.addEventListener("keydown", (e) => {
