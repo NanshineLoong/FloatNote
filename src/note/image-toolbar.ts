@@ -275,7 +275,7 @@ function onHandlePointerMove(e: PointerEvent) {
   if (captionInput) captionInput.style.width = `${width}px`;
 }
 
-function onHandlePointerUp(e: PointerEvent) {
+function onHandlePointerUp() {
   if (!drag) return;
   const d = drag;
   drag = null;

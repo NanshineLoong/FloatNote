@@ -17,7 +17,7 @@ interface TagFilterState {
 }
 
 /** Current filter tag id plus direct layout-affecting decorations. */
-export const tagFilterField = StateField.define<TagFilterState>({
+const tagFilterField = StateField.define<TagFilterState>({
   create: () => ({ active: null, decorations: Decoration.none }),
   update(value, tr) {
     let active = value.active;

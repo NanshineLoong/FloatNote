@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { slugifyImageName } from "./image-attrs";
 
 const MAX_PASTE_BYTES = 20 * 1024 * 1024;
 
@@ -76,6 +75,3 @@ function stamp(): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
-
-// re-export so callers can build suggested stems from dropped filenames
-export { slugifyImageName };

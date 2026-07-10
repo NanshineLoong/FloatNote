@@ -98,7 +98,7 @@ function buildDisc(view: EditorView, def: TagDef, active: boolean): HTMLElement 
   };
   disc.oncontextmenu = (e) => {
     e.preventDefault();
-    openContextMenu(view, def, disc, e.clientX, e.clientY);
+    openContextMenu(view, def, e.clientX, e.clientY);
   };
   return disc;
 }
@@ -109,7 +109,7 @@ export function nextTagFilter(current: string | null, clicked: string): string |
 
 // ── edit popover (rename / recolor / delete) ────────────────────────────────
 
-function openContextMenu(view: EditorView, def: TagDef, anchor: HTMLElement, x: number, y: number): void {
+function openContextMenu(view: EditorView, def: TagDef, x: number, y: number): void {
   const menu = document.createElement("div");
   menu.className = "switch-menu tag-context-menu tag-edit-popover";
 

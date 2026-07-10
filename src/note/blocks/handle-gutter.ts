@@ -8,7 +8,7 @@ import { startBlockDrag, type DragContext } from "./drag";
  * extension point the design calls for: adding "标签" or "加入清单" later is a
  * single entry here, no other code changes. v1 ships only delete.
  */
-export interface BlockAction {
+interface BlockAction {
   id: string;
   label: string;
   /** Phosphor icon class, e.g. "ph-trash". */

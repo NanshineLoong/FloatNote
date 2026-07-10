@@ -2,13 +2,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { save, confirm, open } from "@tauri-apps/plugin-dialog";
 
 /** read_note 命令返回：文件内容 + 磁盘 mtime（ms）。 */
-export interface NoteContent {
+interface NoteContent {
   content: string;
   mtime: number | null;
 }
 
 /** write_note 命令返回：是否冲突 + 写入后的新 mtime。 */
-export interface WriteOutcome {
+interface WriteOutcome {
   conflict: boolean;
   mtime: number | null;
 }
@@ -23,11 +23,11 @@ export interface ProjectEntry {
   path: string;
 }
 
-export const INBOX_FILE = "_inbox.md";
-export const TASKS_FILE = "_tasks.md";
+const INBOX_FILE = "_inbox.md";
+const TASKS_FILE = "_tasks.md";
 
 /** Join a project folder path with a child file, OS-correct separator. */
-export function projectFilePath(projectPath: string, file: string): string {
+function projectFilePath(projectPath: string, file: string): string {
   const sep = projectPath.includes("\\") ? "\\" : "/";
   const trimmed = projectPath.replace(/[\\/]+$/, "");
   return `${trimmed}${sep}${file}`;
@@ -75,7 +75,7 @@ export async function listNotes(dir: string): Promise<NoteEntry[]> {
   return invoke<NoteEntry[]>("list_notes", { dir });
 }
 
-export async function readNote(path: string): Promise<NoteContent> {
+async function readNote(path: string): Promise<NoteContent> {
   return invoke<NoteContent>("read_note", { path });
 }
 
