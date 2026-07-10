@@ -6,11 +6,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { mountAssistant, type AssistantHandle } from "../assistant/assistant";
 import { agentNewSession, agentOpenSession, agentSend, agentCancel, agentListSkills, onAgentEvent, onFileChanged, onNoteUpdated } from "./agent";
-import { buildCaretInsert } from "./append";
-import { buildQuoteBlock, mergeQuoteBlock, resolveMergeTarget, type Source } from "./quote";
-import { htmlToMarkdown } from "./paste";
 import { EditorView, placeholder } from "@codemirror/view";
-import { createEditor, insertAtPos, requestEditorLayout, setDoc } from "./editor";
+import { createEditor, requestEditorLayout, setDoc } from "./editor";
 import { blockHandleGutter, deleteBlock } from "./blocks/handle-gutter";
 import { cancelBlockDrag, scrollerPositionTheme } from "./blocks/drag";
 import { mountTagBar } from "./tags/bar";
@@ -83,6 +80,9 @@ import {
   type ChatConversation,
   type ChatScope,
 } from "./chat-history";
+import { applyFontSize, bumpFont } from "./font-size";
+import { attachQuoteCapture } from "./quote-capture";
+import { attachAutomationToasts } from "./automation-toasts";
 
 const app = document.querySelector<HTMLElement>("#app")!;
 app.innerHTML = `
@@ -1507,27 +1507,6 @@ window.addEventListener("resize", () => {
   resizeSettle = window.setTimeout(() => noteBody.classList.remove("resizing"), 180);
 });
 
-const FONT_MIN = 10;
-const FONT_MAX = 28;
-const DEFAULT_FONT = 15;
-let currentFontSize = 15;
-
-function applyFontSize(size: number) {
-  currentFontSize = Math.min(FONT_MAX, Math.max(FONT_MIN, size));
-  document.documentElement.style.setProperty("--editor-font", `${currentFontSize}px`);
-}
-
-async function saveFontSize() {
-  const config = await getConfig();
-  await invoke("set_config", { newConfig: { ...config, font_size: currentFontSize } });
-}
-
-/** 字号快捷键入口：+1/-1 调整，0 复位默认。 */
-function bumpFont(delta: number) {
-  applyFontSize(delta === 0 ? DEFAULT_FONT : currentFontSize + delta);
-  void saveFontSize();
-}
-
 async function init() {
   const config = await getConfig();
   applyFontSize(config.font_size);
@@ -1608,51 +1587,5 @@ async function init() {
 
 void init();
 
-type QuotePayload = { text: string; html: string | null; source: Source | null };
-
-void listen<QuotePayload>("quote-captured", (event) => {
-  const { text, html, source } = event.payload;
-  // 采集的选区可能带 `text/html`（浏览器、富文本编辑器）；有就转成 Markdown，
-  // 让列表/表格/加粗在 quote 块里保留格式。转换为空（或纯文本源）时退回 text。
-  const body = (html && htmlToMarkdown(html)) || text;
-  const doc = editor.state.doc.toString();
-  const caret = editor.state.selection.main.from;
-  const target = resolveMergeTarget(doc, caret, source);
-  if (target.kind === "merge") {
-    const existing = doc.slice(target.range.from, target.range.to);
-    const merged = mergeQuoteBlock(existing, body);
-    editor.dispatch({
-      changes: { from: target.range.from, to: target.range.to, insert: merged },
-      selection: { anchor: target.range.from + merged.length },
-      scrollIntoView: true,
-    });
-  } else {
-    // `target.at` is the caret when no card is nearby, or the end of the nearest
-    // card when the source differs — so different-source quotes stack as sibling
-    // blocks after the card instead of merging or splitting it.
-    const at = target.at;
-    const before = doc.slice(0, at);
-    const after = doc.slice(at);
-    const insert = buildCaretInsert(before, after, buildQuoteBlock(body, source));
-    insertAtPos(editor, at, insert);
-  }
-  editor.focus();
-});
-
-void listen("accessibility-needed", () => {
-  // macOS 已由后端弹过一次系统授权框；这里只在窗内给一条简短提示，
-  // 不再往 #note-body 正文区塞横幅（避免污染编辑器内容）。
-  showToast("需开启「辅助功能」权限后重试");
-});
-
-let lastAutomationToastAt = 0;
-
-void listen("automation-needed", () => {
-  // 后端识别到当前前台是已知浏览器，但 osascript 读不到标签页 URL/标题
-  // （macOS 自动化权限未授/被拒/超时）。提示用户去授权，授权后即可恢复
-  // 网址+标题捕获；本条引用仍会以"仅 app 名"落地。
-  const now = Date.now();
-  if (now - lastAutomationToastAt < 30_000) return;
-  lastAutomationToastAt = now;
-  showToast("浏览器授权未完成，已先保存为应用来源；授权后重试即可");
-});
+attachQuoteCapture(editor);
+attachAutomationToasts();
