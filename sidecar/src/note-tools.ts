@@ -19,6 +19,20 @@ export interface NoteToolDeps {
 }
 
 export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
+  // All tag tools are scoped to the inbox. Resolve/validate the target once
+  // so each tool repeats neither the kind guard nor the name-carry spread.
+  // Returns the normalized inbox target, or an error tool result to short-circuit.
+  function inboxTarget(
+    toolName: string,
+    target?: NoteTarget,
+  ):
+    | { ok: true; target: NoteTarget }
+    | { ok: false; result: ReturnType<typeof errorResult> } {
+    if (target?.kind && target.kind !== "inbox") {
+      return { ok: false, result: errorResult(`${toolName} 仅支持 inbox 目标，收到 kind="${target.kind}"`) };
+    }
+    return { ok: true, target: { kind: "inbox", ...(target?.name ? { name: target.name } : {}) } };
+  }
   const readNote = defineTool({
     name: "read_note",
     label: "Read note",
@@ -95,17 +109,17 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     }),
     promptSnippet: "set_tag — 给块打标签",
     async execute(_id, params: { anchor: string; tagId?: string; target?: NoteTarget }) {
-      if (params.target?.kind && params.target.kind !== "inbox") {
-        return { content: [{ type: "text" as const, text: `set_tag 仅支持 inbox 目标，收到 kind="${params.target.kind}"` }], details: {} };
-      }
-      const target: NoteTarget = { kind: "inbox", ...(params.target?.name ? { name: params.target.name } : {}) };
+      const t = inboxTarget("set_tag", params.target);
+      if (!t.ok) return t.result;
+      const { target } = t;
       const old = await deps.getNoteText(target);
       const r = findBlockByAnchor(old, params.anchor);
-      if (!r.ok) return { content: [{ type: "text", text: `定位块失败：${r.error}` }], details: {} };
+      if (!r.ok) return errorResult(`定位块失败：${r.error}`);
       const change = setBlockTagChange(old, r.range, params.tagId || null);
       const newContent = change ? applyChange(old, change) : old;
-      const tagName = params.tagId ? (parseDefs(old).get(params.tagId)?.name ?? params.tagId) : "(清除)";
-      const tagColor = params.tagId ? (parseDefs(old).get(params.tagId)?.color ?? "#888") : "#888";
+      const def = params.tagId ? parseDefs(old).get(params.tagId) : undefined;
+      const tagName = params.tagId ? (def?.name ?? params.tagId) : "(清除)";
+      const tagColor = params.tagId ? (def?.color ?? "#888") : "#888";
       const blockText = stripTagMarker(old.slice(r.range.from, r.range.to));
       const blockPreview = blockText.split("\n")[0].slice(0, 20);
       const preview: EditPreview = { tool: "set_tag", summary: `给块「${blockPreview}」${params.tagId ? "打上" : "清除"}标签`, detail: { kind: "tag_assign", blockPreview, tagName, tagColor } };
@@ -125,20 +139,19 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     }),
     promptSnippet: "tag_create — 新建标签",
     async execute(_id, params: { name: string; color: string; target?: NoteTarget }) {
-      if (params.target?.kind && params.target.kind !== "inbox") {
-        return { content: [{ type: "text" as const, text: `tag_create 仅支持 inbox 目标，收到 kind="${params.target.kind}"` }], details: {} };
-      }
-      const target: NoteTarget = { kind: "inbox", ...(params.target?.name ? { name: params.target.name } : {}) };
+      const t = inboxTarget("tag_create", params.target);
+      if (!t.ok) return t.result;
+      const { target } = t;
       const old = await deps.getNoteText(target);
       const free = freeColors(new Set([...parseDefs(old).values()].map((d) => d.color.toLowerCase())));
       // addTagDefChange only rejects colors already in use, not off-palette
       // colors — guard palette membership here so non-palette values like
       // "#000000" are rejected with a helpful "available colors" list.
       if (!free.map((c) => c.toLowerCase()).includes(params.color.toLowerCase())) {
-        return { content: [{ type: "text" as const, text: `颜色 ${params.color} 不可用；可用：${JSON.stringify(free)}` }], details: {} };
+        return errorResult(`颜色 ${params.color} 不可用；可用：${JSON.stringify(free)}`);
       }
       const r = addTagDefChange(old, params.name, params.color);
-      if (!r.id) return { content: [{ type: "text" as const, text: `建标签失败：颜色 ${params.color} 已被占用；可用：${JSON.stringify(free)}` }], details: {} };
+      if (!r.id) return errorResult(`建标签失败：颜色 ${params.color} 已被占用；可用：${JSON.stringify(free)}`);
       const newContent = r.change ? applyChange(old, r.change) : old;
       const preview: EditPreview = { tool: "tag_create", summary: `新建标签「${params.name}」`, detail: { kind: "tag_create", tagName: params.name, tagColor: params.color } };
       const res = await deps.requestWrite({ target, toolName: "tag_create", oldContent: old, newContent, preview });
@@ -156,10 +169,9 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     }),
     promptSnippet: "tag_delete — 删标签",
     async execute(_id, params: { tagId: string; target?: NoteTarget }) {
-      if (params.target?.kind && params.target.kind !== "inbox") {
-        return { content: [{ type: "text" as const, text: `tag_delete 仅支持 inbox 目标，收到 kind="${params.target.kind}"` }], details: {} };
-      }
-      const target: NoteTarget = { kind: "inbox", ...(params.target?.name ? { name: params.target.name } : {}) };
+      const t = inboxTarget("tag_delete", params.target);
+      if (!t.ok) return t.result;
+      const { target } = t;
       const old = await deps.getNoteText(target);
       const changes = deleteTagChanges(old, params.tagId);
       const newContent = applyChanges(old, changes);
@@ -196,6 +208,14 @@ function writeResultText(res: WriteResult) {
     : res.ok
       ? (res.version ? `已更新，版本 v${res.version}` : "已更新")
       : `写入失败：${res.error ?? "未知错误"}`;
+  return {
+    content: [{ type: "text" as const, text }],
+    details: {},
+  };
+}
+
+/** Build a text-only tool result for an error message (no write performed). */
+function errorResult(text: string) {
   return {
     content: [{ type: "text" as const, text }],
     details: {},
