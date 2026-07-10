@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::notes::NoteEntry;
 
 pub const INBOX_FILE: &str = "_inbox.md";
+pub const TASKS_FILE: &str = "_tasks.md";
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct ProjectEntry {

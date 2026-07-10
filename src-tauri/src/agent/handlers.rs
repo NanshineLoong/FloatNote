@@ -6,6 +6,7 @@
 
 use crate::state::AppState;
 use crate::versions;
+use crate::project::{INBOX_FILE, TASKS_FILE};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -164,8 +165,8 @@ fn resolve_target(
         Some(t) => {
             let kind = t.kind.clone();
             let (note_id, path) = match t.kind.as_str() {
-                "inbox" => ("_inbox".to_string(), dir.join("_inbox.md")),
-                "tasks" => ("_tasks".to_string(), dir.join("_tasks.md")),
+                "inbox" => ("_inbox".to_string(), dir.join(INBOX_FILE)),
+                "tasks" => ("_tasks".to_string(), dir.join(TASKS_FILE)),
                 // piece / doc / 未知 kind 一律按 piece 语义处理（v1 简化）。
                 _ => match &t.name {
                     Some(name) if name == &active.note_id => {
