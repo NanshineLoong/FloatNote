@@ -25,10 +25,16 @@ Four components; module-specific guidance exists where it is most needed:
   (checklist), and one or more **piece** files (any `.md` without a `_`
   prefix, defaulting to `piece.md`). The `_` prefix alone distinguishes
   system files from pieces. Loose root `.md` files are legacy flat notes.
-- `docs/architecture/`, `docs/development/`, and `docs/adr/` are stable
-  project documentation. Dated specs/plans are historical implementation
-  records. `dist/`, `src-tauri/target/`, `src-tauri/binaries/`, and generated
-  sidecar resources are generated artifacts.
+- `docs/architecture/` documents the system shape: `overview.md`
+  (top-level map), `frontend.md`, `backend.md`, `sidecar.md`,
+  `data-flow.md`, `runtime-boundaries.md`, `packaging.md`, and
+  `security.md`. `docs/development/` covers working on the app:
+  `setup.md`, `cross-platform.md`, `testing.md`, `design-system.md`,
+  and `release.md`. `docs/adr/` holds numbered architecture decision
+  records (`NNNN-*.md`) plus `README.md`. These are stable project
+  documentation; dated specs/plans are historical implementation
+  records. `dist/`, `src-tauri/target/`, `src-tauri/binaries/`, and
+  generated sidecar resources are generated artifacts.
 
 ## Build, Test, and Development Commands
 
