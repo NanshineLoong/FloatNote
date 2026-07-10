@@ -435,27 +435,13 @@ input {
   right: 0;
   height: 2px;
   border-radius: 1px;
-  background: #2563eb;
+  background: var(--color-accent);
   pointer-events: none;
   z-index: 5;
 }
 
-.scroll-thumb {
-  position: absolute;
-  right: 3px;
-  top: 0;
-  width: 4px;
-  border-radius: 2px;
-  background: rgba(0, 0, 0, 0.22);
-  opacity: 0;
-  transition: opacity 0.35s ease;
-  pointer-events: none;
-  z-index: 10;
-}
-
-.scroll-thumb.visible {
-  opacity: 1;
-}
+/* Scrollbar thumb now lives in src/styles/components.css (.fn-scroll__thumb),
+   driven by src/shared/ui/scrollbar.ts. */
 
 
 
@@ -498,7 +484,7 @@ input {
   margin-top: 4px;
   padding-top: 8px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
-  color: #2563eb;
+  color: var(--color-accent);
 }
 
 /* 第二个新建项紧跟第一个，不再重复分隔线。 */
@@ -514,7 +500,7 @@ input {
   width: 100%;
   margin-top: 4px;
   padding: 6px 10px;
-  border: 1px solid #2563eb;
+  border: 1px solid var(--color-accent);
   border-radius: 6px;
   background: #fff;
   color: #374151;
@@ -660,7 +646,7 @@ input {
 
 .switch-row.active .switch-row-label {
   font-weight: 600;
-  color: #2563eb;
+  color: var(--color-accent);
 }
 
 /* 默认隐藏动作按钮，行被悬停或聚焦时才露出。 */
@@ -749,7 +735,7 @@ input {
   padding: 6px 14px;
   border: none;
   border-radius: 6px;
-  background: #2563eb;
+  background: var(--color-accent);
   color: #fff;
   cursor: pointer;
 }
@@ -819,11 +805,6 @@ input {
     background: #1e1e1e;
   }
 
-  .scroll-thumb {
-    background: rgba(255, 255, 255, 0.28);
-  }
-
-
   .switch-menu {
     border-color: rgba(255, 255, 255, 0.12);
     background: #2a2a2a;
@@ -839,11 +820,11 @@ input {
 
   .switch-item.switch-new {
     border-top-color: rgba(255, 255, 255, 0.1);
-    color: #60a5fa;
+    color: var(--color-accent);
   }
 
   .switch-new-input {
-    border-color: #60a5fa;
+    border-color: var(--color-accent);
     background: #2a2a2a;
     color: #d1d5db;
   }
@@ -896,7 +877,7 @@ input {
   }
 
   .switch-row.active .switch-row-label {
-    color: #60a5fa;
+    color: var(--color-accent);
   }
 
   .switch-row-action {
@@ -988,7 +969,7 @@ input {
   margin-bottom: 4px;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  color: #2563eb;
+  color: var(--color-accent);
 }
 
 
@@ -1103,7 +1084,7 @@ input {
 
 .icon-btn.on {
   background: rgba(37, 99, 235, 0.12) !important;
-  color: #2563eb;
+  color: var(--color-accent);
 }
 
 /* 写作栏的单一滚动容器：文档头（breadcrumb + 标题）与正文同处其中、一起滚。 */
@@ -1256,7 +1237,7 @@ input {
   margin-bottom: 4px;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  color: #2563eb;
+  color: var(--color-accent);
 }
 
 /* 成品编辑器：长到内容高度（不内部滚动），由 #piece-scroll 统一滚。 */
@@ -1368,7 +1349,7 @@ input {
 }
 .tasks-filter:hover,
 .tasks-add-icon:hover {
-  color: #2563eb;
+  color: var(--color-accent);
   background: rgba(37, 99, 235, 0.08);
 }
 .tasks-filter i,
@@ -1377,7 +1358,7 @@ input {
 }
 /* 筛选激活：高亮表示「只看未完成」已生效。 */
 .tasks-filter.active {
-  color: #2563eb;
+  color: var(--color-accent);
   background: rgba(37, 99, 235, 0.12);
 }
 .tasks-add-icon.adding {
@@ -1426,8 +1407,8 @@ input {
   opacity: 0;
 }
 .tasks-row.done .tasks-box {
-  border-color: #2563eb;
-  background: #2563eb;
+  border-color: var(--color-accent);
+  background: var(--color-accent);
 }
 .tasks-row.done .tasks-box i {
   opacity: 1;
@@ -1470,7 +1451,7 @@ input {
 }
 .tasks-more:hover {
   opacity: 1;
-  color: #2563eb;
+  color: var(--color-accent);
   background: rgba(37, 99, 235, 0.1);
 }
 .tasks-more i {
@@ -1505,10 +1486,10 @@ input {
 }
 /* 落点指示线：目标行上/下沿 2px 蓝线。 */
 .tasks-row.drop-before {
-  box-shadow: inset 0 2px 0 0 #2563eb;
+  box-shadow: inset 0 2px 0 0 var(--color-accent);
 }
 .tasks-row.drop-after {
-  box-shadow: inset 0 -2px 0 0 #2563eb;
+  box-shadow: inset 0 -2px 0 0 var(--color-accent);
 }
 
 /* 三点菜单浮层。 */
@@ -1586,7 +1567,7 @@ input {
   outline: none;
 }
 .tasks-input:focus {
-  border-color: #2563eb;
+  border-color: var(--color-accent);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1603,7 +1584,7 @@ input {
     color: #f3f4f6;
   }
   .icon-btn:hover { background: rgba(255, 255, 255, 0.08) !important; }
-  .icon-btn.on { background: rgba(96, 165, 250, 0.2) !important; color: #60a5fa; }
+  .icon-btn.on { background: rgba(96, 165, 250, 0.2) !important; color: var(--color-accent); }
   #app.split-active #piece-col::before { background: rgba(255, 255, 255, 0.1); }
   #piece-scroll { background: #1e1e1e; }
   .tasks-panel { background: #262626; border-color: rgba(255, 255, 255, 0.12); }
@@ -1667,7 +1648,7 @@ input {
   vertical-align: middle;
 }
 .cm-quote-card-link {
-  color: #2563eb;
+  color: var(--color-accent);
   text-decoration: none;
   max-width: 170px;
   overflow: hidden;
@@ -1695,7 +1676,7 @@ input {
     color: #6b7280;
   }
   .cm-quote-card-link {
-    color: #60a5fa;
+    color: var(--color-accent);
   }
 }
 
@@ -1861,7 +1842,7 @@ input {
 }
 
 /* 列表折叠（编辑区常驻）：交互语言与 outline 折叠一致——三角平时隐，
-   行 hover 或聚焦时显现，点击切换折叠。 */
+   行 hover 或聚焦时显现，点击切换折叠。折叠时三角常驻（标识折叠态）。 */
 .cm-list-fold-toggle {
   margin-right: 1px;
   padding: 0 2px;
@@ -1876,20 +1857,20 @@ input {
   vertical-align: middle;
 }
 .cm-line:hover .cm-list-fold-toggle,
-.cm-list-fold-toggle:focus-visible {
+.cm-list-fold-toggle:focus-visible,
+.cm-list-fold-toggle-folded {
   opacity: 1;
   outline: none;
 }
 .cm-list-fold-toggle:hover {
   color: #333;
 }
-.cm-list-fold-summary {
-  margin: 3px 0 5px calc(var(--list-fold-indent, 0px) + 18px);
-  padding: 3px 8px;
-  border-radius: 6px;
-  color: #8a8a86;
-  background: rgba(0, 0, 0, 0.035);
-  font-size: 12px;
+/* 折叠的子树各行收成零高度隐藏（不显示摘要块）；折叠标识由父项 toggle 上的
+   ▸ 承担。镜像 .cm-outline-blank 的做法以保几何不被破坏。 */
+.cm-list-fold-hidden {
+  line-height: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .cm-outline-card-chip {
@@ -2228,10 +2209,6 @@ input {
   .cm-list-fold-toggle:hover {
     color: #f3f4f6;
   }
-  .cm-list-fold-summary {
-    color: #a1a1aa;
-    background: rgba(255, 255, 255, 0.07);
-  }
   .cm-outline-card-chip {
     border-color: rgba(255, 255, 255, 0.10);
     background: #27272a;
@@ -2380,13 +2357,13 @@ input {
 }
 
 .empty-state-btn.primary {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
   color: #fff;
 }
 
 .empty-state-btn.primary:hover {
-  background: #1d4ed8;
+  background: var(--color-accent-hover);
 }
 
 @media (prefers-color-scheme: dark) {

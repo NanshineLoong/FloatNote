@@ -1,0 +1,81 @@
+/* ── Primitive tokens ──────────────────────────────────────────────────────
+   Raw, theme-agnostic values. Components must NOT consume these directly —
+   reference the semantic aliases in `semantic.css` instead. The only consumers
+   of primitives are the semantic `:root` blocks (light + dark).
+
+   Indigo is the locked project primary (`docs/development/design-system.md`).
+   It is deliberately NOT in the tag palette (`shared/note-logic/.../palette.ts`),
+   so primary actions never read as tag chips. */
+
+:root {
+  /* ── Indigo ramp (primary) ── */
+  --indigo-50:  #eef2ff;
+  --indigo-100: #e0e7ff;
+  --indigo-200: #c7d2fe;
+  --indigo-300: #a5b4fc; /* dark hover */
+  --indigo-400: #818cf8; /* dark accent */
+  --indigo-500: #6366f1;
+  --indigo-600: #4f46e5; /* light accent (primary) */
+  --indigo-700: #4338ca; /* light hover */
+  --indigo-800: #3730a3; /* pressed */
+  --indigo-900: #312e81;
+
+  /* Accent-fill + focus-ring (locked). Expressed as primitives for traceability;
+     semantic.css maps --color-accent-fill / --color-focus-ring to these. */
+  --indigo-accent-fill-light: rgba(79, 70, 229, 0.12);
+  --indigo-accent-fill-dark:  rgba(129, 140, 248, 0.18);
+  --indigo-focus-ring-light:  rgba(79, 70, 229, 0.45);
+  --indigo-focus-ring-dark:   rgba(129, 140, 248, 0.50);
+
+  /* ── Neutral ramp (covers the ~60 hex values previously in use) ── */
+  --gray-0:   #ffffff;
+  --gray-50:  #f8f8f7;  /* titlebar / tinted surface */
+  --gray-100: #f3f4f6;
+  --gray-150: #ececea;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;  /* muted */
+  --gray-500: #6b7280;  /* muted */
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #202124;  /* body text, light */
+  --gray-850: #1e1e1e;  /* body/editor bg, dark */
+  --gray-900: #111827;
+  --gray-950: #0b0b0b;
+
+  /* Dark-mode surfaces (existing dark backgrounds) */
+  --dark-surface-1: #2c2c2c; /* popup dark bg */
+  --dark-surface-2: #2a2a2a; /* menus / inputs */
+  --dark-surface-3: #1e1e1e; /* body / editor */
+
+  /* ── Tag palette (mirrors shared/note-logic/src/tags/palette.ts) ──
+     DO NOT change palette.ts; these are for docs/traceability only and are
+     intentionally NOT indigo. */
+  --tag-red:    #e5484d;
+  --tag-amber:  #f5a623;
+  --tag-yellow: #f2c744;
+  --tag-green:  #3cb371;
+  --tag-teal:   #0d9488;
+  --tag-blue:   #3b82f6;
+  --tag-violet: #8b5cf6;
+  --tag-pink:   #ec4899;
+
+  /* ── Status ── */
+  --danger-500: #ef4444;
+  --danger-600: #dc2626;
+  --danger-700: #b91c1c;
+  --success-500: #3cb371;
+
+  /* ── Motion ── */
+  --motion-fast: 120ms;
+  --motion-base: 150ms;
+  --motion-slow: 200ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ── Base radii (component layer composes from these) ── */
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-full: 9999px;
+}

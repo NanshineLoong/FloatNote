@@ -5,16 +5,19 @@
    reads as part of FloatNote, not a foreign control. */
 
 :root {
-  /* light */
-  --popup-bg: #fbfbfa;
-  --popup-border: rgba(0, 0, 0, 0.1);
-  --popup-shadow: 0 6px 20px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
-  --popup-text: #1f1f1f;
-  --popup-muted: #6b7280;
-  --popup-divider: rgba(0, 0, 0, 0.09);
-  --popup-accent: #2563eb;
-  --popup-accent-fill: rgba(37, 99, 235, 0.12);
-  --popup-hover: rgba(0, 0, 0, 0.05);
+  /* Aliased to the global semantic tokens (src/styles/semantic.css), which
+     already switch for dark mode — so this window needs no dark @media block
+     of its own. Kept as --popup-* aliases so the component rules below are
+     untouched. This is the migration template for the other windows. */
+  --popup-bg: var(--color-surface-2);
+  --popup-border: var(--color-border);
+  --popup-shadow: var(--shadow-lg);
+  --popup-text: var(--color-text);
+  --popup-muted: var(--color-text-muted);
+  --popup-divider: var(--color-divider);
+  --popup-accent: var(--color-accent);
+  --popup-accent-fill: var(--color-accent-fill);
+  --popup-hover: var(--color-hover);
 }
 
 * {
@@ -151,20 +154,5 @@ body {
   .popup-empty {
     transition: none;
     transform: none;
-  }
-}
-
-/* ── Dark ── */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --popup-bg: #2c2c2c;
-    --popup-border: rgba(255, 255, 255, 0.12);
-    --popup-shadow: 0 8px 24px rgba(0, 0, 0, 0.42), 0 1px 3px rgba(0, 0, 0, 0.3);
-    --popup-text: #ececec;
-    --popup-muted: #9ca3af;
-    --popup-divider: rgba(255, 255, 255, 0.1);
-    --popup-accent: #60a5fa;
-    --popup-accent-fill: rgba(96, 165, 250, 0.18);
-    --popup-hover: rgba(255, 255, 255, 0.08);
   }
 }

@@ -219,7 +219,7 @@
 }
 .chat-text-content a,
 .chat-diff-newonly a {
-  color: #2563eb;
+  color: var(--color-accent);
   text-decoration: underline;
 }
 pre.chat-codeblock {
@@ -439,7 +439,7 @@ pre.chat-codeblock code {
   outline: none;
 }
 .chat-action-mode:focus {
-  border-color: #2563eb;
+  border-color: var(--color-accent);
 }
 .chat-action-allow,
 .chat-action-deny {
@@ -451,11 +451,11 @@ pre.chat-codeblock code {
   cursor: pointer;
 }
 .chat-action-allow {
-  background: #2563eb;
+  background: var(--color-accent);
   color: #fff;
 }
 .chat-action-allow:hover {
-  background: #1d4ed8;
+  background: var(--color-accent-hover);
 }
 .chat-action-deny {
   background: rgba(0, 0, 0, 0.06);
@@ -815,7 +815,7 @@ pre.chat-codeblock code {
 }
 
 .assistant-input:focus {
-  border-color: #2563eb;
+  border-color: var(--color-accent);
 }
 
 .assistant-send {
@@ -828,14 +828,14 @@ pre.chat-codeblock code {
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: #2563eb;
+  background: var(--color-accent);
   color: #fff;
   cursor: pointer;
   font-size: 17px;
 }
 
 .assistant-send:hover {
-  background: #1d4ed8;
+  background: var(--color-accent-hover);
 }
 
 /* permission bubble */
@@ -927,7 +927,7 @@ pre.chat-codeblock code {
 }
 
 .perm-mode:focus {
-  border-color: #2563eb;
+  border-color: var(--color-accent);
 }
 
 .tag-chip {
@@ -955,12 +955,12 @@ pre.chat-codeblock code {
 
 .perm-bubble-root > button:first-of-type {
   /* 允许写入：主色（蓝）。 */
-  background: #2563eb;
+  background: var(--color-accent);
   color: #fff;
 }
 
 .perm-bubble-root > button:first-of-type:hover {
-  background: #1d4ed8;
+  background: var(--color-accent-hover);
 }
 
 .perm-bubble-root > button:last-of-type {
@@ -1006,15 +1006,15 @@ pre.chat-codeblock code {
   }
 
   .perm-mode:focus {
-    border-color: #3b82f6;
+    border-color: var(--color-accent);
   }
 
   .perm-bubble-root > button:first-of-type {
-    background: #3b82f6;
+    background: var(--color-accent);
   }
 
   .perm-bubble-root > button:first-of-type:hover {
-    background: #2563eb;
+    background: var(--color-accent);
   }
 
   .perm-bubble-root > button:last-of-type {
@@ -1061,7 +1061,7 @@ pre.chat-codeblock code {
   }
   .chat-text-content a,
   .chat-diff-newonly a {
-    color: #60a5fa;
+    color: var(--color-accent);
   }
   .chat-text-content blockquote,
   .chat-diff-newonly blockquote {
@@ -1111,7 +1111,7 @@ pre.chat-codeblock code {
     color: #e5e5e5;
   }
   .chat-action-mode:focus {
-    border-color: #3b82f6;
+    border-color: var(--color-accent);
   }
   .chat-action-deny {
     background: rgba(255, 255, 255, 0.08);
@@ -1201,6 +1201,6 @@ pre.chat-codeblock code {
   }
 
   .assistant-input:focus {
-    border-color: #3b82f6;
+    border-color: var(--color-accent);
   }
 }

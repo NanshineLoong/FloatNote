@@ -86,8 +86,9 @@ button {
 .history-icon-btn:focus-visible,
 .history-clear-options button:focus-visible,
 .history-row-main:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--color-focus-ring);
 }
 
 .history-clear-options {

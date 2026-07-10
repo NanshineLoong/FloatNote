@@ -16,6 +16,7 @@ import { stripTagMarker } from "@floatnote/note-logic";
 import { olOrdinal } from "../list-indent";
 import { outlineStateField } from "../outline-mode";
 import { IconReadyEffect, iconStateKeyFor } from "./icons";
+import { ACCENT, ACCENT_HOVER } from "../../styles/accent";
 import {
   BulletWidget,
   OlNumberWidget,
@@ -578,7 +579,7 @@ const previewTheme = EditorView.theme({
     minWidth: "2em",
   },
   ".cm-preview-table th:focus, .cm-preview-table td:focus": {
-    outline: "2px solid #3b82f6",
+    outline: `2px solid ${ACCENT}`,
     outlineOffset: "-2px",
   },
   ".cm-preview-table th": { fontWeight: "600", background: "rgba(0,0,0,0.04)" },
@@ -613,17 +614,17 @@ const previewTheme = EditorView.theme({
     fontSize: "0.8em",
   },
   ".cm-preview-link": {
-    color: "#2563eb",
+    color: ACCENT,
     textDecoration: "underline",
     cursor: "pointer",
   },
-  ".cm-preview-link:hover": { color: "#1d4ed8" },
+  ".cm-preview-link:hover": { color: ACCENT_HOVER },
   ".cm-preview-ol-mark": { color: "#374151", fontWeight: "600" },
   ".cm-preview-list": {
     paddingLeft: "0.6em",
     listStyleType: "none",
   },
-  ".cm-preview-figure.cm-img-active": { outline: "2px solid #3b82f6", borderRadius: "4px" },
+  ".cm-preview-figure.cm-img-active": { outline: `2px solid ${ACCENT}`, borderRadius: "4px" },
   ".cm-img-toolbar": {
     position: "absolute",
     top: "-34px",
@@ -652,7 +653,7 @@ const previewTheme = EditorView.theme({
     position: "absolute",
     width: "10px",
     height: "10px",
-    background: "#3b82f6",
+    background: ACCENT,
     border: "1px solid #fff",
     borderRadius: "2px",
     pointerEvents: "auto",

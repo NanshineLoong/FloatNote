@@ -107,7 +107,7 @@
 
 .settings-page input[type="text"]:focus,
 .settings-page input[type="password"]:focus {
-  border-color: #2563eb;
+  border-color: var(--color-accent);
 }
 
 .settings-page input[readonly] {
@@ -133,7 +133,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #2563eb;
+  background: var(--color-accent);
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
@@ -154,7 +154,7 @@
 }
 
 .settings-select:focus {
-  border-color: #2563eb;
+  border-color: var(--color-accent);
 }
 
 /* ── Toggle switch ── */
@@ -196,7 +196,7 @@
 }
 
 .settings-toggle input:checked + .settings-toggle-track {
-  background: #2563eb;
+  background: var(--color-accent);
 }
 
 .settings-toggle input:checked + .settings-toggle-track::after {
@@ -232,7 +232,7 @@
   padding: 7px 20px;
   border: none;
   border-radius: 6px;
-  background: #2563eb;
+  background: var(--color-accent);
   color: #fff;
   font-size: 13px;
   font-weight: 500;
@@ -242,7 +242,7 @@
 }
 
 .settings-btn-primary:hover {
-  background: #1d4ed8;
+  background: var(--color-accent-hover);
 }
 
 .settings-btn-primary:disabled {
@@ -273,7 +273,7 @@
 
 .key-recorder.recording {
   border-style: solid;
-  border-color: #2563eb;
+  border-color: var(--color-accent);
   background: rgba(37, 99, 235, 0.06);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
   cursor: default;
@@ -293,7 +293,7 @@
 }
 
 .key-recorder.recording .key-recorder-label {
-  color: #2563eb;
+  color: var(--color-accent);
 }
 
 .key-recorder-hint {
@@ -401,7 +401,7 @@
   }
 
   .key-recorder.recording {
-    border-color: #60a5fa;
+    border-color: var(--color-accent);
     background: rgba(96, 165, 250, 0.1);
     box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
   }
@@ -416,7 +416,7 @@
   }
 
   .key-recorder.recording .key-recorder-label {
-    color: #60a5fa;
+    color: var(--color-accent);
   }
 
   .key-recorder-hint {

@@ -1,0 +1,113 @@
+/* ── Semantic tokens ──────────────────────────────────────────────────────
+   Purpose aliases consumed by components and window styles. Dark mode is
+   OS-driven only (`@media (prefers-color-scheme: dark)`) — no in-app toggle.
+   This generalizes the `--popup-*` pattern from `src/popup/styles.css` to all
+   windows. Component CSS references these, never the primitives. */
+
+:root {
+  /* ── Surfaces ── */
+  --color-bg:           var(--gray-0);
+  --color-surface:      var(--gray-0);
+  --color-surface-2:    var(--gray-50);   /* titlebar / tinted card */
+  --color-surface-3:    var(--gray-100);
+  --color-overlay:      rgba(255, 255, 255, 0.95);
+
+  /* ── Text ── */
+  --color-text:         var(--gray-800);
+  --color-text-muted:   var(--gray-500);
+  --color-text-subtle:  var(--gray-400);
+  --color-text-on-accent: var(--gray-0);
+
+  /* ── Borders / dividers ──
+     Two width systems coexist (assistant/popover 0.5px hairlines vs
+     menus/inputs 1px). Both border COLORS are unified here; widths are named
+     in base.css as --fn-border-width / --fn-border-hair. */
+  --color-border:        rgba(0, 0, 0, 0.12);
+  --color-border-strong: rgba(0, 0, 0, 0.18);
+  --color-border-hair:   rgba(0, 0, 0, 0.10);
+  --color-divider:       rgba(0, 0, 0, 0.09);
+
+  /* ── Accent (Indigo, locked) ── */
+  --color-accent:         var(--indigo-600);
+  --color-accent-hover:   var(--indigo-700);
+  --color-accent-pressed: var(--indigo-800);
+  --color-accent-soft:    var(--indigo-400); /* dark-mode accent */
+  --color-accent-fill:    var(--indigo-accent-fill-light);
+  --color-focus-ring:     var(--indigo-focus-ring-light);
+
+  /* ── Hover / selected fills ── */
+  --color-hover:        rgba(0, 0, 0, 0.05);
+  --color-hover-strong: rgba(0, 0, 0, 0.06);
+  --color-selected:     var(--indigo-accent-fill-light);
+
+  /* ── Shadows (consolidates ~15 ad-hoc one-offs) ── */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.16);
+  --shadow-lg: 0 6px 20px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.22), 0 1px 3px rgba(0, 0, 0, 0.12);
+
+  /* ── Radii (component-scale, mapped to existing 6/8/10 usage) ── */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+
+  /* ── Spacing scale ── */
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 14px;
+  --space-6: 16px;
+  --space-8: 24px;
+
+  /* ── Typography ── (unifies the 4 sans + 3 mono stacks previously copied) */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
+  --fs-xs:   11px;
+  --fs-sm:   12px;
+  --fs-base: 13px;
+  --fs-md:   14px;
+  --fs-lg:   15px; /* editor font */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --lh-tight: 1;
+  --lh-base:  1.45;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg:           var(--dark-surface-3);
+    --color-surface:      var(--dark-surface-2);
+    --color-surface-2:    var(--dark-surface-1);
+    --color-surface-3:    #333333;
+    --color-overlay:      rgba(30, 30, 30, 0.95);
+
+    --color-text:         #ececec;
+    --color-text-muted:   var(--gray-400);
+    --color-text-subtle:  var(--gray-500);
+    --color-text-on-accent: var(--gray-0);
+
+    --color-border:        rgba(255, 255, 255, 0.12);
+    --color-border-strong: rgba(255, 255, 255, 0.18);
+    --color-border-hair:   rgba(255, 255, 255, 0.10);
+    --color-divider:       rgba(255, 255, 255, 0.10);
+
+    --color-accent:         var(--indigo-400);
+    --color-accent-hover:   var(--indigo-300);
+    --color-accent-pressed: var(--indigo-400);
+    --color-accent-fill:    var(--indigo-accent-fill-dark);
+    --color-focus-ring:     var(--indigo-focus-ring-dark);
+
+    --color-hover:        rgba(255, 255, 255, 0.08);
+    --color-hover-strong: rgba(255, 255, 255, 0.10);
+    --color-selected:     var(--indigo-accent-fill-dark);
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.30);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.42);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.42), 0 1px 3px rgba(0, 0, 0, 0.30);
+    --shadow-xl: 0 10px 28px rgba(0, 0, 0, 0.50), 0 1px 3px rgba(0, 0, 0, 0.40);
+  }
+}

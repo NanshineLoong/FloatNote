@@ -1,0 +1,52 @@
+/* ── Base: reset + interaction states ──────────────────────────────────────
+   The single place the focus-ring a11y gap is fixed (previously only
+   `history/styles.css` had a `:focus-visible` ring; everywhere else focus was
+   border-color-only and invisible to keyboard users). Loaded by all four
+   windows via `index.css`. Idempotent with the per-window resets already in
+   `styles.css` / `popup/styles.css` — those re-declare `*{box-sizing}` and
+   font stacks harmlessly. */
+
+/* Two border-width systems coexist in the existing CSS; name them so component
+   authors pick deliberately instead of burying a literal. NOT unified this round
+   (unifying would visibly change the assistant/popover 0.5px hairlines). */
+:root {
+  --fn-border-width: 1px;   /* menus, inputs, settings, history */
+  --fn-border-hair:  0.5px; /* assistant, popovers */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Global focus ring — fixes the keyboard-a11y gap. Components must NOT override
+   `outline` (they may set `border-radius: inherit` only). */
+:where(button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--color-focus-ring);
+  border-radius: inherit;
+}
+
+/* Reduced motion — consolidated (previously declared ad-hoc in styles.css,
+   assistant, popup). history/settings now honor it too. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

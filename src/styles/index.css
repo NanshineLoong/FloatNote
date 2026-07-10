@@ -1,0 +1,10 @@
+/* ── Design-system aggregator ──────────────────────────────────────────────
+   The single `<link>` target for all windows (`index/settings/popup/history.html`).
+   KEEP THIS FILE IMPORT-ONLY: CSS spec requires `@import` to precede any other
+   rules, else Vite silently drops them. Add component rules to
+   `components.css`, not here. */
+
+@import "./primitives.css";
+@import "./semantic.css";
+@import "./base.css";
+@import "./components.css";
