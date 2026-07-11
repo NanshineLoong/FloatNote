@@ -139,12 +139,14 @@ function buildDecorations(
   const doc = state.doc;
   for (const it of items) {
     if (!it.hasChildren) continue;
+    const descendantCount = items.filter((candidate) =>
+      candidate.from >= it.childFrom && candidate.from < it.childTo && candidate.depth > it.depth).length;
     entries.push({
       from: it.from,
       to: it.from,
       deco: Decoration.widget({
         side: -1,
-        widget: new ListFoldToggleWidget(it.id, folded.has(it.id)),
+        widget: new ListFoldToggleWidget(it.id, folded.has(it.id), descendantCount),
       }),
     });
     if (folded.has(it.id)) {
@@ -219,12 +221,12 @@ export const listFoldField = StateField.define<ListFoldState>({
 
 /** bullet 旁 hover 显现的折叠三角。点击交给 listFoldPlugin 委托。 */
 class ListFoldToggleWidget extends WidgetType {
-  constructor(readonly id: string, readonly folded: boolean) {
+  constructor(readonly id: string, readonly folded: boolean, readonly descendantCount: number) {
     super();
   }
 
   eq(o: ListFoldToggleWidget): boolean {
-    return o.id === this.id && o.folded === this.folded;
+    return o.id === this.id && o.folded === this.folded && o.descendantCount === this.descendantCount;
   }
 
   toDOM(): HTMLElement {
@@ -232,10 +234,19 @@ class ListFoldToggleWidget extends WidgetType {
     b.type = "button";
     b.className = "cm-list-fold-toggle" + (this.folded ? " cm-list-fold-toggle-folded" : "");
     b.dataset.listFoldId = this.id;
-    b.title = this.folded ? "展开" : "折叠";
-    b.setAttribute("aria-label", this.folded ? "展开子项" : "折叠子项");
+    b.title = this.folded ? `展开 ${this.descendantCount} 个子项` : `折叠 ${this.descendantCount} 个子项`;
+    b.setAttribute("aria-label", this.folded ? `展开 ${this.descendantCount} 个子项` : `折叠 ${this.descendantCount} 个子项`);
     b.setAttribute("aria-expanded", String(!this.folded));
-    b.textContent = this.folded ? "▸" : "▾";
+    const ring = document.createElement("span");
+    ring.className = "cm-list-fold-ring";
+    ring.setAttribute("aria-hidden", "true");
+    b.appendChild(ring);
+    if (this.folded) {
+      const count = document.createElement("span");
+      count.className = "cm-list-fold-count";
+      count.textContent = String(this.descendantCount);
+      b.appendChild(count);
+    }
     return b;
   }
 

@@ -17,6 +17,7 @@ import { olOrdinal } from "../list-indent";
 import { outlineStateField } from "../outline-mode";
 import { IconReadyEffect, iconStateKeyFor } from "./icons";
 import { ACCENT, ACCENT_HOVER } from "../../styles/accent";
+import { imageSourceField, SetImageSourceEffect } from "../image-interaction";
 import {
   BulletWidget,
   OlNumberWidget,
@@ -68,6 +69,7 @@ function buildDecorations(state: EditorState): DecorationSet {
   const hide = Decoration.replace({});
   const doc = state.doc;
   const outlineOn = !!state.field(outlineStateField, false)?.on;
+  const imageSource = state.field(imageSourceField, false);
   // Live-preview decorations include block widgets (tables, code blocks) and
   // line-break-spanning replacements, which CodeMirror only permits from a
   // StateField — never a ViewPlugin. StateFields have no viewport, so we walk
@@ -97,6 +99,17 @@ function buildDecorations(state: EditorState): DecorationSet {
    *  iterating ListItems; applied as a single line decoration per line so we
    *  don't rely on multi-line-decoration merge semantics for nested items. */
   const listLineDepth = new Map<number, number>();
+  const activeFencedCode: Array<{ from: number; to: number }> = [];
+  syntaxTree(state).iterate({
+    enter(node) {
+      if (node.name !== "FencedCode") return;
+      if (rangeTouchesSelection(selRanges, node.from, node.to)) {
+        activeFencedCode.push({ from: node.from, to: node.to });
+      }
+    },
+  });
+  const inActiveFence = (from: number, to: number) =>
+    activeFencedCode.some((range) => from >= range.from && to <= range.to);
 
   // First pass: collect the line numbers that belong to a `[!quote]` card so
   // the QuoteMark handler can skip the plain-blockquote style on those lines,
@@ -160,6 +173,7 @@ function buildDecorations(state: EditorState): DecorationSet {
         }
 
         case "CodeMark": {
+          if (inActiveFence(node.from, node.to)) return false;
           if (touches(node.from, node.to)) return false;
           entries.push({ from: node.from, to: node.to, deco: hide });
           return false;
@@ -216,12 +230,27 @@ function buildDecorations(state: EditorState): DecorationSet {
           if (touches(node.from, node.to)) return false;
           const ch = doc.sliceString(node.from, node.to);
           if (ch === "-" || ch === "*" || ch === "+") {
+            let child = node.node.parent?.firstChild ?? null;
+            let hasNestedList = false;
+            while (child) {
+              if (child.name === "BulletList" || child.name === "OrderedList") {
+                hasNestedList = true;
+                break;
+              }
+              child = child.nextSibling;
+            }
             entries.push({
               from: node.from,
               to: node.to,
-              deco: outlineOn ? hide : Decoration.replace({ widget: new BulletWidget() }),
+              deco: outlineOn || hasNestedList
+                ? hide
+                : Decoration.replace({ widget: new BulletWidget() }),
             });
           } else {
+            if (outlineOn) {
+              entries.push({ from: node.from, to: node.to, deco: hide });
+              return false;
+            }
             // Ordered list marker (`1.`, `2.` …): replace the literal digits
             // with a widget that shows the ordinal computed from the list tree,
             // so indent/outdent re-numbers automatically. Source digits are
@@ -265,7 +294,7 @@ function buildDecorations(state: EditorState): DecorationSet {
 
         case "Image": {
           if (outlineOn) return false;
-          if (onCursorLine(node.from)) return false;
+          if (imageSource && node.from >= imageSource.from && node.to <= imageSource.to) return false;
           const raw = doc.sliceString(node.from, node.to);
           // lang-markdown's Image node covers `![alt](url)` but NOT the trailing
           // `{...}` attr block (it's plain text). Extend the replacement to
@@ -277,12 +306,20 @@ function buildDecorations(state: EditorState): DecorationSet {
             const close = doc.sliceString(node.to, line.to).indexOf("}");
             if (close >= 0) to = node.to + close + 1;
           }
+          const imageLine = doc.lineAt(node.from);
+          const prefix = doc.sliceString(imageLine.from, node.from);
+          const suffix = doc.sliceString(to, imageLine.to)
+            .replace(/<!-- floatnote:[a-z]+=[^>]*? -->/g, "");
+          // A block figure must own its whole source line. Replacing an inline
+          // Image node would make the prose on either side appear to belong to
+          // the widget and breaks click/selection boundaries.
+          if (prefix.trim() !== "" || suffix.trim() !== "") return false;
           const url = raw.match(/\(([^)]+)\)/)?.[1].trim() ?? "";
           if (url) {
             entries.push({
               from: node.from,
               to,
-              deco: Decoration.replace({ widget: new ImgWidget(doc.sliceString(node.from, to)) }),
+              deco: Decoration.replace({ widget: new ImgWidget(doc.sliceString(node.from, to), node.from, to) }),
             });
           }
           return false;
@@ -522,9 +559,10 @@ export const previewField = StateField.define<DecorationSet>({
   },
   update(deco, tr) {
     const iconReady = tr.effects.some((e) => e.is(IconReadyEffect));
+    const imageModeChanged = tr.effects.some((e) => e.is(SetImageSourceEffect));
     const outlineBefore = !!tr.startState.field(outlineStateField, false)?.on;
     const outlineAfter = !!tr.state.field(outlineStateField, false)?.on;
-    if (tr.docChanged || tr.selection || iconReady || outlineBefore !== outlineAfter) {
+    if (tr.docChanged || tr.selection || iconReady || imageModeChanged || outlineBefore !== outlineAfter) {
       return buildDecorations(tr.state);
     }
     return deco;
@@ -685,5 +723,5 @@ const previewTheme = EditorView.theme({
 });
 
 export function livePreview(): Extension[] {
-  return [previewField, previewTheme];
+  return [imageSourceField, previewField, previewTheme];
 }

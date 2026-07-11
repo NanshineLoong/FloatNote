@@ -22,7 +22,8 @@ function wireOpenUrlLink(a: HTMLAnchorElement, url: string): void {
 class BulletWidget extends WidgetType {
   toDOM(): HTMLElement {
     const span = document.createElement("span");
-    span.textContent = "•";
+    span.className = "cm-list-leaf-dot";
+    span.setAttribute("aria-hidden", "true");
     return span;
   }
 }
@@ -63,13 +64,15 @@ function noteDirOf(view: EditorView): string {
 }
 
 class ImgWidget extends WidgetType {
-  constructor(readonly raw: string) { super(); }
-  eq(o: ImgWidget): boolean { return o.raw === this.raw; }
+  constructor(readonly raw: string, readonly from: number, readonly to: number) { super(); }
+  eq(o: ImgWidget): boolean { return o.raw === this.raw && o.from === this.from && o.to === this.to; }
   toDOM(view: EditorView): HTMLElement {
     const a = parseImage(this.raw);
     const figure = document.createElement("figure");
     const align: ImageAlign = a?.align ?? "left";
     figure.className = `cm-preview-figure img-${align}`;
+    figure.dataset.imageFrom = String(this.from);
+    figure.dataset.imageTo = String(this.to);
     const img = document.createElement("img");
     img.className = "cm-preview-img";
     img.alt = a?.caption ?? "";

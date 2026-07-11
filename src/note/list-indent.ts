@@ -7,15 +7,27 @@ export function isListItemLine(line: string): boolean {
 /** Nesting depth in 4-space units. Our Tab inserts 4 spaces per level, so
  *  user-created nesting is always a multiple of 4. */
 export function lineDepth(line: string): number {
-  const m = /^(\s*)/.exec(line);
-  return Math.floor((m ? m[1].length : 0) / 4);
+  return Math.floor(leadingColumns(line) / 4);
 }
 
 export function outdentLine(line: string): string {
-  const spaces = /^ {1,4}/.exec(line);
-  if (spaces) return line.slice(spaces[0].length);
-  if (/^\t/.test(line)) return line.slice(1);
-  return line;
+  const prefix = /^[ \t]*/.exec(line)?.[0] ?? "";
+  const columns = leadingColumns(prefix);
+  if (columns === 0) return line;
+  return `${" ".repeat(Math.max(0, columns - 4))}${line.slice(prefix.length)}`;
+}
+
+/** Visual leading columns with four-column tab stops. */
+export function leadingColumns(line: string): number {
+  const prefix = /^[ \t]*/.exec(line)?.[0] ?? "";
+  let columns = 0;
+  for (const ch of prefix) columns = ch === "\t" ? columns + (4 - (columns % 4)) : columns + 1;
+  return columns;
+}
+
+function withIndentColumns(line: string, columns: number): string {
+  const prefix = /^[ \t]*/.exec(line)?.[0] ?? "";
+  return `${" ".repeat(Math.max(0, columns))}${line.slice(prefix.length)}`;
 }
 
 /** Whether Tab may demote the current item, given the immediately preceding
@@ -53,4 +65,50 @@ export function prevListItemDepth(lines: string[], index: number): number | null
     return null;
   }
   return null;
+}
+
+/** Last line index owned by a list item, including all more-deeply indented
+ * descendants. Blank lines inside the subtree are retained, but the first
+ * non-list line or list item at the same/shallower depth closes the subtree. */
+export function listSubtreeEnd(lines: string[], index: number): number {
+  if (!isListItemLine(lines[index] ?? "")) return index;
+  const depth = lineDepth(lines[index]);
+  let end = index;
+  for (let i = index + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === "") {
+      end = i;
+      continue;
+    }
+    if (isListItemLine(line)) {
+      if (lineDepth(line) <= depth) break;
+      end = i;
+      continue;
+    }
+    // Markdown continuation paragraphs and fenced content belong to the list
+    // item when their visual indentation is deeper than the item's marker.
+    if (leadingColumns(line) <= depth * 4) break;
+    end = i;
+  }
+  return end;
+}
+
+/** Pure line transform used by the keymap. When the last selected line is a
+ * list item, its descendant subtree is included so hierarchy cannot split. */
+export function transformIndentRange(
+  lines: string[],
+  start: number,
+  end: number,
+  direction: "indent" | "outdent",
+): string[] {
+  const next = [...lines];
+  const last = isListItemLine(lines[end] ?? "") ? listSubtreeEnd(lines, end) : end;
+  for (let i = start; i <= last && i < next.length; i++) {
+    if (direction === "indent") {
+      if (next[i].trim() !== "") next[i] = withIndentColumns(next[i], leadingColumns(next[i]) + 4);
+    } else {
+      next[i] = outdentLine(next[i]);
+    }
+  }
+  return next;
 }

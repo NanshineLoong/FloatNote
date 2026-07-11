@@ -9,6 +9,9 @@ import {
   olOrdinal,
   outdentLine,
   prevListItemDepth,
+  listSubtreeEnd,
+  transformIndentRange,
+  leadingColumns,
 } from "./list-indent";
 
 describe("isListItemLine", () => {
@@ -82,6 +85,50 @@ describe("prevListItemDepth", () => {
   });
   it("returns null at the top", () => {
     expect(prevListItemDepth(["- a"], 0)).toBe(null);
+  });
+});
+
+describe("structural list indentation", () => {
+  const lines = ["- parent", "    - child", "        - grandchild", "- sibling"];
+
+  it("finds the full descendant subtree", () => {
+    expect(listSubtreeEnd(lines, 0)).toBe(2);
+    expect(listSubtreeEnd(lines, 1)).toBe(2);
+    expect(listSubtreeEnd(lines, 3)).toBe(3);
+  });
+
+  it("keeps indented continuation text and fenced content with the item", () => {
+    const continued = [
+      "- parent",
+      "    continuation",
+      "    ```js",
+      "    code()",
+      "    ```",
+      "    - child",
+      "- sibling",
+    ];
+    expect(listSubtreeEnd(continued, 0)).toBe(5);
+  });
+
+  it("indents a list item and every descendant together", () => {
+    expect(transformIndentRange(lines, 0, 0, "indent")).toEqual([
+      "    - parent",
+      "        - child",
+      "            - grandchild",
+      "- sibling",
+    ]);
+  });
+
+  it("outdents selected prose lines consistently", () => {
+    expect(transformIndentRange(["    alpha", "      beta", "gamma"], 0, 1, "outdent"))
+      .toEqual(["alpha", "  beta", "gamma"]);
+  });
+
+  it("measures tab stops and normalizes only affected prefixes", () => {
+    expect(leadingColumns(" \t- item")).toBe(4);
+    expect(transformIndentRange(["\t- item", " \t  continuation"], 0, 1, "indent"))
+      .toEqual(["        - item", "          continuation"]);
+    expect(outdentLine("\t  - item")).toBe("  - item");
   });
 });
 

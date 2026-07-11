@@ -65,9 +65,6 @@ class OutlineBulletWidget extends WidgetType {
     const wrap = document.createElement("span");
     wrap.className = "cm-outline-bullet";
     wrap.dataset.outlineDepth = String(this.node.depth);
-    const dot = document.createElement("span");
-    dot.className = "cm-outline-dot";
-    wrap.appendChild(dot);
     if (this.hasChildren) {
       const toggle = document.createElement("button");
       toggle.type = "button";
@@ -76,8 +73,16 @@ class OutlineBulletWidget extends WidgetType {
       toggle.title = this.folded ? "展开" : "折叠";
       toggle.setAttribute("aria-label", this.folded ? "展开子节点" : "折叠子节点");
       toggle.setAttribute("aria-expanded", String(!this.folded));
-      toggle.textContent = this.folded ? "▸" : "▾";
+      const ring = document.createElement("span");
+      ring.className = "cm-outline-ring";
+      ring.setAttribute("aria-hidden", "true");
+      toggle.appendChild(ring);
       wrap.appendChild(toggle);
+    } else {
+      const dot = document.createElement("span");
+      dot.className = "cm-outline-leaf-dot";
+      dot.setAttribute("aria-hidden", "true");
+      wrap.appendChild(dot);
     }
     return wrap;
   }
@@ -151,8 +156,9 @@ function isCard(kind: OutlineKind): boolean {
   return kind.endsWith("-card");
 }
 
-function hasChildren(node: OutlineNode): boolean {
-  return node.childTo > node.childFrom;
+function hasChildren(nodes: OutlineNode[], node: OutlineNode): boolean {
+  return nodes.some((candidate) =>
+    candidate.from > node.from && candidate.from < node.childTo && candidate.depth > node.depth);
 }
 
 function hiddenChildCount(nodes: OutlineNode[], node: OutlineNode): number {
@@ -163,7 +169,7 @@ function hiddenChildCount(nodes: OutlineNode[], node: OutlineNode): number {
 }
 
 function buildDecorations(doc: string, nodes: OutlineNode[], folded: Set<string>): DecorationSet {
-  if (nodes.length === 0) return Decoration.none;
+  if (doc.length === 0) return Decoration.none;
 
   const lineStarts = lineStartsOf(doc);
   const lineRange = (n: number): { from: number; to: number } => {
@@ -181,7 +187,7 @@ function buildDecorations(doc: string, nodes: OutlineNode[], folded: Set<string>
 
   for (const node of nodes) {
     if (isCovered(node.from, node.to)) continue;
-    const nodeHasChildren = hasChildren(node);
+    const nodeHasChildren = hasChildren(nodes, node);
 
     if (isCard(node.kind)) {
       entries.push({
@@ -238,15 +244,23 @@ function buildDecorations(doc: string, nodes: OutlineNode[], folded: Set<string>
     }
   }
 
-  // 空行压制：不删行，仅压高度
+  const visibleLines = new Set<number>();
+  for (const node of nodes) {
+    for (let n = node.lineFrom; n <= node.lineTo; n++) visibleLines.add(n);
+  }
+
+  // The simplified outline is a structural projection: every source line
+  // other than a heading/list line is collapsed without deleting document
+  // content. Code fences are consumed by parseOutline, so list-like code text
+  // cannot leak into the projection.
   for (let n = 1; n <= lineStarts.length; n++) {
     const { from, to } = lineRange(n);
     if (isCovered(from, to)) continue;
-    if (doc.slice(from, to).trim() !== "") continue;
+    if (visibleLines.has(n)) continue;
     entries.push({
       from,
       to: from,
-      decoration: Decoration.line({ class: "cm-outline-blank" }),
+      decoration: Decoration.line({ class: "cm-outline-hidden" }),
     });
   }
 

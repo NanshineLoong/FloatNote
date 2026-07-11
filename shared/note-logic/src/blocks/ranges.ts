@@ -34,6 +34,20 @@ export function applyChanges(doc: string, cs: ChangeOp[]): string {
 }
 
 const TODO_RE = /^- \[[ xX]\]/;
+const FENCE_RE = /^\s*(`{3,}|~{3,})/;
+const IMAGE_RE = /^\s*!\[[^\]]*\]\([^\n)]+\)\s*(?:\{[^\n}]*\})?\s*(?:<!-- floatnote:[a-z]+=[^>]*? -->\s*)*$/;
+const HEADING_RE = /^\s{0,3}#{1,6}\s+/;
+const TABLE_DELIMITER_RE = /^\s*\|?\s*:?-{1,}:?\s*(?:\|\s*:?-{1,}:?\s*)+\|?\s*$/;
+
+function isTableStart(lines: string[], index: number): boolean {
+  return (lines[index]?.includes("|") ?? false) && TABLE_DELIMITER_RE.test(lines[index + 1] ?? "");
+}
+
+function isStructuralStart(lines: string[], index: number): boolean {
+  const line = lines[index] ?? "";
+  return TODO_RE.test(line) || line.startsWith(">") || FENCE_RE.test(line) ||
+    IMAGE_RE.test(line) || HEADING_RE.test(line) || isTableStart(lines, index);
+}
 
 /** Compute the char-range of every top-level block, in document order. */
 export function blockRanges(text: string): BlockRange[] {
@@ -66,6 +80,39 @@ export function blockRanges(text: string): BlockRange[] {
 
     const from = lineStart[i];
 
+    const fence = FENCE_RE.exec(lines[i]);
+    if (fence) {
+      const marker = fence[1][0];
+      const close = new RegExp(`^\\s*${marker === "`" ? "`{3,}" : "~{3,}"}\\s*(?:<!-- floatnote:[a-z]+=[^>]*? -->\\s*)*$`);
+      let j = i + 1;
+      while (j < lines.length && !close.test(lines[j])) j++;
+      if (j < lines.length) j++;
+      ranges.push({ from, to: endOf(Math.max(i, j - 1)) });
+      i = Math.max(i + 1, j);
+      continue;
+    }
+
+    if (IMAGE_RE.test(lines[i])) {
+      ranges.push({ from, to: endOf(i) });
+      i++;
+      continue;
+    }
+
+    if (HEADING_RE.test(lines[i])) {
+      ranges.push({ from, to: endOf(i) });
+      i++;
+      continue;
+    }
+
+    if (isTableStart(lines, i)) {
+      let j = i + 2;
+      while (j < lines.length && lines[j].trim() !== "" && lines[j].includes("|") &&
+          !isStructuralStart(lines, j)) j++;
+      ranges.push({ from, to: endOf(j - 1) });
+      i = j;
+      continue;
+    }
+
     if (TODO_RE.test(lines[i])) {
       ranges.push({ from, to: endOf(i) });
       i++;
@@ -84,8 +131,7 @@ export function blockRanges(text: string): BlockRange[] {
     while (
       j < lines.length &&
       lines[j].trim() !== "" &&
-      !lines[j].startsWith(">") &&
-      !TODO_RE.test(lines[j])
+      !isStructuralStart(lines, j)
     ) {
       j++;
     }

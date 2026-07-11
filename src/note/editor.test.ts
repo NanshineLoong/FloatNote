@@ -69,6 +69,20 @@ describe("setDoc undo", () => {
   });
 });
 
+describe("editor selection rendering", () => {
+  it("uses CodeMirror's measured selection layer instead of native-only painting", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const view = createEditor(host, () => {});
+    try {
+      expect(view.dom.querySelector(".cm-selectionLayer")).toBeTruthy();
+    } finally {
+      view.destroy();
+      host.remove();
+    }
+  });
+});
+
 describe("fenced code block is editable text (no block widget)", () => {
   // Cursor parked in the leading paragraph so it doesn't touch any fence
   // CodeMark (which would reveal the fence and skip the hide decoration).
@@ -115,6 +129,20 @@ describe("fenced code block is editable text (no block widget)", () => {
     );
     expect(bodyHides).toEqual([]);
     expect(bodyFrom).toBe(bodyLine.from);
+  });
+
+  it("reveals both fences when the caret enters any code-block line", () => {
+    const bodyCursor = DOC.indexOf("const x");
+    const state = previewState(DOC, bodyCursor);
+    const decos = decorations(state.field(previewField));
+    const open = lineFrom(state, 3);
+    const close = lineFrom(state, 5);
+    const hiddenFenceStarts = decos
+      .filter((d) => d.to > d.from && d.spec.widget === undefined && d.spec.class === undefined)
+      .map((d) => d.from);
+
+    expect(hiddenFenceStarts).not.toContain(open);
+    expect(hiddenFenceStarts).not.toContain(close);
   });
 });
 

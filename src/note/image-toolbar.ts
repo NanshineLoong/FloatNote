@@ -2,6 +2,7 @@ import { syntaxTree } from "@codemirror/language";
 import type { EditorView } from "@codemirror/view";
 import { parseImage, writeAttrs, type ImageAlign, type ImageAttrs } from "./image-attrs";
 import { computeResize, HANDLE_SPECS, type HandleSpec } from "./image-resize";
+import { imageSourceField, SetImageSourceEffect } from "./image-interaction";
 
 interface Active {
   view: EditorView;
@@ -45,6 +46,13 @@ function locateImageRange(
   view: EditorView,
   figure: HTMLElement,
 ): { from: number; to: number; raw: string } | null {
+  const dataFrom = Number(figure.dataset.imageFrom);
+  const dataTo = Number(figure.dataset.imageTo);
+  if (Number.isInteger(dataFrom) && Number.isInteger(dataTo) &&
+      dataFrom >= 0 && dataTo > dataFrom && dataTo <= view.state.doc.length) {
+    const raw = view.state.doc.sliceString(dataFrom, dataTo);
+    if (parseImage(raw)) return { from: dataFrom, to: dataTo, raw };
+  }
   const pos = view.posAtDOM(figure);
   let found: { from: number; to: number; raw: string } | null = null;
   syntaxTree(view.state).iterate({
@@ -99,16 +107,15 @@ function currentAttrs(): ImageAttrs {
 
 /** After a writeback, the preview plugin rebuilds the ImgWidget DOM, destroying
  *  the figure that hosted the overlays. Re-find the rebuilt figure for THIS
- *  image via its `from` position (`view.domAtPos(from)` → nearest
- *  `.cm-preview-figure`) rather than by caption — duplicate empty captions (the
- *  common case for pasted images) made caption matching attach to the WRONG
- *  figure. If the widget is torn down or the cursor is on the line (image in
- *  source mode), `domAtPos` won't land inside a figure, so we close. */
+ *  image via the exact `data-image-from` carried by its widget rather than by
+ *  caption — duplicate empty captions made caption matching attach to the
+ *  wrong figure. If the widget is torn down or the image is in source mode,
+ *  the data-position lookup has no match and the toolbar closes. */
 function reattach(view: EditorView): void {
   if (!active || !toolbarEl || !handlesEl || !captionInput) return;
-  const dom = view.domAtPos(active.from);
-  const node = (dom.node.nodeType === 1 ? dom.node : dom.node.parentElement) as HTMLElement | null;
-  const figure = node?.closest?.(".cm-preview-figure") as HTMLElement | null;
+  const figure = view.dom.querySelector(
+    `.cm-preview-figure[data-image-from="${active.from}"]`,
+  ) as HTMLElement | null;
   if (!figure) {
     closeToolbar();
     return;
@@ -337,13 +344,35 @@ export function attachImageToolbar(view: EditorView): () => void {
     }
   };
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") closeToolbar();
+    if (e.key === "Escape") {
+      if (view.state.field(imageSourceField, false)) {
+        e.preventDefault();
+        view.dispatch({ effects: SetImageSourceEffect.of(null) });
+      }
+      closeToolbar();
+      return;
+    }
+    if ((e.key === "F2" || e.key === "Enter") && active && e.target !== captionInput) {
+      e.preventDefault();
+      const { from, to, view: activeView } = active;
+      closeToolbar();
+      // Place the caret inside the image token. The preview range gate then
+      // reveals Markdown while keeping adjacent lines outside the image range.
+      activeView.dispatch({
+        effects: SetImageSourceEffect.of({ from, to }),
+        selection: { anchor: Math.min(from + 2, activeView.state.doc.length) },
+      });
+      activeView.focus();
+    }
   };
   view.dom.addEventListener("click", onClick);
-  view.dom.addEventListener("keyup", onKey);
+  // Capture keydown before CodeMirror's content handler. In particular Enter
+  // must switch the selected image to source without first inserting a newline
+  // at the previously active prose caret.
+  view.dom.addEventListener("keydown", onKey, true);
   return () => {
     view.dom.removeEventListener("click", onClick);
-    view.dom.removeEventListener("keyup", onKey);
+    view.dom.removeEventListener("keydown", onKey, true);
     closeToolbar();
   };
 }

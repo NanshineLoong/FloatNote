@@ -66,6 +66,34 @@ describe("blockRanges", () => {
     expect(ranges).toHaveLength(1);
     expect(text.slice(ranges[0].from, ranges[0].to)).toBe(text);
   });
+
+  it("keeps a standalone image separate from adjacent prose without blank lines", () => {
+    const text = "above\n![cap](img.png){width=240 align=center}<!-- floatnote:tag=visual -->\nbelow";
+    expect(blockRanges(text).map((r) => text.slice(r.from, r.to))).toEqual([
+      "above",
+      "![cap](img.png){width=240 align=center}<!-- floatnote:tag=visual -->",
+      "below",
+    ]);
+  });
+
+  it("keeps a fenced code block separate from adjacent prose", () => {
+    const text = "above\n```md\n![not-an-image](inside-code.png)\n```\nbelow";
+    expect(blockRanges(text).map((r) => text.slice(r.from, r.to))).toEqual([
+      "above",
+      "```md\n![not-an-image](inside-code.png)\n```",
+      "below",
+    ]);
+  });
+
+  it("keeps headings and GFM tables as distinct canonical blocks", () => {
+    const text = "# Heading\nparagraph\n| A | B |\n| - | - |\n| 1 | 2 |\nafter";
+    expect(blockRanges(text).map((r) => text.slice(r.from, r.to))).toEqual([
+      "# Heading",
+      "paragraph",
+      "| A | B |\n| - | - |\n| 1 | 2 |",
+      "after",
+    ]);
+  });
 });
 
 describe("moveBlockChanges", () => {

@@ -8,6 +8,8 @@ import {
   lineDepth,
   outdentLine,
   prevListItemDepth,
+  listSubtreeEnd,
+  leadingColumns,
 } from "./list-indent";
 
 const INDENT = "    ";
@@ -20,12 +22,50 @@ function docLines(doc: { line(n: number): { text: string }; lines: number }): st
   return out;
 }
 
-/** Tab: indent any line by 4 spaces (list lines demote, subject to the
- *  one-level cap). Multi-character selections fall through to the default. */
-function handleTab(view: EditorView): boolean {
+/** Tab/Shift-Tab operate on every selected line. If the last selected line is
+ * a list item, its descendant subtree is included to keep hierarchy intact. */
+function selectedLineIndexes(view: EditorView): { start: number; end: number } {
+  const { doc, selection } = view.state;
+  const sel = selection.main;
+  const startLine = doc.lineAt(sel.from);
+  let endLine = doc.lineAt(sel.to);
+  if (sel.from !== sel.to && sel.to === endLine.from && endLine.number > startLine.number) {
+    endLine = doc.line(endLine.number - 1);
+  }
+  const lines = docLines(doc);
+  let end = endLine.number - 1;
+  if (isListItemLine(lines[end] ?? "")) end = listSubtreeEnd(lines, end);
+  return { start: startLine.number - 1, end };
+}
+
+function dispatchIndent(view: EditorView, direction: "indent" | "outdent"): boolean {
+  const { start, end } = selectedLineIndexes(view);
+  const changes: Array<{ from: number; to?: number; insert: string }> = [];
+  for (let i = start; i <= end; i++) {
+    const line = view.state.doc.line(i + 1);
+    if (direction === "indent") {
+      if (line.text.trim() !== "") {
+        const prefix = /^[ \t]*/.exec(line.text)?.[0] ?? "";
+        changes.push({
+          from: line.from,
+          to: line.from + prefix.length,
+          insert: " ".repeat(leadingColumns(prefix) + INDENT.length),
+        });
+      }
+    } else {
+      const next = outdentLine(line.text);
+      const removed = line.text.length - next.length;
+      if (removed > 0) changes.push({ from: line.from, to: line.from + removed, insert: "" });
+    }
+  }
+  if (changes.length === 0) return false;
+  view.dispatch({ changes, scrollIntoView: true });
+  return true;
+}
+
+export function handleTab(view: EditorView): boolean {
   const state = view.state;
   const sel = state.selection.main;
-  if (sel.from !== sel.to) return false;
   const line = state.doc.lineAt(sel.from);
   if (isListItemLine(line.text)) {
     const curDepth = lineDepth(line.text);
@@ -35,29 +75,12 @@ function handleTab(view: EditorView): boolean {
       return true;
     }
   }
-  view.dispatch({
-    changes: { from: line.from, insert: INDENT },
-    selection: { anchor: sel.from + INDENT.length },
-    scrollIntoView: true,
-  });
-  return true;
+  return dispatchIndent(view, "indent");
 }
 
 /** Shift-Tab: remove one 4-space unit from the line start. */
-function handleOutdent(view: EditorView): boolean {
-  const state = view.state;
-  const sel = state.selection.main;
-  if (sel.from !== sel.to) return false;
-  const line = state.doc.lineAt(sel.from);
-  if (!/^\s/.test(line.text)) return false;
-  const before = outdentLine(line.text);
-  const removed = line.text.length - before.length;
-  if (removed === 0) return false;
-  view.dispatch({
-    changes: { from: line.from, to: line.from + removed, insert: "" },
-    selection: { anchor: Math.max(line.from, sel.from - removed) },
-  });
-  return true;
+export function handleOutdent(view: EditorView): boolean {
+  return dispatchIndent(view, "outdent");
 }
 
 /** Backspace at column 0: remove one indent unit. No indent (empty list item)

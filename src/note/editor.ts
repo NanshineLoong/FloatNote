@@ -3,7 +3,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { Autolink, Strikethrough, Table, TaskList } from "@lezer/markdown";
 import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
-import { EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { drawSelection, EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { livePreview, setNoteDir } from "./preview";
 import { listFold } from "./list-fold";
@@ -12,6 +12,7 @@ import { listKeymap } from "./list-keymap";
 import { tableKeymap } from "./table-keymap";
 import { htmlPasteHandler, imagePasteHandler } from "./paste";
 import { imageDropHandler } from "./image-drop";
+import { markdownInputKeymap } from "./markdown-keymap";
 
 const highlight = HighlightStyle.define([
   { tag: tags.heading, fontWeight: "600" },
@@ -121,6 +122,20 @@ function buildTheme(grow: boolean) {
       ? { height: "auto", minHeight: "100%", fontSize: "var(--editor-font, 15px)" }
       : { height: "100%", fontSize: "var(--editor-font, 15px)" },
     ".cm-content": grow ? { ...baseContent, minHeight: "100%" } : baseContent,
+    ".cm-line": { minHeight: "1.6em" },
+    ".cm-placeholder": {
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      pointerEvents: "none",
+    },
+    ".cm-cursor, .cm-dropCursor": {
+      transition: "none",
+    },
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground": {
+      backgroundColor: "rgba(37, 99, 235, 0.22)",
+    },
+    ".cm-content ::selection": { backgroundColor: "rgba(37, 99, 235, 0.22)" },
     ".cm-scroller": grow ? { overflow: "visible", minHeight: "100%" } : {},
     "&.cm-focused": { outline: "none" },
   });
@@ -137,6 +152,7 @@ export function createEditor(
     parent,
     extensions: [
       history(),
+      drawSelection({ cursorBlinkRate: 1200 }),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ extensions: [Autolink, Table, Strikethrough, TaskList], codeLanguages }),
       syntaxHighlighting(highlight),
@@ -155,6 +171,7 @@ export function createEditor(
       ...livePreview(),
       ...listFold(),
       listKeymap(),
+      markdownInputKeymap(),
       tableKeymap(),
       // imagePasteHandler must come BEFORE htmlPasteHandler so the image check
       // runs first; it returns false (no image) and lets the html handler run.

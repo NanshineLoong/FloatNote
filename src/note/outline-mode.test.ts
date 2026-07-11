@@ -1,4 +1,5 @@
 import { EditorState } from "@codemirror/state";
+import type { Decoration } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
 import {
   getOutlineState,
@@ -43,5 +44,37 @@ describe("outline mode state", () => {
 
     const moved = getOutlineState(state).nodes.find((node) => node.text === "one")!;
     expect(getOutlineState(state).folded.has(moved.id)).toBe(true);
+  });
+
+  it("hides every non-heading/non-list source line", () => {
+    const doc = "# A\nparagraph\n![cap](img.png)\n```md\n- code text\n```\n- visible";
+    const state = EditorState.create({ doc, extensions: [outlineMode({ initialOn: true })] });
+    const outline = getOutlineState(state);
+    const hiddenLines: number[] = [];
+    const cursor = outline.decorations.iter();
+    while (cursor.value) {
+      const cls = (cursor.value as Decoration).spec.class as string | undefined;
+      if (cls?.includes("cm-outline-hidden")) hiddenLines.push(state.doc.lineAt(cursor.from).number);
+      cursor.next();
+    }
+    expect(hiddenLines).toEqual([2, 3, 4, 5, 6]);
+    expect(outline.nodes.map((node) => node.text)).toEqual(["A", "visible"]);
+  });
+
+  it("hides all lines in a document with no structural outline nodes", () => {
+    const state = EditorState.create({
+      doc: "paragraph\n![cap](img.png)",
+      extensions: [outlineMode({ initialOn: true })],
+    });
+    const outline = getOutlineState(state);
+    const hidden: number[] = [];
+    const cursor = outline.decorations.iter();
+    while (cursor.value) {
+      const cls = (cursor.value as Decoration).spec.class as string | undefined;
+      if (cls?.includes("cm-outline-hidden")) hidden.push(state.doc.lineAt(cursor.from).number);
+      cursor.next();
+    }
+    expect(outline.nodes).toEqual([]);
+    expect(hidden).toEqual([1, 2]);
   });
 });

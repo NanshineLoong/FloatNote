@@ -28,20 +28,14 @@ describe("outline edit builders", () => {
     expect(next.anchor).toBe(next.doc.length);
   });
 
-  it("turns a paragraph into a list item on first Tab", () => {
+  it("ignores hidden paragraph content", () => {
     const doc = "Paragraph";
-    const next = applyEdit(doc, buildIndentChange(doc, 4));
-
-    expect(next.doc).toBe("- Paragraph");
-    expect(next.anchor).toBe(6);
+    expect(buildIndentChange(doc, 4)).toBeNull();
   });
 
-  it("turns a body-level list item back into a paragraph on Shift+Tab", () => {
+  it("does not turn a top-level outline list item into hidden paragraph text", () => {
     const doc = "## Heading\n- item";
-    const next = applyEdit(doc, buildDedentChange(doc, doc.length));
-
-    expect(next.doc).toBe("## Heading\nitem");
-    expect(next.anchor).toBe(next.doc.length);
+    expect(buildDedentChange(doc, doc.length)?.swallow).toBe(true);
   });
 
   it("merges a non-empty node into its previous same-level sibling at line start", () => {
@@ -86,12 +80,9 @@ describe("outline edit builders", () => {
     expect(next.doc).toBe("");
   });
 
-  it("creates a sibling para on Enter at para end", () => {
+  it("falls through on hidden paragraph Enter", () => {
     const doc = "para";
-    const next = applyEdit(doc, buildEnterChange(doc, doc.length));
-
-    expect(next.doc).toBe("para\n\n");
-    expect(next.anchor).toBe(next.doc.length);
+    expect(buildEnterChange(doc, doc.length)).toBeNull();
   });
 
   it("falls through on mid-para Enter (returns null)", () => {
@@ -99,10 +90,9 @@ describe("outline edit builders", () => {
     expect(buildEnterChange(doc, 2)).toBeNull();
   });
 
-  it("swallows Tab on a card to avoid corrupting the code block", () => {
+  it("falls through on hidden code blocks", () => {
     const doc = "```ts\nconst x = 1;\n```";
-    const edit = buildIndentChange(doc, 0);
-    expect(edit?.swallow).toBe(true);
+    expect(buildIndentChange(doc, 0)).toBeNull();
   });
 
   it("swallows Backspace at line start when there is no previous same-level sibling", () => {

@@ -44,7 +44,7 @@ function headingMatch(text: string): RegExpExecArray | null {
 }
 
 function listMatch(text: string): RegExpExecArray | null {
-  return /^(\s*)([-*+])(\s+)(.*)$/.exec(text);
+  return /^(\s*)([-*+]|\d+[.)])(\s+)(.*)$/.exec(text);
 }
 
 function isCardKind(kind: OutlineNode["kind"]): boolean {
@@ -166,12 +166,9 @@ export function buildDedentChange(doc: string, pos: number): OutlineEdit | null 
       selection: { anchor: Math.max(line.from, pos - 2) },
     };
   }
-  // body 层 → 转回 para：去 marker
-  const markerTo = line.from + match[1].length + match[2].length + match[3].length;
-  return {
-    changes: { from: line.from, to: markerTo, insert: "" },
-    selection: { anchor: Math.max(line.from, pos - (markerTo - line.from)) },
-  };
+  // Top-level list items stay structural outline nodes. Turning them into
+  // paragraphs would make them disappear from the simplified outline.
+  return noop(pos);
 }
 
 /**
