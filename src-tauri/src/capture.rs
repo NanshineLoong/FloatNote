@@ -108,9 +108,8 @@ pub struct CapturedContent {
     pub html: Option<String>,
 }
 
-/// Backup clipboard, run `copy`, read the new clipboard content, restore.
-/// `copy` is the variable step: keyboard Cmd+C (`simulate_copy`) or AX menu copy
-/// (`ax_copy::copy_via_menu`) for Option-held automatic popup capture.
+/// Backup clipboard, run the supplied copy action, read the new clipboard
+/// content, then restore the user's previous text clipboard.
 fn read_selection_with(
     copy: impl FnOnce() -> Result<(), Box<dyn std::error::Error>>,
 ) -> Option<CapturedContent> {
@@ -169,17 +168,6 @@ fn read_selection_with(
 /// Keyboard Cmd+C path: source app is still frontmost and the selection is live.
 pub fn read_selection() -> Option<CapturedContent> {
     read_selection_with(simulate_copy)
-}
-
-/// AX menu-triggered copy path: avoids physical Option polluting Cmd+C.
-#[cfg(target_os = "macos")]
-pub fn read_selection_via_menu() -> Option<CapturedContent> {
-    read_selection_with(crate::ax_copy::copy_via_menu)
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn read_selection_via_menu() -> Option<CapturedContent> {
-    None
 }
 
 #[cfg(target_os = "macos")]

@@ -11,7 +11,7 @@
      untouched. This is the migration template for the other windows. */
   --popup-bg: var(--color-surface-2);
   --popup-border: var(--color-border);
-  --popup-shadow: var(--shadow-lg);
+  --popup-shadow: var(--shadow-sm);
   --popup-text: var(--color-text);
   --popup-muted: var(--color-text-muted);
   --popup-divider: var(--color-divider);
@@ -49,8 +49,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100vw;
   height: 100vh;
-  padding: 4px;
+  padding: 6px;
 }
 
 /* ── Pill ── */
@@ -59,8 +60,8 @@ body {
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 5px;
-  border: 1px solid var(--popup-border);
+  padding: 4px;
+  border: var(--fn-border-hair) solid var(--popup-border);
   border-radius: 10px;
   background: var(--popup-bg);
   box-shadow: var(--popup-shadow);
@@ -92,6 +93,13 @@ body {
    its compact bar container and enter animation. */
 .popup-bar .fn-btn {
   min-height: 32px;
+}
+
+.popup-root.is-measuring .popup-bar,
+.popup-root.is-measuring .popup-empty {
+  opacity: 0;
+  transform: none;
+}
 }
 
 @media (prefers-reduced-motion: reduce) {

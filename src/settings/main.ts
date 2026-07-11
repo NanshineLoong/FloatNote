@@ -110,11 +110,11 @@ async function render() {
         </div>
 
         <div class="settings-row">
-          <label class="settings-label">划词悬浮窗自动触发</label>
+          <label class="settings-label">划词悬浮窗</label>
           <select id="auto-popup-mode" class="fn-control settings-select">
-            <option value="off" ${(config.auto_popup_mode ?? "off") === "off" ? "selected" : ""}>关闭</option>
-            <option value="every" ${config.auto_popup_mode === "every" ? "selected" : ""}>每次选中弹出</option>
-            <option value="modifier" ${config.auto_popup_mode === "modifier" ? "selected" : ""}>按住 ⌥ 选中时弹出</option>
+            <option value="auto" ${(config.auto_popup_mode ?? "auto") === "auto" ? "selected" : ""}>自动弹出（macOS）</option>
+            <option value="shortcut" ${config.auto_popup_mode === "shortcut" ? "selected" : ""}>仅快捷键</option>
+            <option value="off" ${config.auto_popup_mode === "off" ? "selected" : ""}>关闭</option>
           </select>
         </div>
       </section>

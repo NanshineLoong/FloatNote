@@ -2,17 +2,19 @@ import "@phosphor-icons/web/regular";
 import "./styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow, LogicalPosition, currentMonitor } from "@tauri-apps/api/window";
-import { clampToScreen, type Rect } from "./clamp";
+import { getCurrentWindow, LogicalPosition, LogicalSize, currentMonitor } from "@tauri-apps/api/window";
+import { placePopup, type Rect } from "./clamp";
 import { showToast } from "../shared/toast";
 import { createButton } from "../shared/ui/button";
 
-const POPUP_W = 256;
-const POPUP_H = 46;
+const SHADOW_INSET = 6;
+const SHORTCUT_ERROR_MS = 1600;
 
 interface PopupPayload {
   x: number;
   y: number;
+  generationId: number;
+  origin: "auto" | "shortcut";
   hasText: boolean;
 }
 
@@ -29,6 +31,7 @@ captureBtn.id = "btn-capture";
 actionsEl.appendChild(captureBtn);
 
 let hideTimer: number | null = null;
+let activeGenerationId: number | null = null;
 
 function clearHideTimer(): void {
   if (hideTimer !== null) {
@@ -41,27 +44,30 @@ async function dismiss(): Promise<void> {
   clearHideTimer();
   root.classList.remove("is-visible");
   try {
-    await invoke("dismiss_popup");
+    await invoke("dismiss_popup", { generationId: activeGenerationId });
   } catch {
     // ignore — window may already be hidden
   }
 }
 
-function renderState(hasText: boolean): void {
-  if (hasText) {
+function renderState(payload: PopupPayload): HTMLElement | null {
+  if (payload.origin === "auto" && !payload.hasText) return null;
+  if (payload.hasText) {
     // A prior empty-state render may have armed a 3s auto-dismiss timer;
     // clear it so it doesn't fire and hide the popup while the user views actions.
     clearHideTimer();
     emptyEl.hidden = true;
     actionsEl.hidden = false;
     captureBtn.disabled = false;
+    return actionsEl;
   } else {
     actionsEl.hidden = true;
     emptyEl.hidden = false;
     clearHideTimer();
     hideTimer = window.setTimeout(() => {
       void dismiss();
-    }, 3000);
+    }, SHORTCUT_ERROR_MS);
+    return emptyEl;
   }
 }
 
@@ -89,26 +95,34 @@ async function getBoundsAt(x: number, y: number): Promise<Rect> {
   };
 }
 
-async function showAt(x: number, y: number, hasText: boolean): Promise<void> {
-  const bounds = await getBoundsAt(x, y);
-  const { x: cx, y: cy } = clampToScreen(x, y, POPUP_W, POPUP_H, bounds);
+async function showAt(payload: PopupPayload): Promise<void> {
+  const visibleContent = renderState(payload);
+  if (!visibleContent) return;
+  activeGenerationId = payload.generationId;
+
   const win = getCurrentWindow();
-  await win.setPosition(new LogicalPosition(cx, cy));
-  renderState(hasText);
-  // Reset to base state, reveal, then animate in on the next frame so the
-  // enter transition reliably fires (WebKit won't transition out of [hidden]).
   root.classList.remove("is-visible");
+  root.classList.add("is-measuring");
   root.hidden = false;
+  const contentRect = visibleContent.getBoundingClientRect();
+  const width = Math.ceil(contentRect.width + SHADOW_INSET * 2);
+  const height = Math.ceil(contentRect.height + SHADOW_INSET * 2);
+  await win.setSize(new LogicalSize(width, height));
+
+  const bounds = await getBoundsAt(payload.x, payload.y);
+  const { x, y } = placePopup(payload.x, payload.y, width, height, bounds);
+  await win.setPosition(new LogicalPosition(x, y));
+  root.classList.remove("is-measuring");
   await win.show();
-  await win.setFocus();
   requestAnimationFrame(() => {
     root.classList.add("is-visible");
   });
 }
 
 async function onSubmit(): Promise<void> {
+  if (activeGenerationId === null) return;
   try {
-    await invoke("submit_popup_capture");
+    await invoke("submit_popup_capture", { generationId: activeGenerationId });
   } catch (error) {
     console.error("submit_popup_capture failed", error);
   }
@@ -118,7 +132,9 @@ async function setupListeners(): Promise<void> {
   let lastAutomationToastAt = 0;
 
   await listen<PopupPayload>("popup-payload", (event) => {
-    void showAt(event.payload.x, event.payload.y, event.payload.hasText);
+    const payload = event.payload;
+    if (payload.origin === "auto" && !payload.hasText) return;
+    void showAt(payload);
   });
 
   // 与笔记窗共用同一套 toast：后端目前把 accessibility-needed 发往 main，
@@ -133,13 +149,6 @@ async function setupListeners(): Promise<void> {
     if (now - lastAutomationToastAt < 30_000) return;
     lastAutomationToastAt = now;
     showToast("浏览器授权未完成，授权后重试即可");
-  });
-
-  await getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-    // Dismiss when the popup loses focus (user clicked elsewhere).
-    if (!focused) {
-      void dismiss();
-    }
   });
 
   document.addEventListener("keydown", (e) => {
