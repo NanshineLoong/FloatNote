@@ -17,23 +17,6 @@ export interface SwitcherRowOpts {
   actions: RowAction[];
 }
 
-/**
- * 绑定行悬停显隐。三点/删除按钮的露出原来靠 CSS `:hover`，但 WebKit 在
- * `.fn-menu`（overflow:auto）容器里不主动清除已离开行的 `:hover`，快速划过
- * 或从边缘离开菜单时会残留多行。改用 mouseenter/mouseleave 切换 `is-hovered`
- * 类——真实 DOM 事件走与 `:hover` 不同的派发路径，不会 stale；进入新行时清
- * 掉兄弟行的类，保证同时只有一行高亮。导出供 piece-switcher 复用。
- */
-export function bindSwitchRowHover(row: HTMLElement): void {
-  row.addEventListener("mouseenter", () => {
-    row.parentElement
-      ?.querySelectorAll(".switch-row.is-hovered")
-      .forEach((el) => el.classList.remove("is-hovered"));
-    row.classList.add("is-hovered");
-  });
-  row.addEventListener("mouseleave", () => row.classList.remove("is-hovered"));
-}
-
 interface ProjectMenuRendererDeps {
   closeMenu: () => void;
   closeSubmenu: () => void;
@@ -124,7 +107,6 @@ export function createProjectMenuRenderer(deps: ProjectMenuRendererDeps) {
     const row = document.createElement("div");
     row.className = "switch-row";
     if (opts.active) row.classList.add("active");
-    bindSwitchRowHover(row);
 
     const label = document.createElement("button");
     label.className = "switch-row-label";

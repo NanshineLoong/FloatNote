@@ -545,10 +545,7 @@ body {
   color: var(--color-accent);
 }
 
-/* 默认隐藏动作按钮，行被悬停或聚焦时才露出。
-   注意：不用 CSS `:hover`。WebKit 在 `.fn-menu` 这类 overflow:auto 容器里
-   不会主动清除已离开行的 `:hover`，快速划过/从边缘离开菜单时会残留多行
-   三点。改由 JS 的 mouseenter/mouseleave 切换 `is-hovered` 类驱动显隐。 */
+/* 默认隐藏动作按钮，行被悬停或聚焦时才露出——与 .tasks-row 一致的纯 CSS :hover。 */
 .switch-row-actions {
   display: inline-flex;
   align-items: center;
@@ -557,9 +554,16 @@ body {
   transition: opacity 0.12s ease;
 }
 
-.switch-row.is-hovered .switch-row-actions,
+.switch-row:hover .switch-row-actions,
 .switch-row:focus-within .switch-row-actions {
   opacity: 1;
+}
+
+/* 行悬停停靠感，与 .tasks-row:hover 同色。当前项（.active）保留选中底色，不被
+   悬停覆盖。照搬 tasks-panel 的纯 :hover；若 WebKit 在 .fn-menu（position:fixed+
+   overflow:auto）下再次出现 :hover 残留多行，再退回 JS is-hovered 方案。 */
+.switch-row:hover:not(.active) {
+  background: var(--color-hover);
 }
 
 .switch-row-action {

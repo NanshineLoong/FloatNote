@@ -10,7 +10,6 @@ import {
 import { formatVersionLabel, type VersionEntry } from "./versions";
 import { createIcon } from "../shared/ui/icon";
 import { createMenu, type MenuHandle } from "../shared/ui/menu";
-import { bindSwitchRowHover } from "./project-menu-render";
 
 export interface PieceHeaderHost {
   /** 当前项目文件夹路径。 */
@@ -330,7 +329,6 @@ export function createPieceHeader(args: {
       actions.appendChild(del);
       row.appendChild(label);
       row.appendChild(actions);
-      bindSwitchRowHover(row);
       items.push(row);
     }
 
