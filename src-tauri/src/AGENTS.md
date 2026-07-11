@@ -25,10 +25,11 @@ entry that calls `floatnote::run()`.
   (`mark_self_write` BEFORE writes to avoid TOCTOU; uses `into_inner()` to
   survive mutex poisoning).
 - `source.rs` — macOS app-icon + browser source attribution (macOS-only).
-- `capture.rs`, `cursor.rs` — clipboard/keyboard capture and cursor location.
+- `capture.rs`, `cursor.rs` — AX-first selection capture, lossless pasteboard
+  fallback, local CodeMirror fallback, and cursor location.
 - `selection_intent.rs`, `selection_probe.rs`, `selection_monitor.rs` — pure
-  mouse-selection state, macOS Accessibility evidence, and the global event
-  tap/worker boundary.
+  mouse-selection state, macOS Accessibility text extraction, and the dedicated
+  listen-only event-tap thread/worker boundary.
 - `popup.rs`, `shortcuts.rs`, `tray.rs`, `windows.rs`, `config.rs` —
   generation-aware popup cache, global shortcuts, tray menu, window management,
   and config load/save.

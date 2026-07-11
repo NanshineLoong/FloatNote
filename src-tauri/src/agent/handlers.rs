@@ -257,9 +257,10 @@ mod tests {
                 watcher: Mutex::new(None),
                 write_suppress: crate::watcher::new_suppress_list(),
                 popup_cache: crate::popup::PopupCache::default(),
-            pending_edits: Mutex::new(HashMap::new()),
-            pending_skill_lists: Mutex::new(HashMap::new()),
-            authorized_roots: crate::state::AuthorizedRoots::default(),
+                local_selection: crate::state::LocalSelectionCache::default(),
+                pending_edits: Mutex::new(HashMap::new()),
+                pending_skill_lists: Mutex::new(HashMap::new()),
+                authorized_roots: crate::state::AuthorizedRoots::default(),
             }
         }
 

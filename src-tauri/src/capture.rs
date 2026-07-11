@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Re-entrancy guard. The global-shortcut callback can fire more than once per
 /// physical press on macOS; two concurrent `run_capture` routines would race on
@@ -59,7 +59,7 @@ pub fn run_capture(app: &AppHandle) {
 
     log_line("fired");
 
-    let Some(captured) = read_selection() else {
+    let Some(captured) = capture_current_selection(app) else {
         return;
     };
 
@@ -100,140 +100,220 @@ pub fn check_accessibility(app: &AppHandle) -> bool {
     true
 }
 
-/// What `read_selection` pulled off the clipboard after simulating Cmd+C.
-/// `html` is the `text/html` flavor when the source app wrote one (browsers,
-/// rich-text editors); `None` for plain-text-only sources (Terminal, etc.).
-pub struct CapturedContent {
-    pub text: String,
-    pub html: Option<String>,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelectionMethod {
+    Accessibility,
+    LocalSnapshot,
+    Clipboard,
 }
 
-/// Backup clipboard, run the supplied copy action, read the new clipboard
-/// content, then restore the user's previous text clipboard.
-fn read_selection_with(
-    copy: impl FnOnce() -> Result<(), Box<dyn std::error::Error>>,
-) -> Option<CapturedContent> {
-    let mut clipboard = match arboard::Clipboard::new() {
-        Ok(c) => c,
-        Err(error) => {
-            log_line(&format!("clipboard init error: {error}"));
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SelectionAnchor {
+    pub x: f64,
+    pub y: f64,
+}
+
+#[allow(dead_code)]
+pub struct CurrentSelection {
+    pub text: String,
+    pub html: Option<String>,
+    pub source_pid: i32,
+    pub anchor: Option<SelectionAnchor>,
+    pub method: SelectionMethod,
+}
+
+fn normalized(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn merge_html(mut ax: CurrentSelection, copied: Option<CurrentSelection>) -> CurrentSelection {
+    if let Some(copied) = copied {
+        if normalized(&ax.text) == normalized(&copied.text) {
+            ax.html = copied.html;
+        }
+    }
+    ax
+}
+
+#[cfg(target_os = "macos")]
+mod pasteboard {
+    use super::*;
+    use objc2::runtime::ProtocolObject;
+    use objc2::ClassType;
+    use objc2_app_kit::{
+        NSPasteboard, NSPasteboardContentsOptions, NSPasteboardItem, NSPasteboardTypeHTML,
+        NSPasteboardTypeString, NSPasteboardWriting,
+    };
+    use objc2_foundation::{NSArray, NSData, NSString};
+
+    struct ItemBackup(Vec<(String, Vec<u8>)>);
+
+    fn backup(board: &NSPasteboard) -> Vec<ItemBackup> {
+        let Some(items) = (unsafe { board.pasteboardItems() }) else {
+            return Vec::new();
+        };
+        (0..items.len())
+            .filter_map(|index| {
+                let item = unsafe { items.objectAtIndex(index) };
+                let types = unsafe { item.types() };
+                let reps = (0..types.len())
+                    .filter_map(|type_index| {
+                        let ty = unsafe { types.objectAtIndex(type_index) };
+                        let data = unsafe { item.dataForType(&ty) }?;
+                        Some((ty.to_string(), data.bytes().to_vec()))
+                    })
+                    .collect::<Vec<_>>();
+                (!reps.is_empty()).then_some(ItemBackup(reps))
+            })
+            .collect()
+    }
+
+    fn restore(board: &NSPasteboard, backup: Vec<ItemBackup>) {
+        unsafe {
+            board.prepareForNewContentsWithOptions(
+                NSPasteboardContentsOptions::NSPasteboardContentsCurrentHostOnly,
+            );
+        }
+        if backup.is_empty() {
+            return;
+        }
+        let objects = backup
+            .into_iter()
+            .map(|item| {
+                let object = unsafe { NSPasteboardItem::init(NSPasteboardItem::alloc()) };
+                for (ty, bytes) in item.0 {
+                    let ty = NSString::from_str(&ty);
+                    let data = NSData::with_bytes(&bytes);
+                    unsafe { object.setData_forType(&data, &ty) };
+                }
+                ProtocolObject::<dyn NSPasteboardWriting>::from_retained(object)
+            })
+            .collect::<Vec<_>>();
+        unsafe { board.writeObjects(&NSArray::from_vec(objects)) };
+    }
+
+    fn send_copy(pid: i32) -> bool {
+        use core_graphics::event::{CGEvent, CGEventFlags};
+        use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+        let Ok(source) = CGEventSource::new(CGEventSourceStateID::CombinedSessionState) else {
+            return false;
+        };
+        let Ok(down) = CGEvent::new_keyboard_event(source.clone(), 8, true) else {
+            return false;
+        };
+        down.set_flags(CGEventFlags::CGEventFlagCommand);
+        down.post_to_pid(pid);
+        let Ok(up) = CGEvent::new_keyboard_event(source, 8, false) else {
+            return false;
+        };
+        up.set_flags(CGEventFlags::CGEventFlagCommand);
+        up.post_to_pid(pid);
+        true
+    }
+
+    pub fn copy_selection(pid: i32) -> Option<CurrentSelection> {
+        if crate::source::frontmost_pid() != Some(pid) {
             return None;
         }
-    };
-    let backup = clipboard.get_text().ok();
-    let _ = clipboard.set_text(String::new());
-
-    if let Err(error) = copy() {
-        log_line(&format!("copy error: {error}"));
-        if let Some(text) = backup {
-            let _ = clipboard.set_text(text);
+        let board = unsafe { NSPasteboard::generalPasteboard() };
+        let before = unsafe { board.changeCount() };
+        let saved = backup(&board);
+        if !send_copy(pid) {
+            return None;
         }
-        return None;
-    }
-
-    std::thread::sleep(std::time::Duration::from_millis(150));
-    let text = clipboard.get_text().unwrap_or_default();
-    // Read the HTML flavor too so the frontend can preserve list/table/bold
-    // formatting when converting to Markdown. `get().html()` errors when no
-    // HTML flavor is present (plain-text sources) — that's the common, benign
-    // case, so we just drop to None.
-    let html = clipboard.get().html().ok().filter(|h| !h.trim().is_empty());
-    log_line(&format!(
-        "selection len = {} html = {}",
-        text.len(),
-        html.is_some()
-    ));
-
-    match backup {
-        Some(text) => {
-            let _ = clipboard.set_text(text);
+        let changed = (0..15).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            unsafe { board.changeCount() != before }
+        });
+        if !changed {
+            restore(&board, saved);
+            return None;
         }
-        None => {
-            let _ = clipboard.set_text(String::new());
+        if crate::source::frontmost_pid() != Some(pid) {
+            restore(&board, saved);
+            return None;
         }
-    }
-
-    let trimmed = text.trim().to_string();
-    if trimmed.is_empty() {
-        log_line("empty selection, ignoring");
-        None
-    } else {
-        Some(CapturedContent {
-            text: trimmed,
+        let text = unsafe { board.stringForType(NSPasteboardTypeString) }
+            .map(|text| text.to_string())
+            .unwrap_or_default();
+        let html = unsafe { board.stringForType(NSPasteboardTypeHTML) }
+            .map(|html| html.to_string())
+            .filter(|html| !html.trim().is_empty());
+        restore(&board, saved);
+        (!text.trim().is_empty()).then(|| CurrentSelection {
+            text: text.trim().to_string(),
             html,
+            source_pid: pid,
+            anchor: None,
+            method: SelectionMethod::Clipboard,
         })
     }
 }
 
-/// Keyboard Cmd+C path: source app is still frontmost and the selection is live.
-pub fn read_selection() -> Option<CapturedContent> {
-    read_selection_with(simulate_copy)
-}
-
-#[cfg(target_os = "macos")]
-mod cg {
-    // `CGEventSourceFlagsState` is not exposed by the core-graphics crate, so
-    // declare it directly. It returns the *current* modifier flags from real
-    // hardware, letting us wait until the capture chord is physically released.
-    extern "C" {
-        pub fn CGEventSourceFlagsState(state_id: i32) -> u64;
+pub fn capture_current_selection(app: &AppHandle) -> Option<CurrentSelection> {
+    let pid = crate::source::frontmost_pid()?;
+    let own_pid = std::process::id() as i32;
+    if let Some(text) = crate::selection_probe::current_selected_text(pid) {
+        let ax = CurrentSelection {
+            text,
+            html: None,
+            source_pid: pid,
+            anchor: None,
+            method: SelectionMethod::Accessibility,
+        };
+        #[cfg(target_os = "macos")]
+        return Some(if pid == own_pid {
+            ax
+        } else {
+            merge_html(ax, pasteboard::copy_selection(pid))
+        });
+        #[cfg(not(target_os = "macos"))]
+        return Some(ax);
     }
-
-    // kCGEventSourceStateCombinedSessionState
-    pub const COMBINED_SESSION_STATE: i32 = 0;
-
-    // Modifier bits within CGEventFlags.
-    pub const MASK_SHIFT: u64 = 0x0002_0000;
-    pub const MASK_CONTROL: u64 = 0x0004_0000;
-    pub const MASK_OPTION: u64 = 0x0008_0000;
-    pub const MASK_COMMAND: u64 = 0x0010_0000;
-    pub const MODIFIER_MASK: u64 = MASK_SHIFT | MASK_CONTROL | MASK_OPTION | MASK_COMMAND;
-}
-
-#[cfg(target_os = "macos")]
-fn simulate_copy() -> Result<(), Box<dyn std::error::Error>> {
-    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
-    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-    use std::time::Duration;
-
-    // The capture shortcut (e.g. ⌥⌘C) is a modifier chord, so those modifiers
-    // are still physically held when this fires. Events posted to the HID tap
-    // are merged with the *real* hardware modifier state, so injecting Cmd+C now
-    // would be seen as ⌥⌘C (not a copy). Wait for the user to let go of the
-    // chord first, then inject a clean Cmd+C.
-    let mut waited = 0u32;
-    loop {
-        let flags = unsafe { cg::CGEventSourceFlagsState(cg::COMBINED_SESSION_STATE) };
-        if flags & cg::MODIFIER_MASK == 0 {
-            break;
-        }
-        if waited >= 1000 {
-            log_line("warning: modifiers still held after 1s, injecting anyway");
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(10));
-        waited += 10;
+    if pid == own_pid {
+        let text = app
+            .state::<crate::state::AppState>()
+            .local_selection
+            .current()?;
+        return Some(CurrentSelection {
+            text,
+            html: None,
+            source_pid: pid,
+            anchor: None,
+            method: SelectionMethod::LocalSnapshot,
+        });
     }
-    log_line(&format!("waited {waited}ms for modifier release"));
-
-    let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
-        .map_err(|_| "failed to create CGEventSource")?;
-
-    const KEY_C: u16 = 8;
-    let key_down = CGEvent::new_keyboard_event(source.clone(), KEY_C, true)
-        .map_err(|_| "failed to create key-down event")?;
-    key_down.set_flags(CGEventFlags::CGEventFlagCommand);
-    key_down.post(CGEventTapLocation::HID);
-
-    let key_up = CGEvent::new_keyboard_event(source, KEY_C, false)
-        .map_err(|_| "failed to create key-up event")?;
-    key_up.set_flags(CGEventFlags::CGEventFlagCommand);
-    key_up.post(CGEventTapLocation::HID);
-
-    Ok(())
+    #[cfg(target_os = "macos")]
+    return pasteboard::copy_selection(pid);
+    #[cfg(not(target_os = "macos"))]
+    None
 }
 
-#[cfg(not(target_os = "macos"))]
-fn simulate_copy() -> Result<(), Box<dyn std::error::Error>> {
-    Err("capture is only supported on macOS".into())
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ax_text_survives_failed_or_mismatched_html_enrichment() {
+        let make = |text: &str, html: Option<&str>| CurrentSelection {
+            text: text.into(),
+            html: html.map(str::to_string),
+            source_pid: 1,
+            anchor: None,
+            method: SelectionMethod::Accessibility,
+        };
+        let ax = make("hello world", None);
+        assert_eq!(merge_html(ax, None).text, "hello world");
+
+        let ax = make("hello world", None);
+        let stale = make("old", Some("<b>old</b>"));
+        assert!(merge_html(ax, Some(stale)).html.is_none());
+
+        let ax = make("hello world", None);
+        let copied = make("hello   world", Some("<b>hello world</b>"));
+        assert_eq!(
+            merge_html(ax, Some(copied)).html.as_deref(),
+            Some("<b>hello world</b>")
+        );
+    }
 }

@@ -6,6 +6,7 @@ pub struct Point {
     pub y: f64,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AxTargetKind {
     Text,

@@ -1,6 +1,16 @@
+#[cfg(test)]
 use crate::selection_intent::AxTargetKind;
-use crate::selection_intent::{Point, SelectionCandidate};
 
+#[cfg(test)]
+fn first_selection(values: impl IntoIterator<Item = Option<String>>) -> Option<String> {
+    values
+        .into_iter()
+        .flatten()
+        .find(|text| !text.trim().is_empty())
+        .map(|text| text.trim().to_string())
+}
+
+#[cfg(test)]
 pub fn classify_role(role: &str) -> AxTargetKind {
     match role {
         "AXTextField" => AxTargetKind::Text,
@@ -17,7 +27,6 @@ pub fn classify_role(role: &str) -> AxTargetKind {
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use super::*;
     use std::ffi::{c_char, c_void, CString};
 
     const AX_SUCCESS: i32 = 0;
@@ -26,20 +35,18 @@ mod macos {
 
     #[link(name = "ApplicationServices", kind = "framework")]
     extern "C" {
-        fn AXUIElementCreateSystemWide() -> *mut c_void;
         fn AXUIElementCreateApplication(pid: i32) -> *mut c_void;
-        fn AXUIElementCopyElementAtPosition(
-            application: *mut c_void,
-            x: f32,
-            y: f32,
-            element: *mut *mut c_void,
-        ) -> i32;
         fn AXUIElementCopyAttributeValue(
             element: *mut c_void,
             attribute: *const c_void,
             value: *mut *mut c_void,
         ) -> i32;
-        fn AXUIElementGetPid(element: *mut c_void, pid: *mut i32) -> i32;
+        fn AXUIElementSetMessagingTimeout(element: *mut c_void, timeout: f32) -> i32;
+        fn AXUIElementSetAttributeValue(
+            element: *mut c_void,
+            attribute: *const c_void,
+            value: *const c_void,
+        ) -> i32;
     }
 
     #[link(name = "CoreFoundation", kind = "framework")]
@@ -60,6 +67,9 @@ mod macos {
             buffer_size: isize,
             encoding: u32,
         ) -> u8;
+        fn CFArrayGetCount(value: *const c_void) -> isize;
+        fn CFArrayGetValueAtIndex(value: *const c_void, index: isize) -> *const c_void;
+        static kCFBooleanTrue: *const c_void;
     }
 
     struct OwnedCf(*mut c_void);
@@ -133,62 +143,8 @@ mod macos {
         String::from_utf8(buffer[..end].to_vec()).ok()
     }
 
-    fn role_of(element: *mut c_void) -> Option<String> {
-        let role = copy_attribute(element, "AXRole")?;
-        string_value(role.ptr())
-    }
-
     fn parent_of(element: *mut c_void) -> Option<OwnedCf> {
         copy_attribute(element, "AXParent")
-    }
-
-    fn element_at(point: Point, expected_pid: i32) -> Option<OwnedCf> {
-        let system = OwnedCf::new(unsafe { AXUIElementCreateSystemWide() })?;
-        let mut element = std::ptr::null_mut();
-        let result = unsafe {
-            AXUIElementCopyElementAtPosition(
-                system.ptr(),
-                point.x as f32,
-                point.y as f32,
-                &mut element,
-            )
-        };
-        let element = (result == AX_SUCCESS)
-            .then(|| OwnedCf::new(element))
-            .flatten()?;
-        let mut pid = 0;
-        if unsafe { AXUIElementGetPid(element.ptr(), &mut pid) } != AX_SUCCESS
-            || pid != expected_pid
-        {
-            return None;
-        }
-        Some(element)
-    }
-
-    fn classify_element(element: OwnedCf) -> AxTargetKind {
-        let mut current = Some(element);
-        for _ in 0..MAX_ANCESTORS {
-            let Some(node) = current.take() else {
-                break;
-            };
-            let kind = role_of(node.ptr())
-                .as_deref()
-                .map(classify_role)
-                .unwrap_or(AxTargetKind::Unknown);
-            if kind.is_textual()
-                || matches!(
-                    kind,
-                    AxTargetKind::TitleBar
-                        | AxTargetKind::ScrollBar
-                        | AxTargetKind::Button
-                        | AxTargetKind::FileItem
-                )
-            {
-                return kind;
-            }
-            current = parent_of(node.ptr());
-        }
-        AxTargetKind::Unknown
     }
 
     fn selected_text_from(element: OwnedCf) -> Option<String> {
@@ -208,45 +164,59 @@ mod macos {
         None
     }
 
-    pub fn target_kind_at(point: Point, expected_pid: i32) -> AxTargetKind {
-        if crate::source::frontmost_pid() != Some(expected_pid) {
-            return AxTargetKind::Unknown;
-        }
-        element_at(point, expected_pid)
-            .map(classify_element)
-            .unwrap_or(AxTargetKind::Unknown)
+    fn selected_text_direct(element: *mut c_void) -> Option<String> {
+        let value = copy_attribute(element, "AXSelectedText")?;
+        string_value(value.ptr()).filter(|text| !text.trim().is_empty())
     }
 
-    pub fn completed_selection(candidate: SelectionCandidate) -> bool {
-        if crate::source::frontmost_pid() != Some(candidate.pid) {
-            return false;
+    fn selected_text_once(pid: i32) -> Option<String> {
+        let app = OwnedCf::new(unsafe { AXUIElementCreateApplication(pid) })?;
+        unsafe { AXUIElementSetMessagingTimeout(app.ptr(), 0.25) };
+        let focused = copy_attribute(app.ptr(), "AXFocusedUIElement")?;
+
+        if let Some(text) = selected_text_direct(focused.ptr()) {
+            return Some(text.trim().to_string());
         }
 
-        let app = OwnedCf::new(unsafe { AXUIElementCreateApplication(candidate.pid) });
-        let focused = app
-            .as_ref()
-            .and_then(|app| copy_attribute(app.ptr(), "AXFocusedUIElement"));
-        if focused.and_then(selected_text_from).is_some() {
-            return true;
+        if let Some(children) = copy_attribute(focused.ptr(), "AXChildren") {
+            let count = unsafe { CFArrayGetCount(children.ptr()) };
+            for index in 0..count {
+                let child = unsafe { CFArrayGetValueAtIndex(children.ptr(), index) } as *mut c_void;
+                if let Some(text) = selected_text_direct(child) {
+                    return Some(text.trim().to_string());
+                }
+            }
         }
 
-        element_at(candidate.up, candidate.pid)
-            .and_then(selected_text_from)
-            .is_some()
+        selected_text_from(focused).map(|text| text.trim().to_string())
+    }
+
+    pub fn current_selected_text(pid: i32) -> Option<String> {
+        if crate::source::frontmost_pid() != Some(pid) {
+            return None;
+        }
+        if let Some(text) = selected_text_once(pid) {
+            return Some(text);
+        }
+
+        let app = OwnedCf::new(unsafe { AXUIElementCreateApplication(pid) })?;
+        for attribute in ["AXEnhancedUserInterface", "AXManualAccessibility"] {
+            if let Some(attribute) = CfString::new(attribute) {
+                unsafe {
+                    AXUIElementSetAttributeValue(app.ptr(), attribute.0, kCFBooleanTrue);
+                }
+            }
+        }
+        selected_text_once(pid)
     }
 }
 
 #[cfg(target_os = "macos")]
-pub use macos::{completed_selection, target_kind_at};
+pub use macos::current_selected_text;
 
 #[cfg(not(target_os = "macos"))]
-pub fn target_kind_at(_point: Point, _expected_pid: i32) -> AxTargetKind {
-    AxTargetKind::Unknown
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn completed_selection(_candidate: SelectionCandidate) -> bool {
-    false
+pub fn current_selected_text(_pid: i32) -> Option<String> {
+    None
 }
 
 #[cfg(test)]
@@ -281,5 +251,18 @@ mod tests {
             assert_eq!(classify_role(role), expected);
             assert!(!expected.is_textual());
         }
+    }
+
+    #[test]
+    fn selection_candidates_prefer_the_first_non_empty_value() {
+        assert_eq!(
+            first_selection([
+                None,
+                Some("  ".into()),
+                Some("child".into()),
+                Some("ancestor".into())
+            ]),
+            Some("child".to_string())
+        );
     }
 }

@@ -48,7 +48,9 @@ pub fn run() {
                 .into_owned();
             let path = PathBuf::from(&decoded);
             let state = ctx.app_handle().state::<AppState>();
-            if !crate::notes::is_safe_image_path(&path) || !state.authorized_roots.allows_image(&path) {
+            if !crate::notes::is_safe_image_path(&path)
+                || !state.authorized_roots.allows_image(&path)
+            {
                 return tauri::http::Response::builder()
                     .status(tauri::http::StatusCode::FORBIDDEN)
                     .header(tauri::http::header::CONTENT_TYPE, "text/plain")
@@ -94,6 +96,7 @@ pub fn run() {
                 watcher: Mutex::new(file_watcher),
                 write_suppress,
                 popup_cache: crate::popup::PopupCache::new(),
+                local_selection: crate::state::LocalSelectionCache::default(),
                 pending_edits: Mutex::new(std::collections::HashMap::new()),
                 pending_skill_lists: Mutex::new(std::collections::HashMap::new()),
                 authorized_roots: state::AuthorizedRoots::default(),
@@ -150,7 +153,7 @@ pub fn run() {
                 ) {
                     eprintln!("shortcut registration failed: {error}");
                 }
-                if config.auto_popup_mode != "off" {
+                if commands::should_install_selection_monitor(&config.auto_popup_mode) {
                     selection_monitor::install(app.handle().clone());
                 }
             }
@@ -203,6 +206,7 @@ pub fn run() {
             commands::get_agent_status,
             commands::apply_shortcuts,
             commands::set_auto_popup_mode,
+            commands::update_local_selection,
             commands::get_window_shortcuts,
             commands::open_url,
             source::app_icon,

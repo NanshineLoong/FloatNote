@@ -100,7 +100,6 @@ body {
   opacity: 0;
   transform: none;
 }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .popup-bar,

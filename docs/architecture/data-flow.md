@@ -20,18 +20,19 @@ sidecar 将流式对话事件输出到 JSONL；Rust 解析并广播为 `agent://
 
 ```text
 CGEvent mouse down/up
-  → selection_intent（拖选/原生双击/原生三击候选）
-  → selection_probe（同一前台应用 + 文本 AX role + 非空选区）
-  → capture（保留并恢复剪贴板，读取 text/html）
+  → dedicated listen-only event-tap thread（callback 仅投递元数据）
+  → selection_intent worker（拖选/原生双击/原生三击候选）
+  → capture（AX focused/children/ancestors → 本地快照或外部剪贴板兜底）
+  → NSPasteboard 全 item/type 恢复；文本相符时附加 HTML
   → popup cache（generationId）
-  → selection-popup WebView（测量 → resize → clamp/place → 无焦点 show）
+  → selection-popup WebView（测量 → resize → clamp/place → 不主动聚焦 show）
   → submit_popup_capture
   → quote-captured → inbox editor
 ```
 
-新鼠标按下会使上一候选失效；抓取前后都检查原生事件代次。弹窗可见时，
-Esc 由全局 event tap 消费并关闭，外部点击只关闭弹窗但继续传给来源应用。
-显示和提交路径都不调用窗口 `set_focus()`。
+新鼠标按下会使上一候选失效；抓取前后都检查原生事件代次。event tap 始终
+listen-only：按键和外部点击可异步关闭弹窗，但事件继续传给来源应用。显示
+路径不调用窗口 `set_focus()`，用户首次点击弹窗时才允许窗口获得焦点。
 
 ## 打包时的 AI 启动
 

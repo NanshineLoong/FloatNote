@@ -8,6 +8,11 @@ describe("selection popup window lifecycle", () => {
     expect(source).not.toContain(".setFocus(");
   });
 
+  it("submits on the button's first click", () => {
+    expect(source).toContain('captureBtn.addEventListener("click"');
+    expect(source).toContain('invoke("submit_popup_capture"');
+  });
+
   it("resizes from measured content instead of fixed constants", () => {
     expect(source).toContain("getBoundingClientRect");
     expect(source).toContain("setSize");

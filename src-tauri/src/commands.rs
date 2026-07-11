@@ -26,6 +26,11 @@ pub fn set_config(state: State<AppState>, new_config: Config) -> Result<(), Stri
 }
 
 #[tauri::command]
+pub fn update_local_selection(state: State<AppState>, text: Option<String>) {
+    state.local_selection.update(text);
+}
+
+#[tauri::command]
 pub fn list_notes(dir: String) -> Result<Vec<notes::NoteEntry>, String> {
     notes::list_markdown(std::path::Path::new(&dir)).map_err(|error| error.to_string())
 }
@@ -164,7 +169,9 @@ pub fn create_project(
 ) -> Result<project::ProjectEntry, String> {
     let entry = project::create_project(std::path::Path::new(&root), &name)
         .map_err(|error| error.to_string())?;
-    state.authorized_roots.authorize(std::path::Path::new(&entry.path));
+    state
+        .authorized_roots
+        .authorize(std::path::Path::new(&entry.path));
     // 隐式自动记录：项目新建时，将其所在目录记为工作目录。这是工作目录的唯一来源
     // ——没有设置入口，用户也不感知。失败不阻塞项目创建本身。
     {

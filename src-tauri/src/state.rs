@@ -12,6 +12,25 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Mutex;
 
+#[derive(Default)]
+pub struct LocalSelectionCache {
+    text: Mutex<Option<String>>,
+}
+
+impl LocalSelectionCache {
+    pub fn update(&self, text: Option<String>) {
+        let text = text.and_then(|text| {
+            let trimmed = text.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        });
+        *self.text.lock().unwrap() = text;
+    }
+
+    pub fn current(&self) -> Option<String> {
+        self.text.lock().ok().and_then(|text| text.clone())
+    }
+}
+
 /// Project roots that have been explicitly opened by this app instance.
 /// Custom image URLs are constrained to these roots so another local
 /// `_assets` directory cannot be used as an arbitrary-file reader.
@@ -62,6 +81,8 @@ pub struct AppState {
     pub write_suppress: SuppressList,
     /// 划词弹窗急切抓取的待提交文本。
     pub popup_cache: PopupCache,
+    /// Focused CodeMirror selection, used only when AX cannot read FloatNote itself.
+    pub local_selection: LocalSelectionCache,
     /// apply_edit 待裁决表：request_id → PendingEdit。
     /// `handle_apply_edit` 暂存，`resolve_permission` 取出落盘并回 sidecar。
     pub pending_edits: Mutex<HashMap<String, PendingEdit>>,
@@ -75,7 +96,7 @@ pub struct AppState {
 
 #[cfg(test)]
 mod tests {
-    use super::AuthorizedRoots;
+    use super::{AuthorizedRoots, LocalSelectionCache};
     use crate::testutil::tempdir;
 
     #[test]
@@ -94,5 +115,15 @@ mod tests {
 
         assert!(roots.allows_image(&allowed));
         assert!(!roots.allows_image(&denied));
+    }
+
+    #[test]
+    fn local_selection_cache_keeps_non_empty_text_and_clears_whitespace() {
+        let cache = LocalSelectionCache::default();
+        cache.update(Some("  selected text  ".to_string()));
+        assert_eq!(cache.current().as_deref(), Some("selected text"));
+
+        cache.update(Some(" \n\t ".to_string()));
+        assert!(cache.current().is_none());
     }
 }

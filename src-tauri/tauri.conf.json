@@ -43,7 +43,7 @@
         "transparent": true,
         "decorations": false,
         "focus": false,
-        "focusable": false,
+        "focusable": true,
         "acceptFirstMouse": true,
         "alwaysOnTop": true,
         "shadow": false,

@@ -43,10 +43,10 @@ pub fn set_auto_popup_mode(
         config.auto_popup_mode = mode.clone();
         crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
     }
-    if mode == "off" {
-        crate::selection_monitor::uninstall();
-    } else {
+    if should_install_selection_monitor(&mode) {
         crate::selection_monitor::install(app);
+    } else {
+        crate::selection_monitor::uninstall();
     }
     Ok(())
 }
@@ -55,9 +55,13 @@ fn is_valid_auto_popup_mode(mode: &str) -> bool {
     matches!(mode, "off" | "auto" | "shortcut")
 }
 
+pub(crate) fn should_install_selection_monitor(mode: &str) -> bool {
+    mode == "auto"
+}
+
 #[cfg(test)]
 mod tests {
-    use super::is_valid_auto_popup_mode;
+    use super::{is_valid_auto_popup_mode, should_install_selection_monitor};
 
     #[test]
     fn auto_popup_mode_is_an_explicit_allowlist() {
@@ -68,5 +72,8 @@ mod tests {
         assert!(!is_valid_auto_popup_mode("modifier"));
         assert!(!is_valid_auto_popup_mode("always"));
         assert!(!is_valid_auto_popup_mode("OFF"));
+        assert!(should_install_selection_monitor("auto"));
+        assert!(!should_install_selection_monitor("shortcut"));
+        assert!(!should_install_selection_monitor("off"));
     }
 }

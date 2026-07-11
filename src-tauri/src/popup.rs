@@ -172,7 +172,6 @@ pub fn dismiss_popup(
 /// Global shortcut entry: eagerly capture the selection while the source app
 /// is still focused, cache it, then tell the popup window to show at the cursor.
 pub fn run_popup_capture(app: &AppHandle) {
-    crate::selection_monitor::install(app.clone());
     run_popup_capture_with_origin(app, PopupOrigin::Shortcut, None);
 }
 
@@ -195,7 +194,7 @@ fn run_popup_capture_with_origin(
         return;
     }
 
-    let captured = crate::capture::read_selection();
+    let captured = crate::capture::capture_current_selection(app);
     if selection_event
         .is_some_and(|event| !crate::selection_monitor::is_current_selection_event(event))
     {

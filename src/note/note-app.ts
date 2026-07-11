@@ -67,6 +67,7 @@ import {
 import { canSplit } from "./split";
 import { buildBindings, installShortcuts, type ShortcutActions } from "./shortcuts";
 import { WINDOW_SHORTCUT_DEFAULTS, type WindowShortcutId } from "../shared/shortcuts";
+import { clearLocalSelection, localSelectionPublisher } from "./local-selection";
 import { listVersions, restoreVersion, snapshotNote } from "./versions";
 import { applyFontSize, bumpFont } from "./font-size";
 import { attachQuoteCapture } from "./quote-capture";
@@ -221,6 +222,7 @@ const editor = createEditor(
       },
     ),
     tagDecorations(),
+    localSelectionPublisher(),
     ...tagFilter(),
     placeholder("在这里写点什么…"),
     EditorView.updateListener.of((u) => {
@@ -264,7 +266,7 @@ const pieceEditor = createEditor(
     const f = activePieceFile();
     if (f) scheduleSave(f.path, doc);
   },
-  [scrollerPositionTheme, ...outlineMode(), placeholder("开始写…")],
+  [scrollerPositionTheme, ...outlineMode(), placeholder("开始写…"), localSelectionPublisher()],
   {
     grow: true,
     // pieceEditor is shared by project piece session.mode AND document session.mode. Branch on
@@ -291,6 +293,8 @@ pieceEditor.contentDOM.addEventListener("focus", () => {
     kind: session.mode === "document" ? "doc" : "piece",
   });
 });
+
+window.addEventListener("blur", clearLocalSelection);
 
 // 文档头（标题 + 切换箭头）挂在「写作」栏内容区顶部，随正文一起滚。
 let pieceHeader: ReturnType<typeof createPieceHeader> | null = null;
