@@ -34,6 +34,10 @@ pub enum HostToSidecar {
         request_id: String,
         conversation_id: String,
         user_text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        references: Option<Vec<PromptRef>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        skill: Option<PromptSkill>,
     },
     ApplyEditResult {
         call_id: String,
@@ -158,6 +162,25 @@ pub struct SkillSummary {
     pub description: String,
 }
 
+/// prompt 携带的结构化引用：显示名(display) 与内部标识(id) 分离。
+/// `kind` 取值 `file`/`skill`；`note_kind` 仅文件引用携带（与 NoteTarget.kind 同语义）。
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptRef {
+    pub kind: String,
+    pub id: String,
+    pub display: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note_kind: Option<String>,
+}
+
+/// prompt 携带的 Skill 引用：稳定 name，sidecar 以 /skill:<name> 前缀原生展开。
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptSkill {
+    pub name: String,
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(
     tag = "role",
@@ -255,6 +278,8 @@ mod tests {
             request_id: "r1".into(),
             conversation_id: "c1".into(),
             user_text: "你好".into(),
+            references: None,
+            skill: None,
         };
         let value: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&msg).unwrap()).unwrap();
@@ -262,6 +287,33 @@ mod tests {
         assert_eq!(value["requestId"], "r1");
         assert_eq!(value["conversationId"], "c1");
         assert_eq!(value["userText"], "你好");
+        // None 字段被 skip_serializing_if 省略
+        assert!(value.get("references").is_none());
+        assert!(value.get("skill").is_none());
+    }
+
+    #[test]
+    fn prompt_round_trips_references_and_skill() {
+        let msg = HostToSidecar::Prompt {
+            request_id: "r1".into(),
+            conversation_id: "c1".into(),
+            user_text: "看看".into(),
+            references: Some(vec![PromptRef {
+                kind: "file".into(),
+                id: "p/piece.md".into(),
+                display: "piece.md".into(),
+                note_kind: Some("piece".into()),
+            }]),
+            skill: Some(PromptSkill {
+                name: "summarize".into(),
+            }),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"references\""), "{json}");
+        assert!(json.contains("\"skill\":{\"name\":\"summarize\"}"), "{json}");
+        assert!(json.contains("\"noteKind\":\"piece\""), "{json}");
+        let back: HostToSidecar = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, msg);
     }
 
     #[test]

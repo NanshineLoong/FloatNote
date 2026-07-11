@@ -12,9 +12,10 @@ import {
 import { createNoteTools, type WriteResult } from "./note-tools.js";
 import { TUTOR_SYSTEM_PROMPT } from "./tutor-prompt.js";
 import { listSkills as listSkillsState, readSkillBody, loadSkillPaths, formatSkillsForSystemPrompt } from "./skills.js";
-import type { ChatDisplayMessage, EditPreview, HostToSidecar, NoteTarget, SidecarToHost } from "./protocol.js";
+import type { ChatDisplayMessage, EditPreview, HostToSidecar, NoteTarget, PromptRef, SidecarToHost } from "./protocol.js";
 import { buildAgentModel, type AgentConfig } from "./model.js";
 import { translateEvent } from "./event-translate.js";
+import { composePromptText } from "./prompt-compose.js";
 
 /** Minimal surface of a Pi AgentSession the runner depends on (injectable for tests). */
 export interface SessionLike {
@@ -43,6 +44,8 @@ export interface PromptRequest {
   requestId: string;
   conversationId: string;
   userText: string;
+  references?: PromptRef[];
+  skill?: { name: string };
 }
 
 export interface NewSessionRequest {
@@ -126,7 +129,9 @@ export class AgentRunner {
     });
     this.activeConversations.set(req.requestId, req.conversationId);
     try {
-      await session.prompt(req.userText);
+      // 把结构化 references/skill 序列化进给 Pi 的 prompt 文本：skill 走 /skill:name 前缀
+      // 原生展开，文件引用追加 [引用] 块。无引用时原样透传（向后兼容）。
+      await session.prompt(composePromptText(req));
     } finally {
       unsubscribe();
       this.activeConversations.delete(req.requestId);

@@ -30,7 +30,12 @@ export interface Skill {
   description: string;
 }
 
-export function agentSend(args: { conversationId: string; userText: string }): Promise<string> {
+export function agentSend(args: {
+  conversationId: string;
+  userText: string;
+  references?: { kind: "file" | "skill"; id: string; display: string; noteKind?: string }[];
+  skill?: { name: string };
+}): Promise<string> {
   return invoke<string>("agent_send", args);
 }
 
