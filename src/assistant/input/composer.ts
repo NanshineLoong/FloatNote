@@ -258,7 +258,7 @@ export function mountComposer(opts: ComposerOptions): ComposerHandle {
   function onEnter(v: EditorView): boolean {
     // 返回 true 让 CM6 停止继续匹配 defaultKeymap 的 Enter（否则会插入换行并把
     // 触发器移出光标）。真实 IME 的文本确认由 composition/input 事件写回文档。
-    if (isComposing || v.composing || v.compositionStarted) return true;
+    if (isComposing || v.composing) return true;
     if (popover.isOpen()) {
       popover.confirm();
       return true;
