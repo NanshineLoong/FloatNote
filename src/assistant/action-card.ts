@@ -25,8 +25,10 @@ function titleFor(tool: string): string {
 const INTERACTIVE_TOOLS = new Set([
   "edit_note",
   "write_note",
+  "create_note",
   "set_tag",
   "tag_create",
+  "tag_update",
   "tag_delete",
 ]);
 function isReadonly(tool: string): boolean {
@@ -235,6 +237,10 @@ function renderActionBody(block: Extract<Block, { kind: "action" }>): HTMLElemen
       return renderTagAssign(detail);
     case "tag_create":
       return renderTagCreate(detail);
+    case "tag_update":
+      return renderTagUpdate(detail);
+    case "note_create":
+      return renderNoteCreate(detail);
     case "tag_delete":
       return renderTagDelete(detail);
   }
@@ -346,5 +352,23 @@ function renderTagDelete(d: Extract<EditPreviewDetail, { kind: "tag_delete" }>):
   const row = document.createElement("div");
   row.className = "chat-tag-row";
   row.textContent = `删除标签「${d.tagName}」，${d.markerCount} 处标记将清除`;
+  return row;
+}
+
+function renderTagUpdate(d: Extract<EditPreviewDetail, { kind: "tag_update" }>): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "chat-tag-row";
+  row.textContent = `标签「${d.oldName}」→「${d.newName}」`;
+  return row;
+}
+
+function renderNoteCreate(d: Extract<EditPreviewDetail, { kind: "note_create" }>): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "chat-note-create";
+  const title = document.createElement("strong");
+  title.textContent = d.filename;
+  const preview = document.createElement("pre");
+  preview.textContent = d.contentPreview;
+  row.append(title, preview);
   return row;
 }

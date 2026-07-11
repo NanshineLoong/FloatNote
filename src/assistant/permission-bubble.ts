@@ -8,6 +8,8 @@ export type EditPreviewDetail =
   | { kind: "diff"; hunks: string }
   | { kind: "tag_assign"; blockPreview: string; tagName: string; tagColor: string }
   | { kind: "tag_create"; tagName: string; tagColor: string }
+  | { kind: "tag_update"; tagId: string; oldName: string; oldColor: string; newName: string; newColor: string }
+  | { kind: "note_create"; filename: string; contentPreview: string }
   | { kind: "tag_delete"; tagName: string; markerCount: number };
 
 export interface EditPreview {
@@ -36,11 +38,16 @@ export interface PermissionRequest {
 export const TOOL_LABEL: Record<string, string> = {
   read_note: "读取笔记",
   list_tags: "列出标签",
+  list_notes: "列出笔记",
+  web_search: "搜索网页",
+  web_fetch: "读取网页",
   read_skill: "读取技能",
   edit_note: "编辑文本",
   write_note: "编辑文本",
   set_tag: "设置标签",
   tag_create: "新建标签",
+  tag_update: "修改标签",
+  create_note: "创建文档",
   tag_delete: "删除标签",
 };
 
@@ -83,6 +90,18 @@ export function renderPreviewCard(preview: EditPreview, canSnapshot: boolean): H
       chip.style.background = preview.detail.tagColor;
       chip.textContent = preview.detail.tagName;
       detail.append("新建标签 ", chip);
+      break;
+    }
+    case "tag_update": {
+      detail.textContent = `标签「${preview.detail.oldName}」→「${preview.detail.newName}」`;
+      break;
+    }
+    case "note_create": {
+      const name = document.createElement("strong");
+      name.textContent = preview.detail.filename;
+      const pre = document.createElement("pre");
+      pre.textContent = preview.detail.contentPreview;
+      detail.append("创建文档 ", name, pre);
       break;
     }
     case "tag_delete": {

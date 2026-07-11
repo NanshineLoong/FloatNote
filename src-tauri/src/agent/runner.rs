@@ -15,7 +15,9 @@ use tauri::{AppHandle, Emitter, Manager};
 #[cfg(not(debug_assertions))]
 use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 
-use super::handlers::{handle_apply_edit, handle_get_note_text};
+use super::handlers::{
+    handle_apply_edit, handle_create_note, handle_get_note_text, handle_list_notes,
+};
 use super::protocol::{HostToSidecar, SidecarToHost};
 
 /// 活的 sidecar 子进程句柄：持有子进程与其 stdin。
@@ -263,6 +265,23 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             conversation_id,
             target,
         } => handle_get_note_text(app, call_id, conversation_id, target),
+        SidecarToHost::ListNotes { call_id, .. } => handle_list_notes(app, call_id),
+        SidecarToHost::CreateNote {
+            call_id,
+            conversation_id,
+            tool_call_id,
+            title,
+            content,
+            preview,
+        } => handle_create_note(
+            app,
+            call_id,
+            conversation_id,
+            tool_call_id,
+            title,
+            content,
+            preview,
+        ),
         SidecarToHost::SkillsList { call_id, skills } => {
             // 同步一次性请求-响应：取出 host 侧 oneshot sender 解除等待。
             if let Some(state) = app.try_state::<AppState>() {

@@ -5,6 +5,12 @@ function makeDups(noteText: string): { deps: NoteToolDeps; writes: any[] } {
   const writes: any[] = [];
   const deps: NoteToolDeps = {
     getNoteText: async () => noteText,
+    listNotes: async () => [
+      { kind: "inbox", name: "_inbox.md" },
+      { kind: "tasks", name: "_tasks.md" },
+      { kind: "piece", name: "piece.md" },
+    ],
+    requestCreateNote: async () => ({ ok: true, name: "new-piece.md" }),
     requestWrite: async (args) => {
       writes.push(args);
       return { ok: true, version: 1 };
@@ -13,6 +19,35 @@ function makeDups(noteText: string): { deps: NoteToolDeps; writes: any[] } {
   };
   return { deps, writes };
 }
+
+describe("project note tools", () => {
+  it("lists only project-space targets", async () => {
+    const { deps } = makeDups("");
+    const tools = createNoteTools(deps);
+    const list = tools.find((t) => t.name === "list_notes")!;
+    const result = await (list as any).execute("id", {});
+    expect(JSON.parse(result.content[0].text)).toEqual([
+      { kind: "inbox", name: "_inbox.md" },
+      { kind: "tasks", name: "_tasks.md" },
+      { kind: "piece", name: "piece.md" },
+    ]);
+  });
+
+  it("requests confirmed creation with a semantic preview", async () => {
+    const { deps } = makeDups("");
+    let request: any;
+    deps.requestCreateNote = async (args) => {
+      request = args;
+      return { ok: true, name: "ideas.md" };
+    };
+    const tools = createNoteTools(deps);
+    const create = tools.find((t) => t.name === "create_note")!;
+    const result = await (create as any).execute("tool-1", { title: "ideas", content: "first" });
+    expect(request).toMatchObject({ toolCallId: "tool-1", title: "ideas", content: "first" });
+    expect(request.preview.detail).toEqual({ kind: "note_create", filename: "ideas.md", contentPreview: "first" });
+    expect(result.content[0].text).toContain("ideas.md");
+  });
+});
 
 describe("edit_note", () => {
   it("replaces unique substring", async () => {
@@ -123,5 +158,18 @@ describe("tag_delete", () => {
     expect(writes[0].newContent).toContain("第二块");
     expect(writes[0].preview.detail.kind).toBe("tag_delete");
     expect(writes[0].preview.detail.markerCount).toBe(2);
+  });
+});
+
+describe("tag_update", () => {
+  it("renames and recolors a definition without changing markers", async () => {
+    const note = '<!-- floatnote-tags: review="复习"|c=#e5484d -->\n正文<!-- floatnote:tag=review -->';
+    const { deps, writes } = makeDups(note);
+    const tools = createNoteTools(deps);
+    const update = tools.find((t) => t.name === "tag_update")!;
+    await (update as any).execute("id", { tagId: "review", name: "重点", color: "#f5a623" });
+    expect(writes[0].newContent).toContain('review="重点"|c=#f5a623');
+    expect(writes[0].newContent).toContain("floatnote:tag=review");
+    expect(writes[0].preview.detail.kind).toBe("tag_update");
   });
 });

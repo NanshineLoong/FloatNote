@@ -38,6 +38,7 @@ pub struct PendingEdit {
     pub note_id: String,
     pub path: String,
     pub can_snapshot: bool,
+    pub create_only: bool,
 }
 
 /// 收到 apply_edit：解析 target、emit `permission://request` 给前端、暂存
@@ -92,6 +93,7 @@ pub(super) fn handle_apply_edit(
                     note_id,
                     path: path.to_string_lossy().to_string(),
                     can_snapshot,
+                    create_only: false,
                 },
             );
         }
@@ -109,6 +111,133 @@ pub(super) fn handle_apply_edit(
             });
         }
     }
+}
+
+pub(super) fn handle_list_notes(app: &AppHandle, call_id: String) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let notes = state
+        .active_note
+        .lock()
+        .unwrap()
+        .clone()
+        .and_then(|active| {
+            let dir = PathBuf::from(active.dir);
+            let mut result = Vec::new();
+            if dir.join(INBOX_FILE).is_file() {
+                result.push(super::protocol::AgentNoteEntry {
+                    kind: "inbox".into(),
+                    name: INBOX_FILE.into(),
+                });
+            }
+            if dir.join(TASKS_FILE).is_file() {
+                result.push(super::protocol::AgentNoteEntry {
+                    kind: "tasks".into(),
+                    name: TASKS_FILE.into(),
+                });
+            }
+            let pieces = crate::project::list_pieces(&dir).ok()?;
+            result.extend(
+                pieces
+                    .into_iter()
+                    .map(|piece| super::protocol::AgentNoteEntry {
+                        kind: "piece".into(),
+                        name: format!("{}.md", piece.name),
+                    }),
+            );
+            Some(result)
+        })
+        .unwrap_or_default();
+    let _ = state
+        .agent
+        .lock()
+        .unwrap()
+        .as_mut()
+        .map(|agent| agent.send(&HostToSidecar::NotesList { call_id, notes }));
+}
+
+fn piece_filename(title: &str) -> Result<String, String> {
+    let stem = title.trim().trim_end_matches(".md").trim();
+    if stem.is_empty()
+        || stem.starts_with('_')
+        || stem.contains('/')
+        || stem.contains('\\')
+        || stem == "."
+        || stem == ".."
+    {
+        return Err("标题不能是路径、空标题或系统文件名".into());
+    }
+    Ok(format!("{stem}.md"))
+}
+
+pub(super) fn handle_create_note(
+    app: &AppHandle,
+    call_id: String,
+    conversation_id: String,
+    tool_call_id: String,
+    title: String,
+    content: String,
+    preview: EditPreview,
+) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let resolved = state
+        .active_note
+        .lock()
+        .unwrap()
+        .clone()
+        .and_then(|active| {
+            let filename = piece_filename(&title).ok()?;
+            let dir = PathBuf::from(active.dir);
+            Some((dir.clone(), filename.clone(), dir.join(&filename)))
+        });
+    let Some((dir, filename, path)) = resolved else {
+        let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
+            agent.send(&HostToSidecar::CreateNoteResult {
+                call_id,
+                ok: false,
+                denied: None,
+                name: None,
+                error: Some("无法创建该 piece".into()),
+            })
+        });
+        return;
+    };
+    if path.exists() {
+        let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
+            agent.send(&HostToSidecar::CreateNoteResult {
+                call_id,
+                ok: false,
+                denied: None,
+                name: None,
+                error: Some("同名文档已存在".into()),
+            })
+        });
+        return;
+    }
+    let request_id = call_id.clone();
+    let payload = serde_json::json!({
+        "request_id": request_id, "conversation_id": conversation_id, "tool_call_id": tool_call_id,
+        "tool_name": "create_note", "old_content": "", "new_content": content,
+        "preview": preview, "can_snapshot": false, "resolved_dir": dir.to_string_lossy(),
+        "resolved_note_id": filename.trim_end_matches(".md"), "resolved_path": path.to_string_lossy()
+    });
+    let _ = app.emit("permission://request", &payload);
+    state.pending_edits.lock().unwrap().insert(
+        request_id,
+        PendingEdit {
+            call_id,
+            old_content: String::new(),
+            new_content: content,
+            dir,
+            note_id: filename.trim_end_matches(".md").into(),
+            path: path.to_string_lossy().into(),
+            can_snapshot: false,
+            create_only: true,
+        },
+    );
 }
 
 /// 收到 get_note_text：按 `NoteTarget` 定位文件、读取内容、回 `NoteText`。
@@ -165,22 +294,34 @@ fn resolve_target(
             active.kind.clone(),
         ),
         Some(t) => {
+            if !matches!(t.kind.as_str(), "inbox" | "tasks" | "piece") {
+                return None;
+            }
             let kind = t.kind.clone();
             let (note_id, path) = match t.kind.as_str() {
                 "inbox" => ("_inbox".to_string(), dir.join(INBOX_FILE)),
                 "tasks" => ("_tasks".to_string(), dir.join(TASKS_FILE)),
-                // piece / doc / 未知 kind 一律按 piece 语义处理（v1 简化）。
-                _ => match &t.name {
+                "piece" => match &t.name {
                     Some(name) if name == &active.note_id => {
                         (active.note_id.clone(), PathBuf::from(&active.path))
                     }
                     Some(name) => {
                         // 兼容传入带 `.md` 后缀的 name：取 stem 作为 note_id。
                         let stem = name.trim_end_matches(".md");
+                        if stem.is_empty()
+                            || stem.starts_with('_')
+                            || stem.contains('/')
+                            || stem.contains('\\')
+                            || stem == "."
+                            || stem == ".."
+                        {
+                            return None;
+                        }
                         (stem.to_string(), dir.join(format!("{stem}.md")))
                     }
                     None => (active.note_id.clone(), PathBuf::from(&active.path)),
                 },
+                _ => unreachable!(),
             };
             (note_id, path, kind)
         }
@@ -240,6 +381,60 @@ pub fn handle_apply_edit_at(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn piece_filename_rejects_paths_and_system_files() {
+        assert_eq!(piece_filename("Ideas").unwrap(), "Ideas.md");
+        assert!(piece_filename("_tasks").is_err());
+        assert!(piece_filename("../escape").is_err());
+        assert!(piece_filename("a\\b").is_err());
+    }
+
+    #[test]
+    fn resolve_target_rejects_legacy_docs_and_piece_traversal() {
+        use crate::config::Config;
+        use crate::state::AppState;
+        use std::collections::HashMap;
+        use std::sync::{atomic::AtomicU64, Mutex};
+        let active = crate::agent::ActiveNote {
+            dir: "/tmp/proj".into(),
+            note_id: "piece".into(),
+            path: "/tmp/proj/piece.md".into(),
+            kind: "piece".into(),
+        };
+        let state = AppState {
+            config: Mutex::new(Config::default()),
+            config_path: PathBuf::new(),
+            agent: Mutex::new(None),
+            agent_ready: Mutex::new(false),
+            agent_spawn_error: Mutex::new(None),
+            active_note: Mutex::new(Some(active)),
+            agent_seq: AtomicU64::new(0),
+            watcher: Mutex::new(None),
+            write_suppress: crate::watcher::new_suppress_list(),
+            popup_cache: crate::popup::PopupCache::default(),
+            local_selection: crate::state::LocalSelectionCache::default(),
+            pending_edits: Mutex::new(HashMap::new()),
+            pending_skill_lists: Mutex::new(HashMap::new()),
+            authorized_roots: crate::state::AuthorizedRoots::default(),
+        };
+        assert!(resolve_target(
+            &state,
+            Some(&NoteTarget {
+                kind: "doc".into(),
+                name: Some("old".into())
+            })
+        )
+        .is_none());
+        assert!(resolve_target(
+            &state,
+            Some(&NoteTarget {
+                kind: "piece".into(),
+                name: Some("../escape".into())
+            })
+        )
+        .is_none());
+    }
 
     #[test]
     fn resolve_target_none_falls_back_to_active_note_kind() {

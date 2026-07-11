@@ -56,6 +56,12 @@ async function main(): Promise<void> {
       case "note_text":
         runner.onNoteText(msg);
         break;
+      case "notes_list":
+        runner.onNotesList(msg);
+        break;
+      case "create_note_result":
+        runner.onCreateNoteResult(msg);
+        break;
       case "list_skills":
         send({ type: "skills_list", callId: msg.callId, skills: runner.listSkills() });
         break;

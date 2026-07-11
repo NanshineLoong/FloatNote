@@ -51,6 +51,17 @@ describe("apply_edit protocol", () => {
   });
 });
 
+describe("project note protocol", () => {
+  it("encodes list and confirmed create round-trips", () => {
+    const list: SidecarToHost = { type: "list_notes", callId: "l1", conversationId: "c1" };
+    const listed: HostToSidecar = { type: "notes_list", callId: "l1", notes: [{ kind: "piece", name: "piece.md" }] };
+    const create: SidecarToHost = { type: "create_note", callId: "c1", conversationId: "cv", toolCallId: "t1", title: "Ideas", content: "body", preview: { tool: "create_note", summary: "创建", detail: { kind: "note_create", filename: "Ideas.md", contentPreview: "body" } } };
+    expect(JSON.parse(encodeLine(list))).toEqual(list);
+    expect(JSON.parse(encodeLine(listed))).toEqual(listed);
+    expect(JSON.parse(encodeLine(create))).toEqual(create);
+  });
+});
+
 describe("skills protocol", () => {
   it("encodes list_skills / skills_list round-trip", () => {
     const req: HostToSidecar = { type: "list_skills", callId: "sl1" };

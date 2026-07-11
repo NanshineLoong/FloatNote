@@ -50,6 +50,20 @@ pub enum HostToSidecar {
         content: String,
         found: bool,
     },
+    NotesList {
+        call_id: String,
+        notes: Vec<AgentNoteEntry>,
+    },
+    CreateNoteResult {
+        call_id: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        denied: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     Cancel {
         request_id: String,
     },
@@ -129,6 +143,18 @@ pub enum SidecarToHost {
         #[serde(skip_serializing_if = "Option::is_none")]
         target: Option<NoteTarget>,
     },
+    ListNotes {
+        call_id: String,
+        conversation_id: String,
+    },
+    CreateNote {
+        call_id: String,
+        conversation_id: String,
+        tool_call_id: String,
+        title: String,
+        content: String,
+        preview: EditPreview,
+    },
     Done {
         request_id: String,
         conversation_id: String,
@@ -196,6 +222,13 @@ pub struct NoteTarget {
     pub name: Option<String>,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentNoteEntry {
+    pub kind: String,
+    pub name: String,
+}
+
 /// apply_edit 的预览细节（判别联合，`kind` 区分）。
 ///
 /// 变体名用 `rename_all = "snake_case"` 序列化为 `diff`/`tag_assign`/
@@ -220,6 +253,17 @@ pub enum EditPreviewDetail {
     TagCreate {
         tag_name: String,
         tag_color: String,
+    },
+    TagUpdate {
+        tag_id: String,
+        old_name: String,
+        old_color: String,
+        new_name: String,
+        new_color: String,
+    },
+    NoteCreate {
+        filename: String,
+        content_preview: String,
     },
     TagDelete {
         tag_name: String,
@@ -517,6 +561,13 @@ mod tests {
         assert_eq!(v["kind"], "tag_delete");
         assert_eq!(v["tagName"], "review");
         assert_eq!(v["markerCount"], 3);
+
+        let create: SidecarToHost = serde_json::from_str(r#"{"type":"create_note","callId":"c1","conversationId":"cv","toolCallId":"t1","title":"Ideas","content":"body","preview":{"tool":"create_note","summary":"create","detail":{"kind":"note_create","filename":"Ideas.md","contentPreview":"body"}}}"#).unwrap();
+        assert!(matches!(create, SidecarToHost::CreateNote { .. }));
+        let list: SidecarToHost =
+            serde_json::from_str(r#"{"type":"list_notes","callId":"l1","conversationId":"cv"}"#)
+                .unwrap();
+        assert!(matches!(list, SidecarToHost::ListNotes { .. }));
     }
 
     #[test]

@@ -9,7 +9,8 @@ import {
   type SessionManager as PiSessionManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { createNoteTools, type WriteResult } from "./note-tools.js";
+import { createNoteTools, type CreateNoteResult, type NoteListEntry, type WriteResult } from "./note-tools.js";
+import { createDefaultWebTools } from "./web-tools.js";
 import { TUTOR_SYSTEM_PROMPT } from "./tutor-prompt.js";
 import { listSkills as listSkillsState, readSkillBody, loadSkillPaths, formatSkillsForSystemPrompt } from "./skills.js";
 import type { ChatDisplayMessage, EditPreview, HostToSidecar, NoteTarget, SidecarToHost } from "./protocol.js";
@@ -72,6 +73,8 @@ export class AgentRunner {
   private textSeq = 0;
   private readonly pendingEdits = new Map<string, (r: WriteResult) => void>();
   private readonly pendingTexts = new Map<string, (r: { content: string; found: boolean }) => void>();
+  private readonly pendingLists = new Map<string, (notes: NoteListEntry[]) => void>();
+  private readonly pendingCreates = new Map<string, (result: CreateNoteResult) => void>();
 
   constructor(options: AgentRunnerOptions) {
     this.send = options.send;
@@ -151,6 +154,16 @@ export class AgentRunner {
     }
   }
 
+  onNotesList(msg: Extract<HostToSidecar, { type: "notes_list" }>): void {
+    const resolve = this.pendingLists.get(msg.callId);
+    if (resolve) { this.pendingLists.delete(msg.callId); resolve(msg.notes); }
+  }
+
+  onCreateNoteResult(msg: Extract<HostToSidecar, { type: "create_note_result" }>): void {
+    const resolve = this.pendingCreates.get(msg.callId);
+    if (resolve) { this.pendingCreates.delete(msg.callId); resolve(msg); }
+  }
+
   /** Cancel the in-flight prompt for `requestId`. Scoped to that request's
    *  conversation only — other conversations keep streaming. No-op when the
    *  request is unknown (already finished or never started). */
@@ -165,11 +178,14 @@ export class AgentRunner {
       throw new Error("agent not configured");
     }
     this.sessions.get(conversationId)?.dispose?.();
-    const tools = createNoteTools({
+    const noteTools = createNoteTools({
       getNoteText: (target) => this.getNoteText(conversationId, target),
+      listNotes: () => this.listNotes(conversationId),
+      requestCreateNote: (args) => this.requestCreateNote(conversationId, args),
       requestWrite: (args) => this.requestWrite(conversationId, args),
       readSkillBody,
     });
+    const tools = [...noteTools, ...createDefaultWebTools()];
     const session = await this.factory(this.cfg, tools, sessionManager);
     this.sessions.set(conversationId, session);
     const sessionFile = session.sessionFile ?? session.sessionManager?.getSessionFile() ?? sessionManager.getSessionFile();
@@ -230,6 +246,22 @@ export class AgentRunner {
       this.send(msg);
     });
   }
+
+  private listNotes(conversationId: string): Promise<NoteListEntry[]> {
+    const callId = `l${++this.textSeq}`;
+    return new Promise((resolve) => {
+      this.pendingLists.set(callId, resolve);
+      this.send({ type: "list_notes", callId, conversationId });
+    });
+  }
+
+  private requestCreateNote(conversationId: string, args: { toolCallId: string; title: string; content: string; preview: EditPreview }): Promise<CreateNoteResult> {
+    const callId = `c${++this.writeSeq}`;
+    return new Promise((resolve) => {
+      this.pendingCreates.set(callId, resolve);
+      this.send({ type: "create_note", callId, conversationId, toolCallId: args.toolCallId, title: args.title, content: args.content, preview: args.preview });
+    });
+  }
 }
 
 /** Build a real Pi tutor session from config. */
@@ -258,7 +290,7 @@ const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager) 
   const { session } = await createAgentSession({
     model,
     customTools: tools,
-    tools: ["read_note", "list_tags", "edit_note", "write_note", "set_tag", "tag_create", "tag_delete", "read_skill"],
+    tools: ["read_note", "list_notes", "list_tags", "edit_note", "write_note", "create_note", "set_tag", "tag_create", "tag_update", "tag_delete", "web_search", "web_fetch", "read_skill"],
     noTools: "builtin",
     resourceLoader,
     authStorage,

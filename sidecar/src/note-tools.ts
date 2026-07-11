@@ -3,6 +3,7 @@ import { Type } from "typebox";
 import {
   setBlockTagChange, addTagDefChange,
   deleteTagChanges, parseDefs, stripTagMarker, countMarkers,
+  patchTagDefChange,
   applyChange, applyChanges,
   freeColors,
 } from "@floatnote/note-logic";
@@ -10,9 +11,13 @@ import { replaceOnce, findBlockByAnchor } from "./matching.js";
 import type { NoteTarget, EditPreview } from "./protocol.js";
 
 export interface WriteResult { ok: boolean; version?: number; denied?: boolean; error?: string; }
+export interface NoteListEntry { kind: "inbox" | "tasks" | "piece"; name: string }
+export interface CreateNoteResult { ok: boolean; denied?: boolean; name?: string; error?: string }
 
 export interface NoteToolDeps {
   getNoteText: (target?: NoteTarget) => Promise<string>;
+  listNotes: () => Promise<NoteListEntry[]>;
+  requestCreateNote: (args: { toolCallId: string; title: string; content: string; preview: EditPreview }) => Promise<CreateNoteResult>;
   requestWrite: (args: { toolCallId: string; target?: NoteTarget; toolName: string; oldContent: string; newContent: string; preview: EditPreview }) => Promise<WriteResult>;
   /** Return a loaded skill's full SKILL.md text by name, or null if unknown. */
   readSkillBody: (name: string) => string | null;
@@ -42,6 +47,33 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     async execute(_id, params: { target?: NoteTarget }) {
       const content = await deps.getNoteText(params.target);
       return { content: [{ type: "text", text: content }], details: {} };
+    },
+  });
+
+  const listNotes = defineTool({
+    name: "list_notes",
+    label: "List notes",
+    description: "列出当前项目空间的 inbox、tasks 与全部 piece。无路径参数；不返回 loose root Markdown。",
+    parameters: Type.Object({}),
+    promptSnippet: "list_notes — 列当前项目笔记",
+    async execute() {
+      return { content: [{ type: "text", text: JSON.stringify(await deps.listNotes()) }], details: {} };
+    },
+  });
+
+  const createNote = defineTool({
+    name: "create_note",
+    label: "Create note",
+    description: "经用户确认后在当前项目空间新建一个 piece。title 只能是标题，不能是路径，也不能创建下划线开头的系统文件。",
+    parameters: Type.Object({ title: Type.String(), content: Type.Optional(Type.String()) }),
+    promptSnippet: "create_note — 新建 piece",
+    async execute(toolCallId, params: { title: string; content?: string }) {
+      const filename = `${params.title.trim().replace(/\.md$/i, "")}.md`;
+      const content = params.content ?? "";
+      const preview: EditPreview = { tool: "create_note", summary: `创建文档「${filename}」`, detail: { kind: "note_create", filename, contentPreview: content.slice(0, 240) } };
+      const result = await deps.requestCreateNote({ toolCallId, title: params.title, content, preview });
+      const text = result.denied ? "用户拒绝了此操作" : result.ok ? `已创建 ${result.name ?? filename}` : `创建失败：${result.error ?? "未知错误"}`;
+      return { content: [{ type: "text", text }], details: {} };
     },
   });
 
@@ -183,6 +215,32 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     },
   });
 
+  const tagUpdate = defineTool({
+    name: "tag_update",
+    label: "Update tag",
+    description: "原子修改采集区标签的名称和/或颜色，块标记的稳定 tag id 不变。target 必须 inbox。",
+    parameters: Type.Object({ tagId: Type.String(), name: Type.Optional(Type.String()), color: Type.Optional(Type.String()), target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })) }),
+    promptSnippet: "tag_update — 修改标签",
+    async execute(toolCallId, params: { tagId: string; name?: string; color?: string; target?: NoteTarget }) {
+      const t = inboxTarget("tag_update", params.target);
+      if (!t.ok) return t.result;
+      if (params.name === undefined && params.color === undefined) return errorResult("tag_update 至少需要 name 或 color");
+      const old = await deps.getNoteText(t.target);
+      const def = parseDefs(old).get(params.tagId);
+      if (!def) return errorResult(`未知标签：${params.tagId}`);
+      if (params.color !== undefined) {
+        const usedByOthers = new Set([...parseDefs(old).values()].filter((item) => item.id !== params.tagId).map((item) => item.color.toLowerCase()));
+        const allowed = freeColors(usedByOthers).map((color) => color.toLowerCase());
+        if (!allowed.includes(params.color.toLowerCase())) return errorResult(`颜色 ${params.color} 不可用`);
+      }
+      const change = patchTagDefChange(old, params.tagId, { ...(params.name !== undefined ? { name: params.name } : {}), ...(params.color !== undefined ? { color: params.color } : {}) });
+      if (!change) return errorResult("标签修改失败");
+      const newContent = applyChange(old, change);
+      const preview: EditPreview = { tool: "tag_update", summary: `修改标签「${def.name}」`, detail: { kind: "tag_update", tagId: def.id, oldName: def.name, oldColor: def.color, newName: params.name ?? def.name, newColor: params.color ?? def.color } };
+      return writeResultText(await deps.requestWrite({ toolCallId, target: t.target, toolName: "tag_update", oldContent: old, newContent, preview }));
+    },
+  });
+
   const readSkill = defineTool({
     name: "read_skill",
     label: "Read skill",
@@ -199,7 +257,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     },
   });
 
-  return [readNote, listTags, editNote, writeNote, setTag, tagCreate, tagDelete, readSkill];
+  return [readNote, listNotes, listTags, editNote, writeNote, createNote, setTag, tagCreate, tagUpdate, tagDelete, readSkill];
 }
 
 function writeResultText(res: WriteResult) {

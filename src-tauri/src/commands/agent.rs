@@ -190,12 +190,34 @@ pub fn resolve_permission(
     };
     if decision != "allow" {
         let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
-            agent.send(&HostToSidecar::ApplyEditResult {
+            if p.create_only {
+                agent.send(&HostToSidecar::CreateNoteResult {
+                    call_id: p.call_id,
+                    ok: false,
+                    denied: Some(true),
+                    name: None,
+                    error: None,
+                })
+            } else {
+                agent.send(&HostToSidecar::ApplyEditResult {
+                    call_id: p.call_id,
+                    ok: false,
+                    denied: Some(true),
+                    version: None,
+                    error: None,
+                })
+            }
+        });
+        return Ok(());
+    }
+    if p.create_only && std::path::Path::new(&p.path).exists() {
+        let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
+            agent.send(&HostToSidecar::CreateNoteResult {
                 call_id: p.call_id,
                 ok: false,
-                denied: Some(true),
-                version: None,
-                error: None,
+                denied: Some(false),
+                name: None,
+                error: Some("同名文档已存在".into()),
             })
         });
         return Ok(());
@@ -221,13 +243,23 @@ pub fn resolve_permission(
         );
     }
     let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
-        agent.send(&HostToSidecar::ApplyEditResult {
-            call_id: p.call_id,
-            ok: outcome.ok,
-            denied: Some(false),
-            version: outcome.version,
-            error: outcome.error,
-        })
+        if p.create_only {
+            agent.send(&HostToSidecar::CreateNoteResult {
+                call_id: p.call_id,
+                ok: outcome.ok,
+                denied: Some(false),
+                name: outcome.ok.then(|| format!("{}.md", p.note_id)),
+                error: outcome.error,
+            })
+        } else {
+            agent.send(&HostToSidecar::ApplyEditResult {
+                call_id: p.call_id,
+                ok: outcome.ok,
+                denied: Some(false),
+                version: outcome.version,
+                error: outcome.error,
+            })
+        }
     });
     Ok(())
 }
