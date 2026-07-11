@@ -22,7 +22,7 @@ function mount(doc = ""): EditorView {
 }
 
 function insertRef(view: EditorView, ref: Ref, at = view.state.selection.main.head): void {
-  view.dispatch(insertRefTransaction(view, ref, at));
+  view.dispatch(insertRefTransaction(ref, at));
 }
 
 describe("ref chip CM6 basecoat", () => {

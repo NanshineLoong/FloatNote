@@ -104,15 +104,18 @@ export function refList(state: { doc: { toString: () => string } }): Ref[] {
   return refsInDoc(state.doc.toString());
 }
 
-/** 在指定位置插入引用 token 的事务参数。调用方 dispatch 之。 */
-export function insertRefTransaction(_view: EditorView, ref: Ref, at: number): {
+/** 在指定区间插入引用 token 的事务参数。调用方 dispatch 之。
+ *  to 缺省 = from（纯插入）；popover 确认时 to 为 trigger 末尾以替换 `@query`。 */
+export function insertRefTransaction(ref: Ref, from: number, to: number = from): {
   changes: { from: number; to: number; insert: string };
   selection: { anchor: number };
+  userEvent: string;
 } {
   const token = refToken(ref);
   return {
-    changes: { from: at, to: at, insert: token },
-    selection: { anchor: at + token.length },
+    changes: { from, to, insert: token },
+    selection: { anchor: from + token.length },
+    userEvent: "input.ref",
   };
 }
 

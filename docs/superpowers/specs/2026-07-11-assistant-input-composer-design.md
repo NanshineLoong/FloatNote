@@ -51,8 +51,9 @@ that satisfies every requirement without hand-rolling a custom rich-text engine.
   in an editable flow, so cursor-boundary, atomic delete, and history
   preservation are native CM6 behavior.
 - **Large-input mode:** in-app overlay (fixed overlay within the same Tauri
-  window), not a separate window. Normal and overlay editors share one
-  `EditorState` by switching the `EditorView` host via `view.setState`.
+  window), not a separate window. It keeps the same `EditorView` in place and
+  switches only its host CSS class; this is simpler than host-swapping and
+  keeps `EditorState`, DOM selection, history, and IME composition intact.
 - **Structured send:** extend the `prompt` DTO with optional `references` and
   `skill` fields; update `src/platform/agent.ts`, Rust `agent_send`, and sidecar
   `runner.prompt()` to consume them. `userText` contains only visible prose; chips
@@ -157,12 +158,11 @@ higher-relevance results surface first.
 
 - Normal editor: CM6 `EditorView` in `.assistant-input-wrap`, auto-grows by line
   count up to `max-height: 120px`, then scrolls internally.
-- Expand button opens a fixed in-app overlay hosting a second `EditorView`.
-  CM6 forbids one `EditorState` on two views simultaneously, so the overlay
-  calls `overlayView.setState(dockView.state)` and the dock view is detached; on
-  close the state moves back the same way. `EditorSelection`, history, and ref
-  state live in `EditorState`, so cursor position, selection, text, markdown
-  formatting, references, and undo/redo are all preserved across the switch.
+- The expand button opens a fixed in-app overlay by adding
+  `.fn-input-large` to the existing `.assistant-input-wrap`; the same
+  `EditorView` remains mounted and only remeasures. Cursor position, selection,
+  text, references, undo/redo, and IME composition therefore remain in place
+  without copying state or temporarily creating a second view.
 - Same keymap (Enter sends, Shift+Enter newline), same popover, same chips.
 
 ### State synchronization and IME

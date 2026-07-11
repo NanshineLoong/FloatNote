@@ -9,6 +9,8 @@ import {
   refsInDoc,
   visibleText,
   hasRef,
+  clipboardPayload,
+  docFromClipboard,
   type Ref,
 } from "./model";
 
@@ -85,5 +87,28 @@ describe("refsInDoc / visibleText / hasRef", () => {
   it("hasRef", () => {
     expect(hasRef(`你好${refToken(FILE)}它`)).toBe(true);
     expect(hasRef("你好它")).toBe(false);
+  });
+});
+
+describe("引用剪贴板格式", () => {
+  it("内部复制同时提供可读纯文本与可还原的结构化片段", () => {
+    const source = `请看${refToken(FILE)}，然后${refToken(SKILL)}`;
+
+    expect(clipboardPayload(source)).toEqual({
+      plainText: "请看，然后",
+      structured: [
+        { type: "text", text: "请看" },
+        { type: "ref", ref: FILE },
+        { type: "text", text: "，然后" },
+        { type: "ref", ref: SKILL },
+      ],
+    });
+  });
+
+  it("优先从有效结构化片段恢复 chip，外部内容退化为纯文本", () => {
+    const payload = clipboardPayload(`请看${refToken(FILE)}`);
+
+    expect(docFromClipboard("请看", JSON.stringify(payload.structured))).toBe(`请看${refToken(FILE)}`);
+    expect(docFromClipboard("外部内容", "not-json")).toBe("外部内容");
   });
 });

@@ -869,15 +869,32 @@ pre.chat-codeblock code {
   font-size: 12px;
 }
 
-.assistant-input {
+.assistant-input-host {
   flex: 1;
+  min-width: 0;
+}
+
+.assistant-input,
+.fn-assistant-input {
+  width: 100%;
   max-height: 120px;
-  padding: 9px 12px;
-  border-width: var(--fn-border-hair);
-  border-radius: 18px;
-  font-size: var(--fs-md);
-  line-height: 1.4;
-  resize: none;
+}
+
+.assistant-expand {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.assistant-expand:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
 .assistant-send {
@@ -1163,6 +1180,10 @@ pre.chat-codeblock code {
   max-height: 70vh;
   min-height: 160px;
   border-radius: 12px;
+}
+
+.assistant-input-wrap.fn-input-large .assistant-input-host {
+  width: 100%;
 }
 
 /* allow / deny 按钮：迁移到 createButton（.fn-btn--primary / --secondary），

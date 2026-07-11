@@ -6,8 +6,10 @@ import type { ChatConversation, ChatScope } from "../platform/chat-history";
 import { deriveTitleFromFirstMessage, formatHistoryTime } from "../platform/chat-history-format";
 import socratesSvg from "../assets/socrates.svg?raw";
 import { mountPermissionBubble, type PermissionRequest } from "./permission-bubble.js";
-import { mountSkillPicker, type SkillSummary } from "./skill-picker.js";
-import { mountMentionPicker, type MentionFile } from "./mention-picker.js";
+import type { SkillSummary } from "./skill-picker.js";
+import type { MentionFile } from "./mention-picker.js";
+import { mountComposer, type ComposerHandle } from "./input/composer";
+import { composePromptPayload, type PromptPayload } from "./input/submit";
 import {
   type ChatEvent,
   type ChatState,
@@ -26,7 +28,7 @@ import { createButton } from "../shared/ui/button";
  */
 export interface AssistantDeps {
   /** 发送一条用户消息给 tutor，返回 requestId（用于取消）。 */
-  send: (text: string, conversationId: string) => Promise<string>;
+  send: (payload: PromptPayload, conversationId: string) => Promise<string>;
   createConversation: (scope: ChatScope) => Promise<ChatConversation>;
   openConversation: (conversation: ChatConversation) => Promise<ChatConversation | null | void>;
   listConversations: (scope: ChatScope) => Promise<ChatConversation[]>;
@@ -110,7 +112,8 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       <div class="fn-popover assistant-history-popover" hidden></div>
       <div class="assistant-perm-region"></div>
       <div class="assistant-input-wrap">
-        <textarea class="fn-control assistant-input" rows="1" placeholder="说点什么…"></textarea>
+        <div class="assistant-input-host"></div>
+        <button class="assistant-expand" type="button" aria-label="展开输入框" title="展开输入框"><i class="ph ph-arrows-out"></i></button>
         ${historyButton.outerHTML}
       </div>
     </div>
@@ -120,7 +123,8 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   const newBtn = root.querySelector<HTMLButtonElement>(".assistant-new")!;
   const bot = root.querySelector<HTMLButtonElement>(".assistant-bot")!;
   const inputWrap = root.querySelector<HTMLElement>(".assistant-input-wrap")!;
-  const input = root.querySelector<HTMLTextAreaElement>(".assistant-input")!;
+  const inputHost = root.querySelector<HTMLElement>(".assistant-input-host")!;
+  const expandBtn = root.querySelector<HTMLButtonElement>(".assistant-expand")!;
   const sendBtn = root.querySelector<HTMLButtonElement>(".assistant-send")!;
   const historyPopover = root.querySelector<HTMLElement>(".assistant-history-popover")!;
   const permRegion = root.querySelector<HTMLElement>(".assistant-perm-region")!;
@@ -174,34 +178,25 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     bot.classList.remove("nudge");
     void bot.offsetWidth; // 强制重排以重启动画
     bot.classList.add("nudge");
-    if (open) setTimeout(() => input.focus(), 160);
-    else input.blur();
+    if (open) setTimeout(() => composer.focus(), 160);
+    else (document.activeElement instanceof HTMLElement ? document.activeElement : null)?.blur();
     if (!open) closeHistoryPopover();
   }
 
   bot.addEventListener("click", () => setInputOpen(!inputOpen));
 
-  function autosize() {
-    input.style.height = "auto";
-    input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
-    updateSendMode();
-  }
-
   function updateSendMode() {
-    const hasText = input.value.trim().length > 0;
-    sendBtn.setAttribute("aria-label", hasText ? "发送" : "查看项目对话历史");
-    sendBtn.title = hasText ? "发送" : "查看项目对话历史";
-    sendBtn.innerHTML = hasText
+    const payload = composePromptPayload(composer.getDoc());
+    const hasContent = payload.userText.trim().length > 0 || payload.references.length > 0;
+    sendBtn.setAttribute("aria-label", hasContent ? "发送" : "查看项目对话历史");
+    sendBtn.title = hasContent ? "发送" : "查看项目对话历史";
+    sendBtn.innerHTML = hasContent
       ? `<i class="ph ph-arrow-up"></i>`
       : `<i class="ph ph-clock-counter-clockwise"></i>`;
   }
 
-  async function submit() {
-    const text = input.value.trim();
-    if (!text) {
-      await toggleHistoryPopover();
-      return;
-    }
+  async function submit(payload: PromptPayload) {
+    const text = payload.userText.trim();
     const scope = currentScope;
     if (!scope) {
       dispatch({ type: "error", requestId: null, message: "当前没有打开的项目或文档，请稍后再试" });
@@ -214,12 +209,10 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     }
     await updateConversationTitle(conversation, text);
     state = { ...state, activeConversationId: conversation.id };
-    input.value = "";
-    autosize();
     dispatch({ type: "user", conversationId: conversation.id, text });
     dispatch({ type: "pending", conversationId: conversation.id });
     try {
-      activeRequestId = await deps.send(text, conversation.id);
+      activeRequestId = await deps.send({ ...payload, userText: text }, conversation.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       dispatch({ type: "error", requestId: null, conversationId: conversation.id, message });
@@ -302,14 +295,19 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     }
   }
 
-  input.addEventListener("input", autosize);
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      void submit();
-    }
+  const composer: ComposerHandle = mountComposer({
+    editorHost: inputHost,
+    wrapHost: inputWrap,
+    placeholder: "说点什么…",
+    getScope: () => currentScope,
+    listFiles: deps.listFiles,
+    listSkills: deps.listSkills,
+    onSubmit: (payload) => { void submit(payload); },
+    onEmptySend: () => { void toggleHistoryPopover(); },
+    onChange: updateSendMode,
   });
-  sendBtn.addEventListener("click", () => { void submit(); });
+  sendBtn.addEventListener("click", () => composer.submit());
+  expandBtn.addEventListener("click", () => composer.expandLarge());
   newBtn.addEventListener("click", () => { void startNewConversation(); });
 
   function onDocumentPointerDown(e: PointerEvent) {
@@ -330,25 +328,11 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   const permBubble = mountPermissionBubble(permRegion, (req, decision, writeMode) => {
     return resolvePermission(req.request_id, decision, writeMode);
   });
-  // mention 下拉需在 skillPicker 之后创建（closeSkill 引用 skillPicker），故用前置占位
-  // 让 skillPicker 的 closeMention 能引用到尚未创建的 mentionPicker。
-  let closeMentionMenuFn: () => void = () => {};
-  const skillPicker = mountSkillPicker({
-    bot,
-    input,
-    inputWrap,
-    listSkills: deps.listSkills,
-    openInput: () => setInputOpen(true),
-    closeMention: () => closeMentionMenuFn(),
+  bot.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    setInputOpen(true);
+    composer.openSkillPicker();
   });
-  const mentionPicker = mountMentionPicker({
-    input,
-    dock: inputWrap.parentElement!,
-    listFiles: deps.listFiles,
-    getScope: () => currentScope,
-    closeSkill: () => skillPicker.close(),
-  });
-  closeMentionMenuFn = () => mentionPicker.close();
 
   /** 统一的 permission resolve 入口：派发 reducer 状态 + 调 Rust + 清 dock 兜底气泡。
    *  流内 action 卡与 dock 兜底气泡共用，以 requestId 为幂等键。 */
@@ -392,7 +376,8 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       const message = state.messages[i];
       if (message.role !== "user") continue;
       dispatch({ type: "pending", conversationId: activeConversation.id });
-      void deps.send(message.text, activeConversation.id).then((requestId) => {
+      // 历史消息仅保存展示文本；旧会话与纯文本消息重试时保持向后兼容。
+      void deps.send({ userText: message.text, references: [] }, activeConversation.id).then((requestId) => {
         activeRequestId = requestId;
       }).catch((err) => {
         dispatch({
@@ -461,14 +446,14 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       unlisten?.();
       permUnlisten?.();
       permBubble.destroy();
-      skillPicker.destroy();
-      mentionPicker.destroy();
+      composer.destroy();
       document.removeEventListener("pointerdown", onDocumentPointerDown);
       root.classList.remove("assistant");
       root.innerHTML = "";
     },
     setScope(scope: ChatScope | null) {
       currentScope = scope;
+      composer.setScope(scope);
       setActiveConversation(null);
       closeHistoryPopover();
       state = emptyChat();
@@ -516,16 +501,16 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       permBubble.reject();
     },
     isSkillMenuOpen() {
-      return skillPicker.isOpen();
+      return composer.isPopoverOpen();
     },
     closeSkillMenu() {
-      skillPicker.close();
+      composer.closePopover();
     },
     isMentionMenuOpen() {
-      return mentionPicker.isOpen();
+      return false;
     },
     closeMentionMenu() {
-      mentionPicker.close();
+      composer.closePopover();
     },
   };
 }

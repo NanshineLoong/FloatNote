@@ -16,8 +16,11 @@ into a reconciled message list with incremental DOM updates.
   `EditPreviewDetail` types shared with action-card.
 - `markdown.ts` — minimal block markdown renderer using shared Markdown
   primitives, never note internals.
-- `mention-picker.ts`, `skill-picker.ts` — docked dropdowns (`/`-mention and
-  right-menu skills). Share the docked floating-menu helper.
+- `input/` — the CM6 assistant composer: atomic file/skill chips, unified
+  caret-following candidate popover, structured clipboard/send payload, and
+  the in-window large-input overlay. `mention-picker.ts` and `skill-picker.ts`
+  remain the data-type sources for the composer; their legacy textarea menus
+  are no longer mounted by `assistant.ts`.
 - `styles.css` — assistant card/bubble/diff/picker styling.
 
 Cross-feature contracts come from `src/platform/`; shared helpers/UI come from

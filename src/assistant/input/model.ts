@@ -29,6 +29,8 @@ export type Segment =
   | { type: "text"; text: string }
   | { type: "ref"; ref: Ref };
 
+export const REF_CLIPBOARD_MIME = "text/x-floatnote-refs";
+
 /** 引用 token 的起止哨兵（私用区，永不进入用户正文）。 */
 export const REF_OPEN = "\uF101";
 export const REF_CLOSE = "\uF102";
@@ -105,6 +107,38 @@ export function visibleText(segments: Segment[]): string {
 /** 文档里是否含引用 token。 */
 export function hasRef(text: string): boolean {
   return text.indexOf(REF_OPEN) !== -1 && text.indexOf(REF_CLOSE) !== -1;
+}
+
+/** 内部剪贴板同时提供可供其他应用阅读的纯文本，以及可恢复 chip 的片段。 */
+export function clipboardPayload(text: string): { plainText: string; structured: Segment[] } {
+  const structured = parseDoc(text);
+  return { plainText: visibleText(structured), structured };
+}
+
+/** 从自定义 MIME 恢复片段；无效或外部剪贴板退化为普通文本。 */
+export function docFromClipboard(plainText: string, structured: string): string {
+  try {
+    const parsed = JSON.parse(structured) as unknown;
+    if (Array.isArray(parsed) && parsed.every(isSegment)) return serializeDoc(parsed);
+  } catch {
+    // External clipboard content has no FloatNote MIME, which is expected.
+  }
+  return plainText;
+}
+
+function isSegment(value: unknown): value is Segment {
+  if (!value || typeof value !== "object") return false;
+  const segment = value as { type?: unknown; text?: unknown; ref?: unknown };
+  if (segment.type === "text") return typeof segment.text === "string";
+  if (segment.type !== "ref" || !segment.ref || typeof segment.ref !== "object") return false;
+  const ref = segment.ref as { kind?: unknown; id?: unknown; display?: unknown; meta?: unknown };
+  if ((ref.kind !== "file" && ref.kind !== "skill") || typeof ref.id !== "string" || typeof ref.display !== "string") {
+    return false;
+  }
+  if (ref.meta === undefined) return true;
+  if (!ref.meta || typeof ref.meta !== "object") return false;
+  const noteKind = (ref.meta as { noteKind?: unknown }).noteKind;
+  return noteKind === undefined || noteKind === "inbox" || noteKind === "tasks" || noteKind === "piece" || noteKind === "doc";
 }
 
 /** 定位包含 pos 的引用 token 区间（供 chip X 按钮按位置删整个 token）。无则 null。 */
