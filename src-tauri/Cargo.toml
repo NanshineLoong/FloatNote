@@ -20,6 +20,11 @@ tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-shell = "2"
+# WebdriverIO 审查支持（仅 debug 构建使用）：tauri-plugin-wdio 提供
+# webview 内 JS 执行/IPC mock/日志捕获，tauri-plugin-wdio-webdriver 提供
+# embedded WebDriver 服务（macOS 无需系统 safaridriver）。
+tauri-plugin-wdio = "1"
+tauri-plugin-wdio-webdriver = "1"
 trash = "5"
 base64 = "0.22"
 percent-encoding = "2"

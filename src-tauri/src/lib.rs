@@ -29,7 +29,9 @@ use std::sync::Mutex;
 use tauri::{Manager, WindowEvent};
 
 pub fn run() {
-    tauri::Builder::default()
+    // `mut` 仅在 debug 构建注册 wdio 插件时需要；release 下会被剥离，故关 unused_mut。
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -72,7 +74,18 @@ pub fn run() {
                     .body("not found".as_bytes().to_vec())
                     .unwrap(),
             }
-        })
+        });
+
+    // WebdriverIO 审查支持：仅在 debug 构建注册，避免进入 release 产物。
+    // tauri-plugin-wdio 提供 webview 内 execute / IPC mock / 前后端日志捕获；
+    // tauri-plugin-wdio-webdriver 提供 embedded WebDriver（macOS 无需 safaridriver）。
+    #[cfg(debug_assertions)]
+    {
+        builder = builder.plugin(tauri_plugin_wdio::init());
+        builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
+    }
+
+    builder
         .setup(|app| {
             let path = commands::config_path(app.handle());
             let config = config::load(&path);
@@ -118,6 +131,7 @@ pub fn run() {
             let _ = app
                 .handle()
                 .set_activation_policy(tauri::ActivationPolicy::Accessory);
+
 
             // Hide instead of close the note window so it can be re-opened later.
             if let Some(note_win) = app.get_webview_window("main") {

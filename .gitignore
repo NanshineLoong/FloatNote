@@ -8,3 +8,8 @@ src-tauri/resources/sidecar
 .floatnote/
 .superpowers/
 .claude/
+# WebdriverIO 审查产物（截图等）
+artifacts/*
+!artifacts/.gitkeep
+# WebdriverIO 捕获的运行日志
+logs/
