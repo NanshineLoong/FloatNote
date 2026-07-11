@@ -205,12 +205,13 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             if let Some(state) = app.try_state::<AppState>() {
                 *state.agent_ready.lock().unwrap() = true;
                 // 无条件下发 skill 目录（与 AI 凭据正交：picker 可在配置 AI 前拉取列表）。
-                let skill_paths = resolve_skill_paths(app);
+                let skill_paths = skill_paths_for_app(app);
                 {
                     let mut guard = state.agent.lock().unwrap();
                     if let Some(agent) = guard.as_mut() {
                         if !skill_paths.is_empty() {
-                            let _ = agent.send(&HostToSidecar::SetSkillPaths { skill_paths });
+                            let disabled_skill_names = state.config.lock().unwrap().disabled_skills.clone();
+                            let _ = agent.send(&HostToSidecar::SetSkillPaths { skill_paths, disabled_skill_names });
                         }
                     }
                 }
@@ -322,7 +323,7 @@ fn on_sidecar_exit(app: &AppHandle) {
 /// - 用户全局：`~/.floatnote/skills`（用户自建，复用 chat_history 的 home 解析）。
 ///
 /// 仅返回已存在的目录；全无则空 vec（降级，不崩）。
-fn resolve_skill_paths(app: &AppHandle) -> Vec<String> {
+pub fn skill_paths_for_app(app: &AppHandle) -> Vec<String> {
     let mut paths: Vec<String> = Vec::new();
 
     let bundled = app.path().resource_dir().ok().map(|d| d.join("skills"));

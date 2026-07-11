@@ -54,6 +54,7 @@ export type HostToSidecar =
       /** Host delivers skill directories for the sidecar to load at startup. */
       type: "set_skill_paths";
       skillPaths: string[];
+      disabledSkillNames?: string[];
     };
 
 export type NoteTarget = { kind: "inbox" | "tasks" | "piece" | "doc"; name?: string };

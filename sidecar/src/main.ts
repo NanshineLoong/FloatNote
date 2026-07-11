@@ -60,7 +60,7 @@ async function main(): Promise<void> {
         send({ type: "skills_list", callId: msg.callId, skills: runner.listSkills() });
         break;
       case "set_skill_paths":
-        await runner.setSkillPaths(msg.skillPaths);
+        await runner.setSkillPaths(msg.skillPaths, msg.disabledSkillNames);
         break;
       case "cancel":
         await runner.cancel(msg.requestId);

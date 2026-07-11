@@ -30,7 +30,7 @@ const bodies = new Map<string, string>();
  * Missing/empty directories contribute no skills and never throw. Skills with
  * duplicate names keep the first occurrence (mirrors Pi's collision behavior).
  */
-export function loadSkillPaths(paths: string[]): void {
+export function loadSkillPaths(paths: string[], disabledSkillNames: string[] = []): void {
   const aggregated: Skill[] = [];
   const seen = new Set<string>();
   for (const dir of paths) {
@@ -47,9 +47,10 @@ export function loadSkillPaths(paths: string[]): void {
     }
   }
 
+  const enabled = aggregated.filter((skill) => !disabledSkillNames.includes(skill.name));
   // Read each skill's full SKILL.md text into memory once (zero FS at runtime).
   bodies.clear();
-  for (const skill of aggregated) {
+  for (const skill of enabled) {
     try {
       if (existsSync(skill.filePath)) {
         bodies.set(skill.name, readFileSync(skill.filePath, "utf8"));
@@ -58,7 +59,7 @@ export function loadSkillPaths(paths: string[]): void {
       // unreadable file — leave body absent; read_skill will report unknown
     }
   }
-  skills = aggregated;
+  skills = enabled;
 }
 
 /** Enumerate loaded skills as {name, description}. */

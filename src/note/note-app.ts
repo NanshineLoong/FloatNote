@@ -1192,8 +1192,8 @@ window.addEventListener("resize", () => {
 async function init() {
   const config = await getConfig();
   applyFontSize(config.font_size);
-  session.pieceOutlineDefault = config.piece_outline_default ?? false;
-  applyPieceOutlineMode(session.pieceOutlineDefault);
+  session.pieceOutlineDefault = false;
+  applyPieceOutlineMode(false);
   await bootstrapProjects(config);
 
   const assistant = await invoke<{ open: boolean }>("get_assistant_state");

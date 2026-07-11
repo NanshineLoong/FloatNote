@@ -24,6 +24,7 @@
 
 html,
 body {
+  font-size: var(--fn-font-size, 15px);
   margin: 0;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;

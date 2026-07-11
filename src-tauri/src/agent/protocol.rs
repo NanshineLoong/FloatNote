@@ -57,6 +57,8 @@ pub enum HostToSidecar {
     /// sidecar 收到后调 `skills.reload()`，把描述与全文读入内存。
     SetSkillPaths {
         skill_paths: Vec<String>,
+        #[serde(default)]
+        disabled_skill_names: Vec<String>,
     },
     /// 请求 sidecar 的已加载 skill 列表（同步一次性请求-响应）。
     /// sidecar 回 `SkillsList` 解除 host 侧 oneshot 等待。
@@ -431,6 +433,7 @@ mod tests {
     fn set_skill_paths_serializes_camel_case() {
         let msg = HostToSidecar::SetSkillPaths {
             skill_paths: vec!["/a/skills".into(), "/b/skills".into()],
+            disabled_skill_names: vec!["disabled".into()],
         };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains("\"type\":\"set_skill_paths\""), "{json}");

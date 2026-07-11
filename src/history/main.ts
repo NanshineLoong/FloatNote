@@ -10,6 +10,9 @@ import { formatHistoryTime } from "../platform/chat-history-format";
 import { createIcon } from "../shared/ui/icon";
 import { createButton } from "../shared/ui/button";
 import { createMenu } from "../shared/ui/menu";
+import { initializeAppearance } from "../shared/appearance";
+
+void initializeAppearance();
 
 function buttonMarkup(
   className: string,
