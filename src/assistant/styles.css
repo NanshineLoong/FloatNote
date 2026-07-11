@@ -1118,6 +1118,53 @@ pre.chat-codeblock code {
   font-size: 12px;
 }
 
+/* ── 大输入覆盖层：同一 CM6 输入器切换为固定全屏形态 ──────────────────── */
+.fn-input-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.25);
+  animation: fn-overlay-in 0.16s ease;
+}
+
+.fn-input-overlay-backdrop[hidden] {
+  display: none;
+}
+
+@keyframes fn-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 展开：宿主脱离 dock 流，固定居中成为大编辑区；停用滑入过渡。 */
+.assistant-input-wrap.fn-input-large {
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(720px, 92vw);
+  width: 92vw;
+  opacity: 1;
+  transition: none;
+  z-index: 41;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 0.5px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.assistant-input-wrap.fn-input-large .fn-assistant-input {
+  max-height: 70vh;
+  min-height: 160px;
+  border-radius: 12px;
+}
+
 /* allow / deny 按钮：迁移到 createButton（.fn-btn--primary / --secondary），
    variant 接管颜色与 hover；这里只保留宽度等分布局。 */
 .perm-bubble-root > .fn-btn {
