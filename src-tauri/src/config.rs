@@ -37,7 +37,7 @@ pub struct Config {
     pub shortcut_toggle: String,
     /// 划词悬浮窗快捷键（弹窗式抓取），默认 ⌥⌘P。与 shortcut_capture（直接抓取）独立。
     pub shortcut_popup: String,
-    /// 划词悬浮窗自动触发模式："off"（关闭）/ "every"（每次选中即弹）/ "modifier"（按住 ⌥ 选中时弹）。
+    /// 划词悬浮窗模式："auto"（鼠标选区自动弹）/ "shortcut"（仅快捷键）/ "off"（关闭自动监听）。
     pub auto_popup_mode: String,
     /// 笔记窗内快捷键（窗口聚焦时生效，纯前端分派）。默认值见 WindowShortcuts::default。
     pub window_shortcuts: WindowShortcuts,
@@ -71,7 +71,7 @@ impl Default for Config {
             shortcut_capture: "Alt+Cmd+C".to_string(),
             shortcut_toggle: "Alt+Cmd+N".to_string(),
             shortcut_popup: "Alt+Cmd+P".to_string(),
-            auto_popup_mode: "off".to_string(),
+            auto_popup_mode: "auto".to_string(),
             window_shortcuts: WindowShortcuts::default(),
             piece_outline_default: false,
             font_size: 15,
@@ -89,9 +89,23 @@ impl Default for Config {
 
 pub fn load(path: &Path) -> Config {
     match std::fs::read_to_string(path) {
-        Ok(contents) => serde_json::from_str(&contents).unwrap_or_default(),
+        Ok(contents) => {
+            let mut config: Config = serde_json::from_str(&contents).unwrap_or_default();
+            config.auto_popup_mode = normalize_auto_popup_mode(&config.auto_popup_mode);
+            config
+        }
         Err(_) => Config::default(),
     }
+}
+
+pub fn normalize_auto_popup_mode(mode: &str) -> String {
+    match mode {
+        "every" | "auto" => "auto",
+        "modifier" | "shortcut" => "shortcut",
+        "off" => "off",
+        _ => "auto",
+    }
+    .to_string()
 }
 
 pub fn save(path: &Path, config: &Config) -> std::io::Result<()> {
@@ -139,9 +153,16 @@ mod tests {
     }
 
     #[test]
-    fn auto_popup_mode_defaults_off() {
+    fn auto_popup_mode_defaults_auto() {
         let config = Config::default();
-        assert_eq!(config.auto_popup_mode, "off");
+        assert_eq!(config.auto_popup_mode, "auto");
+    }
+
+    #[test]
+    fn legacy_auto_popup_modes_are_migrated() {
+        assert_eq!(normalize_auto_popup_mode("every"), "auto");
+        assert_eq!(normalize_auto_popup_mode("modifier"), "shortcut");
+        assert_eq!(normalize_auto_popup_mode("off"), "off");
     }
 
     #[test]

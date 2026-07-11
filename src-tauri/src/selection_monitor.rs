@@ -1,13 +1,13 @@
-//! 自动划词悬浮窗触发器：用一个全局 CGEventTap 监听 `leftMouseUp`，按
-//! `auto_popup_mode` 决定是否调用既有的 `popup::run_popup_capture`。
+//! 自动划词悬浮窗触发器：用全局 CGEventTap 识别鼠标拖选、系统双击和
+//! 系统三击，再经 Accessibility 选区证据确认后触发 popup capture。
 //!
 //! 设计要点：
 //! - **C 回调而非 ObjC block**：`CGEventTapCreate` 接受一个 `extern "C" fn` 指针，
 //!   不需要在 objc2 0.2 里构造 block，复用 `capture.rs` 里声明 extern C 的既有风格。
-//! - **只听不改**：`kCGEventTapOptionListen`，回调原样返回事件，绝不拦截/吞掉输入。
-//! - **不在 run loop 线程上做长任务**：回调里只做廉价的模式/修饰键判断，命中后
-//!   `thread::spawn` 跑 `run_popup_capture`（其内部含 150ms 剪贴板等待），避免阻塞
-//!   主 run loop（鼠标抬起频率远高于快捷键）。
+//! - **最小拦截**：普通鼠标/键盘事件原样返回；只有弹窗可见时的 Esc 被消费，
+//!   使它只关闭最上层临时工具条而不同时影响来源应用。
+//! - **单工作线程**：回调只完成手势归一化并把候选送入有界队列；AX 选区确认和
+//!   剪贴板抓取在一个持久 worker 中串行执行，避免每次 mouse-up 创建线程。
 //! - **复用既有管线**：`CaptureGuard` 重入保护、`check_accessibility`、
 //!   `read_selection`/`simulate_copy`、`cursor::get_cursor_pos`、`PopupCache`、
 //!   `submit_popup_capture`/`dismiss_popup` 全部原样复用，本模块只改「谁来调用」。
@@ -17,8 +17,32 @@
 //! 既有 `accessibility-needed` 横幅提示用户去系统设置授权。
 
 use std::ffi::c_void;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{mpsc, LazyLock, Mutex};
 use tauri::{AppHandle, Manager};
+
+use crate::selection_intent::{
+    MouseDown, MouseUp, Point, SelectionCandidate, SelectionIntentTracker,
+};
+
+#[derive(Clone, Copy)]
+struct LogicalRect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+fn point_in_rect(point: Point, rect: LogicalRect) -> bool {
+    point.x >= rect.x
+        && point.x <= rect.x + rect.width
+        && point.y >= rect.y
+        && point.y <= rect.y + rect.height
+}
+
+fn should_consume_escape(popup_visible: bool, event_type: u32, key_code: i64) -> bool {
+    popup_visible && event_type == 10 && key_code == 53
+}
 
 #[cfg(target_os = "macos")]
 mod cg {
@@ -29,18 +53,19 @@ mod cg {
                                               // CGEventTapPlacement
     pub const KCG_HEAD_INSERT_EVENT_TAP: i32 = 0;
     // CGEventTapOptions
-    pub const KCG_EVENT_TAP_OPTION_LISTEN: u32 = 1; // 只听不改
-                                                    // CGEventType
+    pub const KCG_EVENT_TAP_OPTION_DEFAULT: u32 = 0;
+    // CGEventType
     pub const KCG_LEFT_MOUSE_DOWN: u32 = 1;
     pub const KCG_LEFT_MOUSE_UP: u32 = 2;
-    // CGEventMask = 1 << eventType。同时听 down+up：down 记起点，up 算位移判断真选区。
-    pub const EVENT_MASK: u64 = (1u64 << KCG_LEFT_MOUSE_DOWN) | (1u64 << KCG_LEFT_MOUSE_UP);
-    // CGEventFlags — NSEventModifierFlagOption（与 capture.rs::cg::MASK_OPTION 一致）
-    pub const MASK_OPTION: u64 = 0x0008_0000;
-    // 拖动距离阈值（屏幕点）：小于此值且非多次点击视为纯点击，不触发。
-    pub const DRAG_THRESHOLD: f64 = 5.0;
-    // 多击判定窗口：500ms 内、位移 < DRAG_THRESHOLD 的连续按下算双击/三击。
-    pub const MULTI_CLICK_WINDOW_MS: u128 = 500;
+    pub const KCG_KEY_DOWN: u32 = 10;
+    pub const KCG_TAP_DISABLED_BY_TIMEOUT: u32 = 0xFFFF_FFFE;
+    pub const KCG_TAP_DISABLED_BY_USER_INPUT: u32 = 0xFFFF_FFFF;
+    // CGEventMask = 1 << eventType。
+    pub const EVENT_MASK: u64 =
+        (1u64 << KCG_LEFT_MOUSE_DOWN) | (1u64 << KCG_LEFT_MOUSE_UP) | (1u64 << KCG_KEY_DOWN);
+    pub const KCG_MOUSE_EVENT_NUMBER: u32 = 0;
+    pub const KCG_MOUSE_EVENT_CLICK_STATE: u32 = 1;
+    pub const KCG_KEYBOARD_EVENT_KEYCODE: u32 = 9;
 
     pub type CGEventRef = *mut c_void;
     pub type CGEventTapProxy = *mut c_void;
@@ -67,8 +92,9 @@ mod cg {
             callback: CGEventTapCallBack,
             user_info: *mut c_void,
         ) -> *mut c_void; // CFMachPortRef
-        pub fn CGEventGetFlags(event: CGEventRef) -> u64;
         pub fn CGEventGetLocation(event: CGEventRef) -> CGPoint;
+        pub fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
+        pub fn CGEventTapEnable(tap: *mut c_void, enable: bool);
     }
 
     #[link(name = "CoreFoundation", kind = "framework")]
@@ -106,13 +132,14 @@ static MONITOR: Mutex<Option<MonitorHandles>> = Mutex::new(None);
 static APP: Mutex<Option<AppHandle>> = Mutex::new(None);
 
 #[cfg(target_os = "macos")]
-type LastDown = ((f64, f64), u32, std::time::Instant);
+static TRACKER: LazyLock<Mutex<SelectionIntentTracker>> =
+    LazyLock::new(|| Mutex::new(SelectionIntentTracker::default()));
 
-/// 上次左键按下的（位置、累计多击数、时刻）。抬起时算位移判断「真选区 vs 纯点击」，
-/// 多击数用于放行双击选词/三击选行。macOS 26 未导出 CGEventGetIntegerEventField，
-/// 故多击数靠手动计数（500ms 内、位移小的连续按下累加）。
 #[cfg(target_os = "macos")]
-static LAST_DOWN: Mutex<Option<LastDown>> = Mutex::new(None);
+static WORKER: Mutex<Option<mpsc::SyncSender<SelectionCandidate>>> = Mutex::new(None);
+
+#[cfg(target_os = "macos")]
+static LATEST_SELECTION_EVENT: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(target_os = "macos")]
 extern "C" fn on_mouse_event(
@@ -121,89 +148,170 @@ extern "C" fn on_mouse_event(
     event: *mut c_void,
     _user_info: *mut c_void,
 ) -> *mut c_void {
-    // 回调绝不能 panic 穿越 FFI 边界。
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        handle_mouse_event(type_, event);
-    }));
-    event
+    let consume = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        handle_global_event(type_, event)
+    }))
+    .unwrap_or(false);
+    if consume {
+        std::ptr::null_mut()
+    } else {
+        event
+    }
 }
 
 #[cfg(target_os = "macos")]
-fn handle_mouse_event(type_: u32, event: *mut c_void) {
-    // 左键按下：记录起点 + 累计多击数后即返回（不做任何抓取）。
-    if type_ == cg::KCG_LEFT_MOUSE_DOWN {
-        let loc = unsafe { cg::CGEventGetLocation(event) };
-        let now = std::time::Instant::now();
-        if let Ok(mut g) = LAST_DOWN.lock() {
-            let count = match *g {
-                Some(((px, py), n, t))
-                    if now.duration_since(t).as_millis() <= cg::MULTI_CLICK_WINDOW_MS
-                        && ((loc.x - px).powi(2) + (loc.y - py).powi(2)).sqrt()
-                            < cg::DRAG_THRESHOLD =>
-                {
-                    n.saturating_add(1)
-                }
-                _ => 1,
-            };
-            *g = Some(((loc.x, loc.y), count, now));
+fn handle_global_event(type_: u32, event: *mut c_void) -> bool {
+    if matches!(
+        type_,
+        cg::KCG_TAP_DISABLED_BY_TIMEOUT | cg::KCG_TAP_DISABLED_BY_USER_INPUT
+    ) {
+        if let Ok(slot) = MONITOR.lock() {
+            if let Some(handles) = slot.as_ref() {
+                unsafe { cg::CGEventTapEnable(handles.port, true) };
+            }
         }
-        return;
-    }
-
-    // 只处理左键抬起；tap 被禁用等杂项 type 忽略。
-    if type_ != cg::KCG_LEFT_MOUSE_UP {
-        return;
+        return false;
     }
 
     let app = match APP.lock().ok().and_then(|g| g.clone()) {
-        Some(a) => a,
-        None => return, // 未 install
+        Some(app) => app,
+        None => return false,
     };
 
-    // 廉价地在 run loop 线程上读模式 + 修饰键。
-    let mode = app
-        .try_state::<crate::state::AppState>()
-        .and_then(|s| s.config.lock().ok().map(|c| c.auto_popup_mode.clone()))
-        .unwrap_or_default();
-    if mode != "every" && mode != "modifier" {
-        return; // off
+    if type_ == cg::KCG_KEY_DOWN {
+        let key_code =
+            unsafe { cg::CGEventGetIntegerValueField(event, cg::KCG_KEYBOARD_EVENT_KEYCODE) };
+        let visible = crate::popup::is_visible(&app);
+        if should_consume_escape(visible, type_, key_code) {
+            crate::popup::dismiss_active(&app);
+            return true;
+        }
+        if visible {
+            crate::popup::dismiss_active(&app);
+        }
+        return false;
     }
-    if mode == "modifier" {
-        let flags = unsafe { cg::CGEventGetFlags(event) };
-        if flags & cg::MASK_OPTION == 0 {
-            return; // 未按住 ⌥
+
+    let location = unsafe { cg::CGEventGetLocation(event) };
+    let point = Point {
+        x: location.x,
+        y: location.y,
+    };
+    if type_ == cg::KCG_LEFT_MOUSE_DOWN {
+        if let Some(rect) = popup_rect(&app) {
+            if point_in_rect(point, rect) {
+                return false;
+            }
+            crate::popup::dismiss_active(&app);
         }
     }
 
-    // 区分真选区与纯点击：拖动 ≥ 阈值，或双击/三击（累计多击数 ≥ 2）。
-    // 纯单击（位移小、多击数=1）直接跳过，根本不进入剪贴板流程，
-    // 避免无选区时误弹窗、也省掉无谓的剪贴板破坏。
-    let up = unsafe { cg::CGEventGetLocation(event) };
-    let down_state = LAST_DOWN.lock().ok().and_then(|mut g| g.take());
-    let is_selection = match down_state {
-        Some(((dx, dy), count, _t)) => {
-            let dist = ((up.x - dx).powi(2) + (up.y - dy).powi(2)).sqrt();
-            dist >= cg::DRAG_THRESHOLD || count >= 2
-        }
-        None => false, // tap 装在按下之后：无起点信息则不触发（保守）
+    if !auto_mode_enabled(&app) {
+        return false;
+    }
+
+    let Some(pid) = crate::source::frontmost_pid() else {
+        return false;
     };
-    if !is_selection {
+    let event_number =
+        unsafe { cg::CGEventGetIntegerValueField(event, cg::KCG_MOUSE_EVENT_NUMBER) } as u64;
+
+    if type_ == cg::KCG_LEFT_MOUSE_DOWN {
+        LATEST_SELECTION_EVENT.store(event_number, Ordering::SeqCst);
+        let target = crate::selection_probe::target_kind_at(point, pid);
+        if let Ok(mut tracker) = TRACKER.lock() {
+            tracker.on_mouse_down(MouseDown {
+                event_number,
+                pid,
+                point,
+                target,
+            });
+        }
+        return false;
+    }
+
+    if type_ != cg::KCG_LEFT_MOUSE_UP {
+        return false;
+    }
+    let click_count =
+        unsafe { cg::CGEventGetIntegerValueField(event, cg::KCG_MOUSE_EVENT_CLICK_STATE) }
+            .clamp(1, u8::MAX as i64) as u8;
+    let candidate = TRACKER.lock().ok().and_then(|mut tracker| {
+        tracker.on_mouse_up(MouseUp {
+            event_number,
+            pid,
+            point,
+            click_count,
+        })
+    });
+    if let Some(candidate) = candidate {
+        if let Some(sender) = WORKER.lock().ok().and_then(|slot| slot.clone()) {
+            let _ = sender.try_send(candidate);
+        }
+    }
+    false
+}
+
+#[cfg(target_os = "macos")]
+fn popup_rect(app: &AppHandle) -> Option<LogicalRect> {
+    let popup = app.get_webview_window("selection-popup")?;
+    if !popup.is_visible().ok()? {
+        return None;
+    }
+    let scale = popup.scale_factor().ok()?;
+    let position = popup.outer_position().ok()?;
+    let size = popup.outer_size().ok()?;
+    Some(LogicalRect {
+        x: position.x as f64 / scale,
+        y: position.y as f64 / scale,
+        width: size.width as f64 / scale,
+        height: size.height as f64 / scale,
+    })
+}
+
+fn auto_mode_enabled(app: &AppHandle) -> bool {
+    app.try_state::<crate::state::AppState>()
+        .and_then(|state| {
+            state
+                .config
+                .lock()
+                .ok()
+                .map(|config| config.auto_popup_mode == "auto")
+        })
+        .unwrap_or(false)
+}
+
+pub fn is_current_selection_event(event_number: u64) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return LATEST_SELECTION_EVENT.load(Ordering::SeqCst) == event_number;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = event_number;
+        false
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn install_worker(app: AppHandle) {
+    let mut slot = WORKER.lock().expect("WORKER mutex poisoned");
+    if slot.is_some() {
         return;
     }
-
-    // 弹窗已显示 → 短路，让用户先处理当前这次（与原 spec 决策一致）。
-    if let Some(w) = app.get_webview_window("selection-popup") {
-        if w.is_visible().unwrap_or(false) {
-            return;
-        }
-    }
-
-    // modifier 模式走 AX 菜单复制（⌥ 可保持按住）；every 模式走键盘 Cmd+C。
-    let via_menu = mode == "modifier";
-
-    // 跑 capture 管线（含 150ms 剪贴板等待 + AX IPC）放后台线程，避免阻塞 run loop。
+    let (sender, receiver) = mpsc::sync_channel::<SelectionCandidate>(8);
+    *slot = Some(sender);
     std::thread::spawn(move || {
-        crate::popup::run_popup_capture_with(&app, via_menu);
+        while let Ok(candidate) = receiver.recv() {
+            std::thread::sleep(std::time::Duration::from_millis(35));
+            if !is_current_selection_event(candidate.event_number)
+                || !auto_mode_enabled(&app)
+                || !crate::selection_probe::completed_selection(candidate)
+            {
+                continue;
+            }
+            crate::popup::run_auto_popup_capture(&app, candidate.event_number);
+        }
     });
 }
 
@@ -217,7 +325,10 @@ pub fn install(app: AppHandle) {
         }
     }
     #[cfg(target_os = "macos")]
-    install_macos(app);
+    {
+        install_worker(app.clone());
+        install_macos(app);
+    }
     #[cfg(not(target_os = "macos"))]
     {
         let _ = app;
@@ -241,7 +352,7 @@ fn install_macos(app: AppHandle) {
         cg::CGEventTapCreate(
             cg::KCG_SESSION_EVENT_TAP,
             cg::KCG_HEAD_INSERT_EVENT_TAP,
-            cg::KCG_EVENT_TAP_OPTION_LISTEN,
+            cg::KCG_EVENT_TAP_OPTION_DEFAULT,
             cg::EVENT_MASK,
             on_mouse_event,
             std::ptr::null_mut(),
@@ -284,4 +395,31 @@ pub fn uninstall() {
     }
     #[cfg(not(target_os = "macos"))]
     {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escape_is_consumed_only_while_popup_is_visible() {
+        assert!(should_consume_escape(true, 10, 53));
+        assert!(!should_consume_escape(false, 10, 53));
+        assert!(!should_consume_escape(true, 10, 36));
+        assert!(!should_consume_escape(true, 1, 53));
+    }
+
+    #[test]
+    fn popup_hit_test_uses_visible_window_bounds() {
+        let rect = LogicalRect {
+            x: 100.0,
+            y: 200.0,
+            width: 80.0,
+            height: 40.0,
+        };
+        assert!(point_in_rect(Point { x: 100.0, y: 200.0 }, rect));
+        assert!(point_in_rect(Point { x: 180.0, y: 240.0 }, rect));
+        assert!(!point_in_rect(Point { x: 99.0, y: 220.0 }, rect));
+        assert!(!point_in_rect(Point { x: 140.0, y: 241.0 }, rect));
+    }
 }

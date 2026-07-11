@@ -52,7 +52,7 @@ pub fn set_auto_popup_mode(
 }
 
 fn is_valid_auto_popup_mode(mode: &str) -> bool {
-    matches!(mode, "off" | "every" | "modifier")
+    matches!(mode, "off" | "auto" | "shortcut")
 }
 
 #[cfg(test)]
@@ -62,8 +62,10 @@ mod tests {
     #[test]
     fn auto_popup_mode_is_an_explicit_allowlist() {
         assert!(is_valid_auto_popup_mode("off"));
-        assert!(is_valid_auto_popup_mode("every"));
-        assert!(is_valid_auto_popup_mode("modifier"));
+        assert!(is_valid_auto_popup_mode("auto"));
+        assert!(is_valid_auto_popup_mode("shortcut"));
+        assert!(!is_valid_auto_popup_mode("every"));
+        assert!(!is_valid_auto_popup_mode("modifier"));
         assert!(!is_valid_auto_popup_mode("always"));
         assert!(!is_valid_auto_popup_mode("OFF"));
     }

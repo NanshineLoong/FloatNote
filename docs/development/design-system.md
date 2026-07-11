@@ -34,6 +34,9 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 - 字号：`--fs-xs`(11) / `--fs-sm`(12) / `--fs-base`(13) / `--fs-md`(14) / `--fs-lg`(15，编辑器)。字重 `--fw-regular/medium/semibold`。字体栈 `--font-sans` / `--font-mono`。
 - 圆角：`--radius-xs`(3) / `--sm`(6) / `--md`(8) / `--lg`(10) / `--radius-full`(9999)。
 - 阴影：`--shadow-xs … --shadow-xl`（暗色已重定义更深）。
+- 划词弹窗关闭原生窗口阴影，由唯一的 CSS 工具条容器持有发丝边与
+  `--shadow-sm`；Tauri 窗口按内容动态测量，只保留 6px 阴影余量，避免透明
+  原生边界与可见内容错位。
 
 ## 交互状态（在 `base.css`）
 

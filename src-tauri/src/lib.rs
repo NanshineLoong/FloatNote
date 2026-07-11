@@ -1,5 +1,4 @@
 mod agent;
-mod ax_copy;
 mod capture;
 mod chat_history;
 mod commands;
@@ -10,7 +9,9 @@ mod paths;
 mod platform;
 mod popup;
 mod project;
+mod selection_intent;
 mod selection_monitor;
+mod selection_probe;
 mod shortcuts;
 mod source;
 mod state;

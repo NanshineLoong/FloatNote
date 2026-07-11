@@ -38,16 +38,18 @@
       {
         "label": "selection-popup",
         "url": "popup.html",
-        "width": 256,
-        "height": 46,
+        "width": 100,
+        "height": 50,
         "transparent": true,
         "decorations": false,
+        "focus": false,
+        "focusable": false,
+        "acceptFirstMouse": true,
         "alwaysOnTop": true,
+        "shadow": false,
         "resizable": false,
         "visible": false,
-        "skipTaskbar": true,
-        "hiddenTitle": true,
-        "titleBarStyle": "Overlay"
+        "skipTaskbar": true
       }
     ],
     "security": {

@@ -26,3 +26,18 @@ export function clampToScreen(
   const cy = Math.min(Math.max(y, minY), Math.max(minY, maxY));
   return { x: cx, y: cy };
 }
+
+export function placePopup(
+  anchorX: number,
+  anchorY: number,
+  width: number,
+  height: number,
+  bounds: Rect,
+  gap = 10,
+): { x: number; y: number } {
+  const right = anchorX + gap;
+  const below = anchorY + gap;
+  const x = right + width <= bounds.maxX ? right : anchorX - width - gap;
+  const y = below + height <= bounds.maxY ? below : anchorY - height - gap;
+  return clampToScreen(x, y, width, height, bounds);
+}
