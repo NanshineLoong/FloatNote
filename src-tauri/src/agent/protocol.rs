@@ -101,12 +101,21 @@ pub enum SidecarToHost {
     Tool {
         request_id: String,
         conversation_id: String,
+        call_id: String,
         name: String,
         phase: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        args: Option<serde_json::Value>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        result: Option<serde_json::Value>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        is_error: Option<bool>,
     },
     ApplyEdit {
         call_id: String,
         conversation_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tool_call_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         target: Option<NoteTarget>,
         tool_name: String,
@@ -363,6 +372,7 @@ mod tests {
         let msg = SidecarToHost::ApplyEdit {
             call_id: "w1".into(),
             conversation_id: "c1".into(),
+            tool_call_id: None,
             target: None,
             tool_name: "write_note".into(),
             old_content: "a".into(),

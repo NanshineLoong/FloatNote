@@ -14,7 +14,7 @@ Assistant UI → src/platform/agent → Tauri command → Rust agent host
                                               Node sidecar
 ```
 
-sidecar 将流式对话事件输出到 JSONL；Rust 解析并广播为 `agent://event`，由 `src/platform/agent.ts` 订阅。读取和编辑工具同样经 JSONL 回到 Rust。编辑不会立即落盘：Rust 解析 target、保存 pending edit、发送 `permission://request`；用户在 UI 中 allow 或 deny 后，`resolve_permission` 才完成写入并向 sidecar 回传结果。
+sidecar 将流式对话事件输出到 JSONL；Rust 解析并广播为 `agent://event`，由 `src/platform/agent.ts` 订阅。工具事件携带稳定 `callId`，start 还携带参数摘要，end 携带结果和错误标记，使前端能按真实调用匹配交错执行并展示操作对象。写工具发起 `apply_edit` 时同时携带 Pi 的 `toolCallId`，Rust 将它透传到 `permission://request`，因此权限卡能原位升级正确的工具块。编辑不会立即落盘：Rust 解析 target、保存 pending edit；用户在 UI 中 allow 或 deny 后，`resolve_permission` 才完成写入并向 sidecar 回传结果。
 
 ## 全局划词弹窗
 

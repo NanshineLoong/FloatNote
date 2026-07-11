@@ -22,6 +22,7 @@ export type WriteMode = "direct" | "snapshot";
 export interface PermissionRequest {
   request_id: string;
   conversation_id: string;
+  tool_call_id?: string;
   /** 目标笔记；缺省（target 省略）= 当前活动笔记。仅当 Rust 解析出显式 target 时存在。 */
   target?: { kind: string; name?: string };
   tool_name: string;
@@ -108,7 +109,7 @@ export function renderPreviewCard(preview: EditPreview, canSnapshot: boolean): H
 
 export function mountPermissionBubble(
   root: HTMLElement,
-  onResolve?: (req: PermissionRequest, decision: "allow" | "deny", writeMode: WriteMode) => void,
+  onResolve?: (req: PermissionRequest, decision: "allow" | "deny", writeMode: WriteMode) => void | Promise<void>,
 ): {
   destroy: () => void;
   isOpen: () => boolean;
@@ -128,11 +129,14 @@ export function mountPermissionBubble(
     if (!currentReq) return;
     const req = currentReq;
     if (onResolve) {
-      onResolve(req, decision, writeMode);
+      for (const control of root.querySelectorAll<HTMLButtonElement | HTMLSelectElement>("button, select")) control.disabled = true;
+      Promise.resolve(onResolve(req, decision, writeMode)).then(clearBubble).catch(() => {
+        for (const control of root.querySelectorAll<HTMLButtonElement | HTMLSelectElement>("button, select")) control.disabled = false;
+      });
     } else {
       void invoke("resolve_permission", { requestId: req.request_id, decision, writeMode });
+      clearBubble();
     }
-    clearBubble();
   }
 
   function show(req: PermissionRequest) {

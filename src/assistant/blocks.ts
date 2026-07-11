@@ -1,5 +1,5 @@
 import type { Block, ChatMessage } from "./render";
-import { renderBlock, renderMessage } from "./render";
+import { decorateCodeBlocks, renderBlock, renderMessage } from "./render";
 import { updateActionCard } from "./action-card";
 import { fillMarkdown } from "./markdown";
 
@@ -109,10 +109,19 @@ function indexBlockNodes(msgEl: HTMLElement, bmap: Map<string, HTMLElement>): vo
 /** 更新已存在的块节点内容/状态（不重建）。 */
 function updateBlockNode(node: HTMLElement, block: Block, streaming: boolean): void {
   switch (block.kind) {
+    case "wait": {
+      const label = node.lastElementChild;
+      if (label) label.textContent = block.label;
+      break;
+    }
     case "text": {
       const content = node.querySelector<HTMLElement>(".chat-text-content");
       if (content) fillMarkdown(content, block.text);
+      if (content) decorateCodeBlocks(content);
+      node.dataset.copyText = block.text;
       node.classList.toggle("chat-streaming", streaming);
+      const retry = node.querySelector<HTMLButtonElement>(".chat-retry-btn");
+      if (retry) retry.disabled = streaming;
       break;
     }
     case "thinking": {
@@ -129,6 +138,28 @@ function updateBlockNode(node: HTMLElement, block: Block, streaming: boolean): v
     case "action":
       updateActionCard(node, block);
       break;
+    case "action_group": {
+      if (!node.classList.contains("chat-action-group")) {
+        const replacement = renderBlock(block, streaming);
+        node.className = replacement.className;
+        node.replaceChildren(...Array.from(replacement.childNodes));
+        break;
+      }
+      const summary = node.querySelector<HTMLElement>("summary");
+      if (summary) summary.textContent = block.summary;
+      const items = node.querySelector<HTMLElement>(".chat-action-group-items");
+      if (!items) break;
+      const existing = new Map<string, HTMLElement>();
+      for (const child of Array.from(items.children) as HTMLElement[]) {
+        if (child.dataset.blockId) existing.set(child.dataset.blockId, child);
+      }
+      for (const item of block.items) {
+        const child = existing.get(item.id);
+        if (child) updateActionCard(child, item);
+        else items.appendChild(renderBlock(item, streaming));
+      }
+      break;
+    }
     case "error":
       if (node.textContent !== block.text) node.textContent = block.text;
       break;

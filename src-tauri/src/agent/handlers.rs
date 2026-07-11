@@ -50,6 +50,7 @@ pub(super) fn handle_apply_edit(
     app: &AppHandle,
     call_id: String,
     conversation_id: String,
+    tool_call_id: Option<String>,
     target: Option<NoteTarget>,
     tool_name: String,
     old_content: String,
@@ -67,6 +68,7 @@ pub(super) fn handle_apply_edit(
             let mut payload = serde_json::json!({
                 "request_id": request_id,
                 "conversation_id": conversation_id,
+                "tool_call_id": tool_call_id,
                 "tool_name": tool_name,
                 "old_content": old_content,
                 "new_content": new_content,

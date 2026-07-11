@@ -15,26 +15,53 @@ import { createIcon } from "../../shared/ui/icon";
  * align: "left"（AI 气泡，靠左）/ "right"（用户气泡，靠右）。
  */
 function attachCopyButton(textEl: HTMLElement, rawText: string, align: "left" | "right" = "left"): void {
+  textEl.dataset.copyText = rawText;
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "chat-copy-btn" + (align === "right" ? " is-right" : "");
+  btn.className = "chat-message-action chat-copy-btn" + (align === "right" ? " is-right" : "");
   btn.setAttribute("aria-label", "复制原文");
   btn.title = "复制";
   btn.append(createIcon({ phosphor: "ph ph-copy", size: 14 }));
   btn.addEventListener("click", () => {
-    void copyText(rawText).then((ok) => {
+    void copyText(textEl.dataset.copyText ?? "").then((ok) => {
       if (!ok) return;
       btn.title = "已复制";
+      btn.setAttribute("aria-label", "已复制");
       btn.replaceChildren(createIcon({ phosphor: "ph ph-check", size: 14 }));
       btn.classList.add("is-copied");
       window.setTimeout(() => {
         btn.title = "复制";
+        btn.setAttribute("aria-label", "复制原文");
         btn.replaceChildren(createIcon({ phosphor: "ph ph-copy", size: 14 }));
         btn.classList.remove("is-copied");
       }, 1200);
     });
   });
-  textEl.appendChild(btn);
+  ensureMessageActions(textEl, align).appendChild(btn);
+}
+
+function ensureMessageActions(textEl: HTMLElement, align: "left" | "right" = "left"): HTMLElement {
+  let actions = textEl.querySelector<HTMLElement>(":scope > .chat-message-actions");
+  if (!actions) {
+    actions = document.createElement("div");
+    actions.className = `chat-message-actions${align === "right" ? " is-right" : ""}`;
+    textEl.appendChild(actions);
+  }
+  return actions;
+}
+
+function attachRetryButton(textEl: HTMLElement, blockId: string, disabled: boolean): void {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "chat-message-action chat-retry-btn";
+  btn.setAttribute("aria-label", "重试");
+  btn.title = "重试";
+  btn.disabled = disabled;
+  btn.append(createIcon({ phosphor: "ph ph-arrow-clockwise", size: 14 }));
+  btn.addEventListener("click", () => {
+    textEl.dispatchEvent(new CustomEvent("chat:retry", { bubbles: true, detail: { blockId } }));
+  });
+  ensureMessageActions(textEl).appendChild(btn);
 }
 
 /** 复制文本：优先 navigator.clipboard，降级 execCommand 临时 textarea。 */
@@ -61,6 +88,28 @@ function legacyCopy(text: string): boolean {
     return ok;
   } catch {
     return false;
+  }
+}
+
+export function decorateCodeBlocks(root: HTMLElement): void {
+  for (const pre of root.querySelectorAll<HTMLElement>("pre.chat-codeblock")) {
+    if (pre.querySelector(":scope > .chat-code-copy")) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chat-code-copy";
+    button.title = "复制代码";
+    button.setAttribute("aria-label", "复制代码");
+    button.append(createIcon({ phosphor: "ph ph-copy", size: 13 }));
+    button.addEventListener("click", () => {
+      const code = pre.querySelector("code")?.textContent ?? "";
+      void copyText(code).then((ok) => {
+        if (!ok) return;
+        button.title = "已复制";
+        button.setAttribute("aria-label", "已复制");
+        button.replaceChildren(createIcon({ phosphor: "ph ph-check", size: 13 }));
+      });
+    });
+    pre.appendChild(button);
   }
 }
 
@@ -92,14 +141,27 @@ export function renderBlock(block: Block, streaming: boolean): HTMLElement {
   el.className = `chat-block chat-block-${block.kind}`;
   el.dataset.blockId = block.id;
   switch (block.kind) {
+    case "wait": {
+      el.classList.add("chat-wait");
+      el.setAttribute("role", "status");
+      const indicator = document.createElement("span");
+      indicator.className = "chat-wait-indicator";
+      indicator.setAttribute("aria-hidden", "true");
+      const label = document.createElement("span");
+      label.textContent = block.label;
+      el.append(indicator, label);
+      break;
+    }
     case "text": {
       el.classList.add("chat-text");
       const content = document.createElement("div");
       content.className = "chat-text-content";
       fillMarkdown(content, block.text);
+      decorateCodeBlocks(content);
       el.appendChild(content);
       if (streaming) el.classList.add("chat-streaming");
       attachCopyButton(el, block.text);
+      attachRetryButton(el, block.id, streaming);
       break;
     }
     case "thinking":
@@ -126,6 +188,19 @@ export function renderBlock(block: Block, streaming: boolean): HTMLElement {
     case "action":
       // 动作卡由 action-card 模块构建（header/body/footer + 状态 class）。
       return buildActionCard(block);
+    case "action_group": {
+      el.classList.add("chat-action-group");
+      const details = document.createElement("details");
+      details.open = !block.collapsed && block.items.some((item) => item.execution === "running");
+      const summary = document.createElement("summary");
+      summary.textContent = block.summary;
+      const items = document.createElement("div");
+      items.className = "chat-action-group-items";
+      for (const item of block.items) items.appendChild(buildActionCard(item));
+      details.append(summary, items);
+      el.appendChild(details);
+      break;
+    }
     case "error":
       el.setAttribute("role", "alert");
       el.textContent = block.text;

@@ -88,4 +88,31 @@ describe("reconcileMessages", () => {
     expect(el.dataset.messageId).toBeTruthy();
     __resetBlockMap(el);
   });
+
+  it("copies the latest streamed text rather than the initial render value", async () => {
+    const writes: string[] = [];
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (text: string) => { writes.push(text); } },
+    });
+    const scroll = makeScroll();
+    const map = new Map<string, HTMLElement>();
+    const s1 = run([{ type: "delta", requestId: "r1", text: "Hel" }]);
+    reconcileMessages(scroll, s1.messages, map);
+    const s2 = reduceEvents(s1, { type: "delta", requestId: "r1", text: "lo" });
+    reconcileMessages(scroll, s2.messages, map);
+    scroll.querySelector<HTMLButtonElement>(".chat-copy-btn")!.click();
+    await Promise.resolve();
+    expect(writes).toEqual(["Hello"]);
+  });
+
+  it("renders copy and retry as icon-only actions with accessible labels", () => {
+    const scroll = makeScroll();
+    const map = new Map<string, HTMLElement>();
+    const state = run([{ type: "delta", requestId: "r1", text: "answer" }, { type: "done", requestId: "r1" }]);
+    reconcileMessages(scroll, state.messages, map);
+    const buttons = Array.from(scroll.querySelectorAll<HTMLButtonElement>(".chat-message-action"));
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual(["复制原文", "重试"]);
+    expect(buttons.every((button) => button.textContent === "")).toBe(true);
+  });
 });

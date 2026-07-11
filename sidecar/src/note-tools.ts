@@ -13,7 +13,7 @@ export interface WriteResult { ok: boolean; version?: number; denied?: boolean; 
 
 export interface NoteToolDeps {
   getNoteText: (target?: NoteTarget) => Promise<string>;
-  requestWrite: (args: { target?: NoteTarget; toolName: string; oldContent: string; newContent: string; preview: EditPreview }) => Promise<WriteResult>;
+  requestWrite: (args: { toolCallId: string; target?: NoteTarget; toolName: string; oldContent: string; newContent: string; preview: EditPreview }) => Promise<WriteResult>;
   /** Return a loaded skill's full SKILL.md text by name, or null if unknown. */
   readSkillBody: (name: string) => string | null;
 }
@@ -71,12 +71,12 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
       target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })),
     }),
     promptSnippet: "edit_note — 唯一 str_replace",
-    async execute(_id, params: { old_string: string; new_string: string; target?: NoteTarget }) {
+    async execute(toolCallId, params: { old_string: string; new_string: string; target?: NoteTarget }) {
       const old = await deps.getNoteText(params.target);
       const r = replaceOnce(old, params.old_string, params.new_string);
       if (!r.ok) return errorResult(`替换失败：${r.error}`);
       const preview: EditPreview = { tool: "edit_note", summary: "编辑文本", detail: { kind: "diff", hunks: unifiedDiff(old, r.newContent) } };
-      const res = await deps.requestWrite({ target: params.target, toolName: "edit_note", oldContent: old, newContent: r.newContent, preview });
+      const res = await deps.requestWrite({ toolCallId, target: params.target, toolName: "edit_note", oldContent: old, newContent: r.newContent, preview });
       return writeResultText(res);
     },
   });
@@ -90,10 +90,10 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
       target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })),
     }),
     promptSnippet: "write_note — 整篇覆写",
-    async execute(_id, params: { content: string; target?: NoteTarget }) {
+    async execute(toolCallId, params: { content: string; target?: NoteTarget }) {
       const old = await deps.getNoteText(params.target);
       const preview: EditPreview = { tool: "write_note", summary: "整篇覆写", detail: { kind: "diff", hunks: unifiedDiff(old, params.content) } };
-      const res = await deps.requestWrite({ target: params.target, toolName: "write_note", oldContent: old, newContent: params.content, preview });
+      const res = await deps.requestWrite({ toolCallId, target: params.target, toolName: "write_note", oldContent: old, newContent: params.content, preview });
       return writeResultText(res);
     },
   });
@@ -108,7 +108,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
       target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })),
     }),
     promptSnippet: "set_tag — 给块打标签",
-    async execute(_id, params: { anchor: string; tagId?: string; target?: NoteTarget }) {
+    async execute(toolCallId, params: { anchor: string; tagId?: string; target?: NoteTarget }) {
       const t = inboxTarget("set_tag", params.target);
       if (!t.ok) return t.result;
       const { target } = t;
@@ -123,7 +123,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
       const blockText = stripTagMarker(old.slice(r.range.from, r.range.to));
       const blockPreview = blockText.split("\n")[0].slice(0, 20);
       const preview: EditPreview = { tool: "set_tag", summary: `给块「${blockPreview}」${params.tagId ? "打上" : "清除"}标签`, detail: { kind: "tag_assign", blockPreview, tagName, tagColor } };
-      const res = await deps.requestWrite({ target, toolName: "set_tag", oldContent: old, newContent, preview });
+      const res = await deps.requestWrite({ toolCallId, target, toolName: "set_tag", oldContent: old, newContent, preview });
       return writeResultText(res);
     },
   });
@@ -138,7 +138,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
       target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })),
     }),
     promptSnippet: "tag_create — 新建标签",
-    async execute(_id, params: { name: string; color: string; target?: NoteTarget }) {
+    async execute(toolCallId, params: { name: string; color: string; target?: NoteTarget }) {
       const t = inboxTarget("tag_create", params.target);
       if (!t.ok) return t.result;
       const { target } = t;
@@ -154,7 +154,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
       if (!r.id) return errorResult(`建标签失败：颜色 ${params.color} 已被占用；可用：${JSON.stringify(free)}`);
       const newContent = r.change ? applyChange(old, r.change) : old;
       const preview: EditPreview = { tool: "tag_create", summary: `新建标签「${params.name}」`, detail: { kind: "tag_create", tagName: params.name, tagColor: params.color } };
-      const res = await deps.requestWrite({ target, toolName: "tag_create", oldContent: old, newContent, preview });
+      const res = await deps.requestWrite({ toolCallId, target, toolName: "tag_create", oldContent: old, newContent, preview });
       return writeResultText(res);
     },
   });
@@ -168,7 +168,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
       target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })),
     }),
     promptSnippet: "tag_delete — 删标签",
-    async execute(_id, params: { tagId: string; target?: NoteTarget }) {
+    async execute(toolCallId, params: { tagId: string; target?: NoteTarget }) {
       const t = inboxTarget("tag_delete", params.target);
       if (!t.ok) return t.result;
       const { target } = t;
@@ -178,7 +178,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
       const def = parseDefs(old).get(params.tagId);
       const markerCount = countMarkers(old, params.tagId);
       const preview: EditPreview = { tool: "tag_delete", summary: `删除标签「${def?.name ?? params.tagId}」`, detail: { kind: "tag_delete", tagName: def?.name ?? params.tagId, markerCount } };
-      const res = await deps.requestWrite({ target, toolName: "tag_delete", oldContent: old, newContent, preview });
+      const res = await deps.requestWrite({ toolCallId, target, toolName: "tag_delete", oldContent: old, newContent, preview });
       return writeResultText(res);
     },
   });

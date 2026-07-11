@@ -92,13 +92,18 @@ export type SidecarToHost =
       type: "tool";
       requestId: string;
       conversationId: string;
+      callId: string;
       name: string;
       phase: "start" | "end";
+      args?: unknown;
+      result?: unknown;
+      isError?: boolean;
     }
   | {
       type: "apply_edit";
       callId: string;
       conversationId: string;
+      toolCallId?: string;
       /** 目标笔记；缺省=当前活动笔记（由 Rust 解析）。仅当调用方显式指定时携带。 */
       target?: NoteTarget;
       toolName: string;

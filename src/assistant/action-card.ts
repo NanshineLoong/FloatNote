@@ -103,11 +103,13 @@ export function buildActionCard(block: Extract<Block, { kind: "action" }>): HTML
     variant: "primary",
     label: "允许",
     onClick: () => {
-      if (!block.requestId) return;
+      const requestId = el.dataset.requestId;
+      if (!requestId) return;
+      setCardControlsDisabled(el, true);
       el.dispatchEvent(
         new CustomEvent("chat:resolve", {
           bubbles: true,
-          detail: { requestId: block.requestId, decision: "allow", writeMode: modeSelect.value },
+          detail: { requestId, decision: "allow", writeMode: modeSelect.value },
         }),
       );
     },
@@ -116,11 +118,13 @@ export function buildActionCard(block: Extract<Block, { kind: "action" }>): HTML
     variant: "secondary",
     label: "拒绝",
     onClick: () => {
-      if (!block.requestId) return;
+      const requestId = el.dataset.requestId;
+      if (!requestId) return;
+      setCardControlsDisabled(el, true);
       el.dispatchEvent(
         new CustomEvent("chat:resolve", {
           bubbles: true,
-          detail: { requestId: block.requestId, decision: "deny", writeMode: "direct" },
+          detail: { requestId, decision: "deny", writeMode: "direct" },
         }),
       );
     },
@@ -134,18 +138,34 @@ export function buildActionCard(block: Extract<Block, { kind: "action" }>): HTML
 
 /** 增量更新动作卡（状态 class + body + footer 可见性），不重建节点。 */
 export function updateActionCard(el: HTMLElement, block: Extract<Block, { kind: "action" }>): void {
-  el.classList.toggle("chat-action-pending", block.status === "pending");
-  el.classList.toggle("chat-action-approved", block.status === "approved");
-  el.classList.toggle("chat-action-rejected", block.status === "rejected");
-  el.classList.toggle("chat-action-done", block.status === "done");
+  el.dataset.requestId = block.requestId ?? "";
+  el.classList.toggle("chat-action-pending", block.execution === "running");
+  el.classList.toggle("chat-action-approved", block.decision === "allowed");
+  el.classList.toggle("chat-action-rejected", block.decision === "denied");
+  el.classList.toggle("chat-action-done", block.execution === "succeeded");
+  el.classList.toggle("chat-action-failed", block.execution === "failed");
 
   const titleEl = el.querySelector<HTMLElement>(".chat-action-title");
-  if (titleEl) titleEl.textContent = titleFor(block.tool);
+  const target = block.targets[0];
+  if (titleEl) titleEl.textContent = target ? `${titleFor(block.tool)} · ${target}` : titleFor(block.tool);
 
   // 只读紧凑行：只切 done + spinner 可见性（无 summary/body/footer，无 ✓ 对勾）。
   if (el.classList.contains("chat-action-readonly")) {
     const spinner = el.querySelector<HTMLElement>(".chat-action-spinner");
-    if (spinner) spinner.classList.toggle("is-active", block.status === "pending");
+    if (spinner) spinner.classList.toggle("is-active", block.execution === "running");
+    let result = el.querySelector<HTMLElement>(".chat-action-result");
+    if (!result) {
+      result = document.createElement("div");
+      result.className = "chat-action-result";
+      el.appendChild(result);
+    }
+    result.textContent = block.execution === "failed"
+      ? `执行失败${block.resultSummary ? `：${block.resultSummary}` : ""}`
+      : block.execution === "succeeded" && block.resultSummary
+        ? block.resultSummary
+        : "";
+    result.classList.toggle("is-error", block.execution === "failed");
+    result.classList.toggle("is-empty", !result.textContent);
     return;
   }
 
@@ -162,13 +182,39 @@ export function updateActionCard(el: HTMLElement, block: Extract<Block, { kind: 
   }
 
   // footer 仅在 pending 且已收到 requestId（可交互）时可见。
-  const interactive = block.status === "pending" && Boolean(block.requestId);
+  const interactive = block.execution === "running" && block.decision === "pending" && Boolean(block.requestId);
   const footer = el.querySelector<HTMLElement>(".chat-action-footer");
   if (footer) footer.classList.toggle("is-hidden", !interactive);
 
   // 写入模式选项仅在 canSnapshot 时可选 snapshot。
   const snap = el.querySelector<HTMLOptionElement>('option[value="snapshot"]');
   if (snap) snap.hidden = !block.canSnapshot;
+
+  let outcome = el.querySelector<HTMLElement>(".chat-action-outcome");
+  if (!outcome) {
+    outcome = document.createElement("div");
+    outcome.className = "chat-action-outcome";
+    el.appendChild(outcome);
+  }
+  outcome.textContent = actionOutcome(block);
+  outcome.classList.toggle("is-hidden", !outcome.textContent);
+  setCardControlsDisabled(el, !interactive);
+}
+
+function actionOutcome(block: Extract<Block, { kind: "action" }>): string {
+  if (block.permissionError) return `权限操作失败：${block.permissionError}`;
+  if (block.decision === "denied") return "已拒绝";
+  if (block.decision === "allowed" && block.execution === "running") return "已允许 · 正在写入";
+  if (block.decision === "allowed" && block.execution === "succeeded") return "已允许 · 写入成功";
+  if (block.decision === "allowed" && block.execution === "failed") return "已允许 · 写入失败";
+  if (block.execution === "failed") return "执行失败";
+  return "";
+}
+
+function setCardControlsDisabled(el: HTMLElement, disabled: boolean): void {
+  for (const control of el.querySelectorAll<HTMLButtonElement | HTMLSelectElement>(".chat-action-footer button, .chat-action-footer select")) {
+    control.disabled = disabled;
+  }
 }
 
 /** 按 detail.kind + tool 渲染 body（只读）。 */

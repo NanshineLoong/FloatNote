@@ -22,7 +22,7 @@ export type ChatEvent =
       messages: ChatDisplayMessage[];
     }
   | { type: "delta"; requestId: string; conversationId?: string; text: string }
-  | { type: "tool"; requestId: string; conversationId?: string; name: string; phase: "start" | "end" }
+  | { type: "tool"; requestId: string; conversationId?: string; callId?: string; name: string; phase: "start" | "end"; args?: unknown; result?: unknown; isError?: boolean }
   | { type: "done"; requestId: string; conversationId?: string }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }
@@ -36,6 +36,7 @@ export type ChatEvent =
   | {
       type: "permission_request";
       requestId: string; // Rust pending-edit id，resolve 幂等键
+      callId?: string;
       conversationId?: string;
       toolName: string;
       detail: EditPreviewDetail;
@@ -45,25 +46,35 @@ export type ChatEvent =
       canSnapshot: boolean;
     }
   | { type: "permission_resolve"; requestId: string; decision: "allow" | "deny" }
+  | { type: "permission_resolve_failed"; requestId: string; message: string }
   // thinking 折叠切换（仅内存，不落库）。
   | { type: "thinking_toggle"; blockId: string };
 
+export type ActionBlock = {
+  id: string;
+  kind: "action";
+  tool: string;
+  detail?: EditPreviewDetail;
+  summary?: string;
+  oldContent?: string;
+  newContent?: string;
+  canSnapshot?: boolean;
+  callId?: string;
+  targets: string[];
+  decision: "pending" | "allowed" | "denied";
+  execution: "running" | "succeeded" | "failed";
+  resultSummary?: string;
+  writeMode?: WriteMode;
+  requestId?: string;
+  permissionError?: string;
+};
+
 export type Block =
+  | { id: string; kind: "wait"; label: string }
   | { id: string; kind: "text"; text: string; streaming?: boolean }
   | { id: string; kind: "thinking"; text: string; collapsed: boolean; done: boolean }
-  | {
-      id: string;
-      kind: "action";
-      tool: string;
-      detail?: EditPreviewDetail;
-      summary?: string;
-      oldContent?: string;
-      newContent?: string;
-      canSnapshot?: boolean;
-      status: "pending" | "approved" | "rejected" | "done";
-      writeMode?: WriteMode;
-      requestId?: string; // Rust pending-edit id；填充后即可交互/作为 resolve 幂等键
-    }
+  | ActionBlock
+  | { id: string; kind: "action_group"; category: "read"; summary: string; collapsed: boolean; items: ActionBlock[] }
   | { id: string; kind: "error"; text: string };
 
 export type ChatMessage =
@@ -126,7 +137,7 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
       return push(removePending(state), {
         id: nextId("m"),
         role: "assistant",
-        blocks: [{ id: nextId("b"), kind: "text", text: "正在思考…", streaming: true }],
+        blocks: [{ id: nextId("b"), kind: "wait", label: "正在准备回复…" }],
         streaming: true,
         pending: true,
       });
@@ -218,13 +229,25 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
         // permission://request 填充），只读工具（read_note/list_tags/read_skill）
         // 走紧凑行（无 detail/requestId → action-card 渲染 header-only）。
         const { state: s, msg } = ensureStreaming(state);
+        const action: ActionBlock = {
+          id: nextId("b"),
+          kind: "action",
+          callId: event.callId,
+          tool: event.name,
+          targets: extractTargets(event.args),
+          decision: "pending",
+          execution: "running",
+        };
         return updateLast(s, {
           ...msg,
-          blocks: [...msg.blocks, { id: nextId("b"), kind: "action", tool: event.name, status: "pending" }],
+          blocks: appendAction(msg.blocks, action),
         });
       }
-      // phase end：把最近一个 pending/approved 的 action 置 done（rejected 保留）。
-      return setLastActionStatus(state, (st) => st === "pending" || st === "approved", "done");
+      return updateAction(state, (b) => event.callId ? b.callId === event.callId : b.tool === event.name && b.execution === "running", (b) => ({
+        ...b,
+        execution: event.isError ? "failed" : "succeeded",
+        resultSummary: summarizeResult(event.result),
+      }));
     }
 
     case "error": {
@@ -252,13 +275,19 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
     }
 
     case "permission_resolve": {
-      return setLastActionStatus(
-        state,
-        (st) => st === "pending" || st === "approved" || st === "rejected",
-        event.decision === "allow" ? "approved" : "rejected",
-        (b) => b.requestId === event.requestId,
-      );
+      return updateAction(state, (b) => b.requestId === event.requestId, (b) => ({
+        ...b,
+        decision: event.decision === "allow" ? "allowed" : "denied",
+        permissionError: undefined,
+      }));
     }
+
+    case "permission_resolve_failed":
+      return updateAction(state, (b) => b.requestId === event.requestId, (b) => ({
+        ...b,
+        decision: "pending",
+        permissionError: event.message,
+      }));
 
     case "thinking_toggle": {
       // 翻转指定 thinking 块的 collapsed（在任意 assistant 消息中查找）。
@@ -338,9 +367,10 @@ function fillActionBlock(state: ChatState, event: Extract<ChatEvent, { type: "pe
     const b = blocks[i];
     if (
       b.kind === "action" &&
-      b.status === "pending" &&
+      b.execution === "running" &&
       b.requestId === undefined &&
-      b.tool === event.toolName
+      b.tool === event.toolName &&
+      (!event.callId || b.callId === event.callId)
     ) {
       blocks[i] = {
         ...b,
@@ -350,6 +380,7 @@ function fillActionBlock(state: ChatState, event: Extract<ChatEvent, { type: "pe
         newContent: event.newContent,
         canSnapshot: event.canSnapshot,
         requestId: event.requestId,
+        permissionError: undefined,
       };
       return updateLast(state, { ...last, blocks });
     }
@@ -361,23 +392,87 @@ function fillActionBlock(state: ChatState, event: Extract<ChatEvent, { type: "pe
  * 修改最后一个满足 `pred(status)`（且可选 `where`）的 action block 的 status。
  * 用于 tool_end（→ done）与 permission_resolve（→ approved/rejected）。
  */
-function setLastActionStatus(
+function updateAction(
   state: ChatState,
-  pred: (status: string) => boolean,
-  status: "pending" | "approved" | "rejected" | "done",
-  where?: (b: Extract<Block, { kind: "action" }>) => boolean,
+  where: (b: Extract<Block, { kind: "action" }>) => boolean,
+  update: (b: Extract<Block, { kind: "action" }>) => Extract<Block, { kind: "action" }>,
 ): ChatState {
-  const last = state.messages[state.messages.length - 1];
-  if (!last || last.role !== "assistant") return state;
-  const blocks = last.blocks.slice();
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    const b = blocks[i];
-    if (b.kind === "action" && pred(b.status) && (!where || where(b))) {
-      blocks[i] = { ...b, status };
-      return updateLast(state, { ...last, blocks });
+  const messages = state.messages.slice();
+  for (let mi = messages.length - 1; mi >= 0; mi--) {
+    const message = messages[mi];
+    if (message.role !== "assistant") continue;
+    const blocks = message.blocks.slice();
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const b = blocks[i];
+      if (b.kind === "action" && where(b)) {
+        blocks[i] = update(b);
+        messages[mi] = { ...message, blocks };
+        return { ...state, messages };
+      }
+      if (b.kind === "action_group") {
+        const itemIndex = b.items.findIndex(where);
+        if (itemIndex >= 0) {
+          const items = b.items.slice();
+          items[itemIndex] = update(items[itemIndex]);
+          blocks[i] = { ...b, items };
+          messages[mi] = { ...message, blocks };
+          return { ...state, messages };
+        }
+      }
     }
   }
   return state;
+}
+
+function appendAction(blocks: Block[], action: ActionBlock): Block[] {
+  if (!isReadTool(action.tool)) return [...blocks, action];
+  const out = blocks.slice();
+  const last = out[out.length - 1];
+  if (last?.kind === "action_group" && last.category === "read") {
+    const items = [...last.items, action];
+    out[out.length - 1] = { ...last, items, summary: readGroupSummary(items) };
+    return out;
+  }
+  const previous = out[out.length - 2];
+  if (previous?.kind === "action" && last?.kind === "action" && isReadTool(previous.tool) && isReadTool(last.tool)) {
+    const items = [previous, last, action];
+    out.splice(out.length - 2, 2, { id: previous.id, kind: "action_group", category: "read", summary: readGroupSummary(items), collapsed: false, items });
+    return out;
+  }
+  return [...out, action];
+}
+
+function isReadTool(tool: string): boolean {
+  return tool === "read_note";
+}
+
+function readGroupSummary(items: ActionBlock[]): string {
+  const targets = new Set(items.flatMap((item) => item.targets));
+  const count = targets.size || items.length;
+  return `读取 ${count} 个文件`;
+}
+
+function extractTargets(args: unknown): string[] {
+  if (!args || typeof args !== "object") return [];
+  const value = args as Record<string, unknown>;
+  const target = value.target ?? value.file_path ?? value.path;
+  if (typeof target === "string" && target.trim()) return [target];
+  if (target && typeof target === "object") {
+    const named = (target as Record<string, unknown>).name;
+    if (typeof named === "string" && named.trim()) return [named];
+  }
+  return [];
+}
+
+function summarizeResult(result: unknown): string | undefined {
+  if (result === undefined || result === null) return undefined;
+  if (typeof result === "string") return result.length > 120 ? `${result.slice(0, 117)}…` : result;
+  try {
+    const text = JSON.stringify(result);
+    return text.length > 120 ? `${text.slice(0, 117)}…` : text;
+  } catch {
+    return undefined;
+  }
 }
 
 function acceptsConversation(state: ChatState, event: { conversationId?: string }): boolean {

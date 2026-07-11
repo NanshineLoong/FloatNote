@@ -328,7 +328,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   let unlisten: UnlistenFn | null = null;
 
   const permBubble = mountPermissionBubble(permRegion, (req, decision, writeMode) => {
-    resolvePermission(req.request_id, decision, writeMode);
+    return resolvePermission(req.request_id, decision, writeMode);
   });
   // mention 下拉需在 skillPicker 之后创建（closeSkill 引用 skillPicker），故用前置占位
   // 让 skillPicker 的 closeMention 能引用到尚未创建的 mentionPicker。
@@ -356,10 +356,14 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     requestId: string,
     decision: "allow" | "deny",
     writeMode: "direct" | "snapshot",
-  ) {
+  ): Promise<void> {
     dispatch({ type: "permission_resolve", requestId, decision });
-    void invoke("resolve_permission", { requestId, decision, writeMode });
-    permBubble.clear();
+    return invoke("resolve_permission", { requestId, decision, writeMode }).then(() => {
+      permBubble.clear();
+    }).catch((err) => {
+      dispatch({ type: "permission_resolve_failed", requestId, message: err instanceof Error ? err.message : String(err) });
+      throw err;
+    });
   }
 
   // 流内 action 卡的允许/拒绝按钮派发 chat:resolve（bubbles），在此统一处理。
@@ -369,13 +373,37 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       decision: "allow" | "deny";
       writeMode: "direct" | "snapshot";
     };
-    resolvePermission(detail.requestId, detail.decision, detail.writeMode);
+    void resolvePermission(detail.requestId, detail.decision, detail.writeMode).catch(() => {});
   });
 
   // thinking 块折叠/展开切换。
   scroll.addEventListener("chat:toggle-thinking", (e) => {
     const detail = (e as CustomEvent).detail as { blockId: string };
     dispatch({ type: "thinking_toggle", blockId: detail.blockId });
+  });
+
+  scroll.addEventListener("chat:retry", (e) => {
+    const { blockId } = (e as CustomEvent).detail as { blockId: string };
+    const messageIndex = state.messages.findIndex(
+      (message) => message.role === "assistant" && message.blocks.some((block) => block.id === blockId),
+    );
+    if (messageIndex < 0 || !activeConversation || isChatStreaming(state)) return;
+    for (let i = messageIndex - 1; i >= 0; i--) {
+      const message = state.messages[i];
+      if (message.role !== "user") continue;
+      dispatch({ type: "pending", conversationId: activeConversation.id });
+      void deps.send(message.text, activeConversation.id).then((requestId) => {
+        activeRequestId = requestId;
+      }).catch((err) => {
+        dispatch({
+          type: "error",
+          requestId: null,
+          conversationId: activeConversation?.id,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+      break;
+    }
   });
 
   // permission://request：优先填充流内 action 卡；若无匹配卡（非流式即时请求），
@@ -386,6 +414,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     dispatch({
       type: "permission_request",
       requestId: req.request_id,
+      callId: req.tool_call_id,
       conversationId: req.conversation_id,
       toolName: req.tool_name,
       detail: req.preview.detail,

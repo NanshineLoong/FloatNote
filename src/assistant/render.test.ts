@@ -27,11 +27,11 @@ describe("reduceEvents", () => {
     expect(norm(state.messages)).toEqual([{ role: "user", text: "你好" }]);
   });
 
-  it("shows an assistant pending bubble immediately after submit", () => {
+  it("shows a lightweight wait block instead of an assistant text bubble", () => {
     const state = run([{ type: "user", text: "你好" }, { type: "pending" }]);
     expect(norm(state.messages)).toEqual([
       { role: "user", text: "你好" },
-      { role: "assistant", streaming: true, pending: true, blocks: [{ kind: "text", text: "正在思考…", streaming: true }] },
+      { role: "assistant", streaming: true, pending: true, blocks: [{ kind: "wait", label: "正在准备回复…" }] },
     ]);
   });
 
@@ -111,27 +111,53 @@ describe("reduceEvents", () => {
   });
 
   it("creates an action block on tool start and marks it done on tool end", () => {
-    const started = run([{ type: "tool", requestId: "r1", name: "write_note", phase: "start" }]);
+    const started = run([{ type: "tool", requestId: "r1", callId: "call-1", name: "write_note", phase: "start", args: { target: "piece.md" } }]);
     expect(norm(started.messages)).toEqual([
-      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "write_note", status: "pending" }] },
+      { role: "assistant", streaming: true, blocks: [{ kind: "action", callId: "call-1", tool: "write_note", targets: ["piece.md"], decision: "pending", execution: "running" }] },
     ]);
 
-    const ended = reduceEvents(started, { type: "tool", requestId: "r1", name: "write_note", phase: "end" });
+    const ended = reduceEvents(started, { type: "tool", requestId: "r1", callId: "call-1", name: "write_note", phase: "end", result: "ok", isError: false });
     expect(norm(ended.messages)).toEqual([
-      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "write_note", status: "done" }] },
+      { role: "assistant", streaming: true, blocks: [{ kind: "action", callId: "call-1", tool: "write_note", targets: ["piece.md"], decision: "pending", execution: "succeeded", resultSummary: "ok" }] },
     ]);
+  });
+
+  it("matches interleaved tool results by call id instead of the most recent action", () => {
+    let state = run([
+      { type: "tool", requestId: "r1", callId: "read-1", name: "read_note", phase: "start", args: { target: "piece.md" } },
+      { type: "tool", requestId: "r1", callId: "read-2", name: "read_note", phase: "start", args: { target: "ideas.md" } },
+    ]);
+    state = reduceEvents(state, { type: "tool", requestId: "r1", callId: "read-1", name: "read_note", phase: "end", result: "first", isError: false });
+    const blocks = (state.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks;
+    expect(blocks[0]).toMatchObject({ kind: "action", callId: "read-1", execution: "succeeded" });
+    expect(blocks[1]).toMatchObject({ kind: "action", callId: "read-2", execution: "running" });
+  });
+
+  it("groups three consecutive read tools and starts a new segment after text", () => {
+    const state = run([
+      { type: "tool", requestId: "r1", callId: "a", name: "read_note", phase: "start", args: { target: "a.md" } },
+      { type: "tool", requestId: "r1", callId: "b", name: "read_note", phase: "start", args: { target: "b.md" } },
+      { type: "tool", requestId: "r1", callId: "c", name: "read_note", phase: "start", args: { target: "c.md" } },
+      { type: "delta", requestId: "r1", text: "阶段说明" },
+      { type: "tool", requestId: "r1", callId: "d", name: "read_note", phase: "start", args: { target: "d.md" } },
+    ]);
+    const blocks = (state.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks;
+    expect(blocks[0]).toMatchObject({ kind: "action_group", category: "read", summary: "读取 3 个文件" });
+    if (blocks[0].kind === "action_group") expect(blocks[0].items).toHaveLength(3);
+    expect(blocks[1]).toMatchObject({ kind: "text", text: "阶段说明" });
+    expect(blocks[2]).toMatchObject({ kind: "action", callId: "d" });
   });
 
   it("creates a readonly action block for read-only tools (no permission flow)", () => {
     const started = run([{ type: "tool", requestId: "r1", name: "read_note", phase: "start" }]);
     // read_note 不进 permission 流，但仍产出 action block（渲染为紧凑行）。
     expect(norm(started.messages)).toEqual([
-      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "read_note", status: "pending" }] },
+      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "read_note", targets: [], decision: "pending", execution: "running" }] },
     ]);
 
     const ended = reduceEvents(started, { type: "tool", requestId: "r1", name: "read_note", phase: "end" });
     expect(norm(ended.messages)).toEqual([
-      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "read_note", status: "done" }] },
+      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "read_note", targets: [], decision: "pending", execution: "succeeded" }] },
     ]);
   });
 
@@ -148,7 +174,7 @@ describe("reduceEvents", () => {
       {
         role: "assistant", streaming: false,
         blocks: [
-          { kind: "action", tool: "write_note", status: "done" },
+          { kind: "action", tool: "write_note", targets: [], decision: "pending", execution: "succeeded" },
           { kind: "text", text: "已整理", streaming: false },
         ],
       },
@@ -174,7 +200,7 @@ describe("reduceEvents", () => {
   });
 
   it("fills action block detail on permission_request and resolves on permission_resolve", () => {
-    const started = run([{ type: "tool", requestId: "r1", name: "edit_note", phase: "start" }]);
+    const started = run([{ type: "tool", requestId: "r1", callId: "call-1", name: "edit_note", phase: "start", args: { target: "piece.md" } }]);
     const filled = reduceEvents(started, {
       type: "permission_request",
       requestId: "pe-1",
@@ -191,12 +217,19 @@ describe("reduceEvents", () => {
       expect(action.requestId).toBe("pe-1");
       expect(action.canSnapshot).toBe(true);
       expect(action.newContent).toBe("b");
-      expect(action.status).toBe("pending");
+      expect(action.decision).toBe("pending");
     }
 
     const resolved = reduceEvents(filled, { type: "permission_resolve", requestId: "pe-1", decision: "allow" });
     const after = (resolved.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks[0];
-    if (after.kind === "action") expect(after.status).toBe("approved");
+    if (after.kind === "action") {
+      expect(after.decision).toBe("allowed");
+      expect(after.execution).toBe("running");
+    }
+
+    const ended = reduceEvents(resolved, { type: "tool", requestId: "r1", callId: "call-1", name: "edit_note", phase: "end", result: "written", isError: false });
+    const finalBlock = (ended.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks[0];
+    expect(finalBlock).toMatchObject({ kind: "action", decision: "allowed", execution: "succeeded" });
   });
 
   it("interleaves a full exchange", () => {
@@ -283,7 +316,7 @@ describe("reduceEvents", () => {
     ]);
     expect(norm(state.messages)).toEqual([
       { role: "user", text: "新问题" },
-      { role: "assistant", streaming: true, pending: true, blocks: [{ kind: "text", text: "正在思考…", streaming: true }] },
+      { role: "assistant", streaming: true, pending: true, blocks: [{ kind: "wait", label: "正在准备回复…" }] },
     ]);
   });
 });

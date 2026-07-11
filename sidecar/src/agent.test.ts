@@ -56,11 +56,11 @@ describe("translateEvent", () => {
 
   it("maps tool execution start/end to tool lines", () => {
     expect(
-      translateEvent("r1", "c1", ev({ type: "tool_execution_start", toolCallId: "c", toolName: "write_note", args: {} })),
-    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", name: "write_note", phase: "start" });
+      translateEvent("r1", "c1", ev({ type: "tool_execution_start", toolCallId: "c", toolName: "write_note", args: { target: "piece.md" } })),
+    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write_note", phase: "start", args: { target: "piece.md" } });
     expect(
       translateEvent("r1", "c1", ev({ type: "tool_execution_end", toolCallId: "c", toolName: "write_note", result: {}, isError: false })),
-    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", name: "write_note", phase: "end" });
+    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write_note", phase: "end", result: {}, isError: false });
   });
 
   it("maps agent_end to a done line", () => {
@@ -222,6 +222,7 @@ describe("AgentRunner", () => {
       type: "apply_edit",
       callId: expect.any(String),
       conversationId: "c1",
+      toolCallId: "c1",
       toolName: "write_note",
       oldContent: "old doc",
       newContent: "tidied note",

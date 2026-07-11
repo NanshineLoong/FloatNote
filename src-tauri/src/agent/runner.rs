@@ -241,6 +241,7 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
         SidecarToHost::ApplyEdit {
             call_id,
             conversation_id,
+            tool_call_id,
             target,
             tool_name,
             old_content,
@@ -250,6 +251,7 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             app,
             call_id,
             conversation_id,
+            tool_call_id,
             target,
             tool_name,
             old_content,

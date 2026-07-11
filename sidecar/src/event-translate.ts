@@ -31,9 +31,9 @@ export function translateEvent(
       return null;
     }
     case "tool_execution_start":
-      return { type: "tool", requestId, conversationId, name: event.toolName, phase: "start" };
+      return { type: "tool", requestId, conversationId, callId: event.toolCallId, name: event.toolName, phase: "start", args: event.args };
     case "tool_execution_end":
-      return { type: "tool", requestId, conversationId, name: event.toolName, phase: "end" };
+      return { type: "tool", requestId, conversationId, callId: event.toolCallId, name: event.toolName, phase: "end", result: event.result, isError: event.isError };
     case "agent_end":
       return { type: "done", requestId, conversationId };
     default:

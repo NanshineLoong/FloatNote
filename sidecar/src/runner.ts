@@ -210,13 +210,14 @@ export class AgentRunner {
 
   private requestWrite(
     conversationId: string,
-    args: { target?: NoteTarget; toolName: string; oldContent: string; newContent: string; preview: EditPreview },
+    args: { toolCallId: string; target?: NoteTarget; toolName: string; oldContent: string; newContent: string; preview: EditPreview },
   ): Promise<WriteResult> {
     const callId = `w${++this.writeSeq}`;
     const msg: SidecarToHost = {
       type: "apply_edit",
       callId,
       conversationId,
+      toolCallId: args.toolCallId,
       // target 缺省=当前活动笔记；仅当调用方给出时携带，由 Rust 解析。
       ...(args.target ? { target: args.target } : {}),
       toolName: args.toolName,

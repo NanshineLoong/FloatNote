@@ -122,7 +122,7 @@ describe("split view CSS placement", () => {
     // AI 气泡底色走语义 token（light/dark 由 semantic.css 统一切换），
     // assistant 窗口不再保留 per-window dark @media 块。
     expect(assistantCss).toMatch(
-      /\.chat-block-text\s*{[^}]*background:\s*var\(--color-bubble-ai-bg\);/s,
+      /\.chat-block-text\s*>\s*\.chat-text-content\s*{[^}]*background:\s*var\(--color-bubble-ai-bg\);/s,
     );
     expect(assistantBubbleColor).toBe("#f3f1ec");
     expect(assistantCss).not.toMatch(/@media\s*\(prefers-color-scheme:\s*dark\)/s);
