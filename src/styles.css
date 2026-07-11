@@ -545,7 +545,10 @@ body {
   color: var(--color-accent);
 }
 
-/* 默认隐藏动作按钮，行被悬停或聚焦时才露出。 */
+/* 默认隐藏动作按钮，行被悬停或聚焦时才露出。
+   注意：不用 CSS `:hover`。WebKit 在 `.fn-menu` 这类 overflow:auto 容器里
+   不会主动清除已离开行的 `:hover`，快速划过/从边缘离开菜单时会残留多行
+   三点。改由 JS 的 mouseenter/mouseleave 切换 `is-hovered` 类驱动显隐。 */
 .switch-row-actions {
   display: inline-flex;
   align-items: center;
@@ -554,7 +557,7 @@ body {
   transition: opacity 0.12s ease;
 }
 
-.switch-row:hover .switch-row-actions,
+.switch-row.is-hovered .switch-row-actions,
 .switch-row:focus-within .switch-row-actions {
   opacity: 1;
 }
