@@ -111,6 +111,35 @@ const baseContent = {
   padding: "16px 0",
 };
 
+/** CodeMirror deliberately draws a selection through the full width of an
+ * empty line. Keep the range itself unchanged, but label that paint fragment
+ * so CSS can render a small line-start cue instead. */
+const compactBlankLineSelection = ViewPlugin.fromClass(class {
+  update(update: ViewUpdate): void {
+    if (!update.selectionSet && !update.docChanged && !update.viewportChanged) return;
+    update.view.requestMeasure({
+      read: (view) => {
+        const blankTops = new Set<number>();
+        for (const range of view.state.selection.ranges) {
+          if (range.empty) continue;
+          const first = view.state.doc.lineAt(range.from).number;
+          const last = view.state.doc.lineAt(range.to).number;
+          for (let lineNo = first; lineNo <= last; lineNo++) {
+            const line = view.state.doc.line(lineNo);
+            if (line.length === 0) blankTops.add(Math.round(view.lineBlockAt(line.from).top));
+          }
+        }
+        return blankTops;
+      },
+      write: (blankTops, view) => {
+        view.dom.querySelectorAll<HTMLElement>(".cm-selectionBackground").forEach((el) => {
+          el.classList.toggle("cm-selection-blank", blankTops.has(Math.round(Number.parseFloat(el.style.top))));
+        });
+      },
+    });
+  }
+});
+
 /**
  * `grow` 让编辑器长到内容高度、关掉自身的内部滚动（`.cm-scroller` overflow:visible）——
  * 这样标题块与正文能落在同一个外层滚动容器里一起滚（写作栏的 Notion 式手感）。
@@ -121,7 +150,9 @@ function buildTheme(grow: boolean) {
     "&": grow
       ? { height: "auto", minHeight: "100%", fontSize: "var(--editor-font, 15px)" }
       : { height: "100%", fontSize: "var(--editor-font, 15px)" },
-    ".cm-content": grow ? { ...baseContent, minHeight: "100%" } : baseContent,
+    ".cm-content": grow
+      ? { ...baseContent, padding: "16px var(--piece-content-inset, 0px)", minHeight: "100%" }
+      : baseContent,
     ".cm-line": { minHeight: "1.6em" },
     ".cm-placeholder": {
       whiteSpace: "nowrap",
@@ -153,6 +184,7 @@ export function createEditor(
     extensions: [
       history(),
       drawSelection({ cursorBlinkRate: 1200 }),
+      compactBlankLineSelection,
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ extensions: [Autolink, Table, Strikethrough, TaskList], codeLanguages }),
       syntaxHighlighting(highlight),

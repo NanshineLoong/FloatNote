@@ -1,6 +1,7 @@
 import { syntaxTree } from "@codemirror/language";
 import {
   StateField,
+  type Transaction,
   type EditorState,
   type Extension,
   RangeSetBuilder,
@@ -230,19 +231,13 @@ function buildDecorations(state: EditorState): DecorationSet {
           if (touches(node.from, node.to)) return false;
           const ch = doc.sliceString(node.from, node.to);
           if (ch === "-" || ch === "*" || ch === "+") {
-            let child = node.node.parent?.firstChild ?? null;
-            let hasNestedList = false;
-            while (child) {
-              if (child.name === "BulletList" || child.name === "OrderedList") {
-                hasNestedList = true;
-                break;
-              }
-              child = child.nextSibling;
-            }
             entries.push({
               from: node.from,
               to: node.to,
-              deco: outlineOn || hasNestedList
+              // A parent item keeps the same bullet as a leaf item. The fold
+              // control is inserted before it, so adding a third level no
+              // longer changes how the second level is rendered.
+              deco: outlineOn
                 ? hide
                 : Decoration.replace({ widget: new BulletWidget() }),
             });
@@ -558,6 +553,7 @@ export const previewField = StateField.define<DecorationSet>({
     return buildDecorations(state);
   },
   update(deco, tr) {
+    if (shouldMapPreviewDecorations(tr)) return tr.docChanged ? deco.map(tr.changes) : deco;
     const iconReady = tr.effects.some((e) => e.is(IconReadyEffect));
     const imageModeChanged = tr.effects.some((e) => e.is(SetImageSourceEffect));
     const outlineBefore = !!tr.startState.field(outlineStateField, false)?.on;
@@ -569,6 +565,14 @@ export const previewField = StateField.define<DecorationSet>({
   },
   provide: (f) => EditorView.decorations.from(f),
 });
+
+/** IME candidate text lives in CodeMirror's composing DOM. Rebuilding live
+ * preview widgets during that transaction makes WebKit re-resolve the DOM
+ * selection and paints the candidate as selected. Keep the current decoration
+ * objects and only map their positions until the composition is confirmed. */
+export function shouldMapPreviewDecorations(tr: Transaction): boolean {
+  return tr.isUserEvent("input.type.compose");
+}
 
 const previewTheme = EditorView.theme({
   ".cm-preview-h1": { fontSize: "2em", fontWeight: "700", lineHeight: "1.3" },

@@ -42,6 +42,12 @@ describe("split view CSS placement", () => {
     );
   });
 
+  it("aligns the writing title with editor content and keeps blank selection marks compact", () => {
+    expect(css).toMatch(/#piece-doc-header\s*{[^}]*padding-left:\s*var\(--piece-content-inset\);/s);
+    expect(editorSource).toContain('padding: "16px var(--piece-content-inset, 0px)"');
+    expect(css).toMatch(/\.cm-selectionBackground\.cm-selection-blank\s*{[^}]*width:\s*0\.45em;/s);
+  });
+
   it("keeps inbox block handles in the compact left margin", () => {
     expect(css).toMatch(
       /#editor-root\s*{[^}]*overflow:\s*visible;/s,

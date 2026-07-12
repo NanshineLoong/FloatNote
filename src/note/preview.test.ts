@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Transaction } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
-import { iconCacheStateKey, livePreview, previewField, rangeTouchesSelection, shouldRetryMissingIcon } from "./preview";
+import { iconCacheStateKey, livePreview, previewField, rangeTouchesSelection, shouldMapPreviewDecorations, shouldRetryMissingIcon } from "./preview";
 import { OutlineToggleEffect, outlineMode } from "./outline-mode";
 import type { Decoration, DecorationSet } from "@codemirror/view";
 
@@ -66,6 +66,25 @@ describe("rangeTouchesSelection", () => {
   });
 });
 
+describe("IME composition preview updates", () => {
+  it("maps current decorations during an unconfirmed composition update", () => {
+    const state = EditorState.create({ doc: "# 标题", extensions: [markdown(), ...livePreview()] });
+    const transaction = state.update({
+      changes: { from: state.doc.length, insert: "中" },
+      annotations: Transaction.userEvent.of("input.type.compose"),
+    });
+
+    expect(shouldMapPreviewDecorations(transaction)).toBe(true);
+  });
+
+  it("rebuilds decorations for ordinary input once composition is confirmed", () => {
+    const state = EditorState.create({ doc: "# 标题", extensions: [markdown(), ...livePreview()] });
+    const transaction = state.update({ changes: { from: state.doc.length, insert: "中" } });
+
+    expect(shouldMapPreviewDecorations(transaction)).toBe(false);
+  });
+});
+
 describe("preview in outline mode", () => {
   it("rebuilds when outline toggles on and stops rendering its own list bullet widget", () => {
     let state = EditorState.create({
@@ -79,5 +98,21 @@ describe("preview in outline mode", () => {
     state = state.update({ effects: OutlineToggleEffect.of(true) }).state;
     previewDecorations = decorations(state.field(previewField));
     expect(previewDecorations.some((d) => d.spec.widget)).toBe(false);
+  });
+});
+
+describe("nested list preview", () => {
+  it("keeps every list level's bullet when a deeper child is added", () => {
+    const doc = "- root\n  - middle\n    - leaf";
+    const state = EditorState.create({
+      doc,
+      extensions: [markdown(), ...livePreview()],
+      selection: { anchor: doc.length },
+    });
+    const widgetStarts = decorations(state.field(previewField))
+      .filter((d) => d.spec.widget)
+      .map((d) => d.from);
+
+    expect(widgetStarts).toEqual([0, doc.indexOf("- middle"), doc.indexOf("- leaf")]);
   });
 });

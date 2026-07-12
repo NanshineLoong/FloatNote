@@ -756,6 +756,7 @@ body {
 
 /* 写作栏的单一滚动容器：文档头（breadcrumb + 标题）与正文同处其中、一起滚。 */
 #piece-scroll {
+  --piece-content-inset: 2px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -775,7 +776,10 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  padding: 12px 0 2px;
+  padding-top: 12px;
+  padding-right: var(--piece-content-inset);
+  padding-bottom: 2px;
+  padding-left: var(--piece-content-inset);
 }
 
 /* 切换行：左 breadcrumb、右版本入口。作为固定顶栏的 flex 子项，与 .piece-mode-slot
@@ -1476,20 +1480,19 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  width: 18px;
-  min-width: 18px;
+  width: 13px;
+  min-width: 13px;
   height: 18px;
-  margin: 0 1px 0 0;
+  margin: 0 2px 0 -15px;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--color-text-subtle);
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
   vertical-align: middle;
 }
-.cm-list-fold-ring,
 .cm-list-leaf-dot {
   display: inline-block;
   box-sizing: border-box;
@@ -1498,16 +1501,6 @@ body {
   border: 1.25px solid currentColor;
   border-radius: 50%;
   vertical-align: middle;
-}
-.cm-list-fold-ring {
-  position: relative;
-}
-.cm-list-fold-ring::after {
-  content: "";
-  position: absolute;
-  inset: 2px;
-  border-radius: 50%;
-  background: currentColor;
 }
 .cm-list-leaf-dot {
   margin: 0 5px 0 2px;
@@ -1521,17 +1514,10 @@ body {
 .cm-list-fold-toggle:hover {
   color: var(--color-text);
 }
-.cm-list-fold-count {
-  min-width: 12px;
-  color: var(--color-text-subtle);
-  font-size: 10px;
-}
-/* 折叠的子树各行收成零高度隐藏（不显示摘要块）；折叠标识由父项 toggle 上的
-   ▸ 承担。镜像 .cm-outline-blank 的做法以保几何不被破坏。 */
-.cm-list-fold-hidden {
-  line-height: 0;
-  min-height: 0;
-  overflow: hidden;
+.cm-selectionBackground.cm-selection-blank {
+  width: 0.45em;
+  min-width: 0.45em;
+  border-radius: 2px;
 }
 
 .cm-outline-card-chip {

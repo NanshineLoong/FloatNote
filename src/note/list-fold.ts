@@ -149,19 +149,19 @@ function buildDecorations(
         widget: new ListFoldToggleWidget(it.id, folded.has(it.id), descendantCount),
       }),
     });
-    if (folded.has(it.id)) {
-      // 折叠：不显示摘要块，仅把子树各行收成零高度隐藏；折叠标识由父项
-      // toggle 上的 ▸（常驻）承担。镜像 outline 的 .cm-outline-blank 做法。
-      const startLine = state.doc.lineAt(it.childFrom).number;
-      const endLine = state.doc.lineAt(Math.max(it.childFrom, it.childTo - 1)).number;
-      for (let n = startLine; n <= endLine; n++) {
-        const line = state.doc.line(n);
-        entries.push({
-          from: line.from,
-          to: line.from,
-          deco: Decoration.line({ class: "cm-list-fold-hidden" }),
-        });
-      }
+    // A line class cannot override CodeMirror's measured minimum line height,
+    // so it only made descendants visually compressed, not actually folded.
+    // Replace the whole child range at a line boundary instead. Nested folded
+    // entries are subsumed by their nearest folded ancestor to avoid overlapping
+    // replacement decorations.
+    if (folded.has(it.id) && !items.some((parent) =>
+      parent.id !== it.id && folded.has(parent.id) &&
+      it.childFrom >= parent.childFrom && it.childTo <= parent.childTo)) {
+      entries.push({
+        from: it.childFrom,
+        to: it.childTo,
+        deco: Decoration.replace({ block: true }),
+      });
     }
   }
   entries.sort((a, b) => (a.from !== b.from ? a.from - b.from : a.to - b.to));
@@ -237,16 +237,9 @@ class ListFoldToggleWidget extends WidgetType {
     b.title = this.folded ? `展开 ${this.descendantCount} 个子项` : `折叠 ${this.descendantCount} 个子项`;
     b.setAttribute("aria-label", this.folded ? `展开 ${this.descendantCount} 个子项` : `折叠 ${this.descendantCount} 个子项`);
     b.setAttribute("aria-expanded", String(!this.folded));
-    const ring = document.createElement("span");
-    ring.className = "cm-list-fold-ring";
-    ring.setAttribute("aria-hidden", "true");
-    b.appendChild(ring);
-    if (this.folded) {
-      const count = document.createElement("span");
-      count.className = "cm-list-fold-count";
-      count.textContent = String(this.descendantCount);
-      b.appendChild(count);
-    }
+    // Keep the list's own bullet visible; this control only communicates the
+    // expansion state. A text chevron avoids the distorted ring/count layout.
+    b.textContent = this.folded ? "▸" : "▾";
     return b;
   }
 
