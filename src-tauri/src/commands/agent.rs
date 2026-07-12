@@ -1,4 +1,4 @@
-use crate::agent::{ActiveNote, HostToSidecar, NoteUpdated, SkillSummary};
+use crate::agent::{ActiveNote, HostToSidecar, NoteUpdated, PromptRef, PromptSkill, SkillSummary};
 use crate::state::AppState;
 use std::{fs, path::{Path, PathBuf}, sync::atomic::Ordering};
 use tauri::{Emitter, Manager, State};
@@ -29,6 +29,8 @@ pub fn agent_send(
     state: State<AppState>,
     conversation_id: String,
     user_text: String,
+    references: Option<Vec<PromptRef>>,
+    skill: Option<PromptSkill>,
 ) -> Result<String, String> {
     let seq = state.agent_seq.fetch_add(1, Ordering::Relaxed) + 1;
     let request_id = format!("r{seq}");
@@ -39,6 +41,8 @@ pub fn agent_send(
             request_id: request_id.clone(),
             conversation_id,
             user_text,
+            references,
+            skill,
         })
         .map_err(|error| error.to_string())?;
     Ok(request_id)

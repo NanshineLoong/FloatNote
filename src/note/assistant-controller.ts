@@ -61,7 +61,7 @@ export interface AssistantController {
 export function createAssistantController(deps: AssistantControllerDeps): AssistantController {
   const currentScope = () => chatScopeForSession(deps.session);
   const handle = mountAssistant(deps.region, {
-    send: (text, conversationId) => agentSend({ conversationId, userText: text }),
+    send: (payload, conversationId) => agentSend({ conversationId, ...payload }),
     createConversation: async (scope) => {
       const conversation = await chatCreate(scope);
       await agentNewSession({

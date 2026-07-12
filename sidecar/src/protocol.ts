@@ -31,6 +31,10 @@ export type HostToSidecar =
       requestId: string;
       conversationId: string;
       userText: string;
+      /** 结构化引用（文件/Skill），由前端 chip 转换而来。userText 只含可见正文。 */
+      references?: PromptRef[];
+      /** 首个 Skill 引用（稳定 name），sidecar 用 /skill:name 前缀原生展开。 */
+      skill?: { name: string };
     }
   | {
       type: "apply_edit_result";
@@ -60,6 +64,14 @@ export type HostToSidecar =
     };
 
 export type NoteTarget = { kind: "inbox" | "tasks" | "piece"; name?: string };
+
+/** prompt 携带的结构化引用：显示名(display) 与内部标识(id) 分离。 */
+export interface PromptRef {
+  kind: "file" | "skill";
+  id: string;
+  display: string;
+  noteKind?: "inbox" | "tasks" | "piece" | "doc";
+}
 
 export type EditPreviewDetail =
   | { kind: "diff"; hunks: string }

@@ -869,15 +869,32 @@ pre.chat-codeblock code {
   font-size: 12px;
 }
 
-.assistant-input {
+.assistant-input-host {
   flex: 1;
+  min-width: 0;
+}
+
+.assistant-input,
+.fn-assistant-input {
+  width: 100%;
   max-height: 120px;
-  padding: 9px 12px;
-  border-width: var(--fn-border-hair);
-  border-radius: 18px;
-  font-size: var(--fs-md);
-  line-height: 1.4;
-  resize: none;
+}
+
+.assistant-expand {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.assistant-expand:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
 .assistant-send {
@@ -990,6 +1007,183 @@ pre.chat-codeblock code {
   line-height: 1.5;
   vertical-align: middle;
   /* background 由 JS 内联设置 */
+}
+
+/* ── 引用 chip（CM6 widget 渲染）：原子区间，不可进入内部、整体删除 ─────── */
+.fn-ref-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 0 8px;
+  margin: 0 1px;
+  border-radius: 999px;
+  background: var(--color-accent-fill);
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.5;
+  vertical-align: baseline;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.fn-ref-chip-kind {
+  font-size: 10px;
+  color: var(--color-accent);
+  background: transparent;
+}
+
+.fn-ref-chip-label {
+  font-weight: 500;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fn-ref-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fn-ref-chip-x:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+/* ── 候选 popover（caret-following，@ 与 / 复用）────────────────────────── */
+.fn-ref-popover {
+  position: fixed;
+  z-index: 50;
+  min-width: 200px;
+  max-width: 320px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 0.5px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text);
+}
+
+.fn-ref-popover-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fn-ref-popover-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.fn-ref-popover-item.active,
+.fn-ref-popover-item:hover {
+  background: var(--color-hover);
+}
+
+.fn-ref-popover-kind {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--color-accent-fill);
+  color: var(--color-accent);
+}
+
+.fn-ref-popover-label {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fn-ref-popover-desc {
+  grid-column: 1 / -1;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fn-ref-popover-empty {
+  padding: 8px 9px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+/* ── 大输入覆盖层：同一 CM6 输入器切换为固定全屏形态 ──────────────────── */
+.fn-input-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.25);
+  animation: fn-overlay-in 0.16s ease;
+}
+
+.fn-input-overlay-backdrop[hidden] {
+  display: none;
+}
+
+@keyframes fn-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 展开：宿主脱离 dock 流，固定居中成为大编辑区；停用滑入过渡。 */
+.assistant-input-wrap.fn-input-large {
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(720px, 92vw);
+  width: 92vw;
+  opacity: 1;
+  transition: none;
+  z-index: 41;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 0.5px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.assistant-input-wrap.fn-input-large .fn-assistant-input {
+  max-height: 70vh;
+  min-height: 160px;
+  border-radius: 12px;
+}
+
+.assistant-input-wrap.fn-input-large .assistant-input-host {
+  width: 100%;
 }
 
 /* allow / deny 按钮：迁移到 createButton（.fn-btn--primary / --secondary），
