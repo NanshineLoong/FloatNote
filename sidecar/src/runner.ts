@@ -1,3 +1,4 @@
+import { complete, type Context } from "@earendil-works/pi-ai";
 import {
   AuthStorage,
   createAgentSession,
@@ -127,6 +128,7 @@ export class AgentRunner {
     this.activeConversations.set(req.requestId, req.conversationId);
     try {
       await session.prompt(req.userText);
+      void this.generateTitle(req.conversationId, req.userText);
     } finally {
       unsubscribe();
       this.activeConversations.delete(req.requestId);
@@ -182,6 +184,32 @@ export class AgentRunner {
       sessionFile,
       messages: displayMessagesFromSession(session),
     });
+  }
+
+  private async generateTitle(conversationId: string, userText: string): Promise<void> {
+    if (!this.cfg || !userText.trim()) return;
+    try {
+      const context: Context = {
+        systemPrompt: "为下面的用户请求生成简短明确的中文对话标题。只返回标题，不使用 Markdown，不超过 24 个字符。",
+        messages: [{ role: "user", content: userText, timestamp: Date.now() }],
+      };
+      const response = await complete(buildAgentModel(this.cfg), context, {
+        apiKey: this.cfg.apiKey,
+        maxTokens: 32,
+        cacheRetention: "none",
+      });
+      const title = response.content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join("")
+        .replace(/[\n\r]+/g, " ")
+        .replace(/[*_`#>]/g, "")
+        .trim()
+        .slice(0, 24);
+      if (title) this.send({ type: "title", conversationId, title });
+    } catch {
+      // 标题生成是增强功能；失败不影响持久会话和回复。
+    }
   }
 
   private getNoteText(conversationId: string, target?: NoteTarget): Promise<string> {

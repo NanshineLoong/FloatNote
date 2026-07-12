@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { mountAssistant, type AssistantHandle } from "../assistant/assistant";
 import {
@@ -95,7 +95,10 @@ export function createAssistantController(deps: AssistantControllerDeps): Assist
     },
   });
 
+  let navigationToken = 0;
+
   async function openConversationFromHistory(conversation: ChatConversation) {
+    const token = ++navigationToken;
     const window = getCurrentWindow();
     await window.show();
     await window.setFocus();
@@ -106,6 +109,7 @@ export function createAssistantController(deps: AssistantControllerDeps): Assist
         return;
       }
       await deps.openProject(project);
+      if (token !== navigationToken) return;
     } else {
       const [document] = await resolveDocuments([conversation.scopePath]);
       if (!document) {
@@ -113,16 +117,19 @@ export function createAssistantController(deps: AssistantControllerDeps): Assist
         return;
       }
       await deps.openDocument(document);
+      if (token !== navigationToken) return;
     }
     await handle.openConversation(conversation);
+    if (token === navigationToken) await emit("chat://active", conversation.id);
   }
 
-  void listen<ChatConversation>("chat://open", (event) => {
-    void openConversationFromHistory(event.payload);
-  });
   void listen<string>("chat://open-id", async (event) => {
     const conversation = await chatOpen(event.payload);
     if (conversation) await openConversationFromHistory(conversation);
+  });
+  void listen<string>("chat://deleted", () => {
+    navigationToken += 1;
+    handle.setScope(currentScope());
   });
 
   async function toggleFromChrome() {

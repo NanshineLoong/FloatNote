@@ -38,7 +38,7 @@ pub fn show_history(app: &AppHandle) {
         return;
     }
     match WebviewWindowBuilder::new(app, "history", WebviewUrl::App("history.html".into()))
-        .title("FloatNote 对话历史")
+        .title("")
         .inner_size(760.0, 560.0)
         .min_inner_size(520.0, 360.0)
         .visible(false)
