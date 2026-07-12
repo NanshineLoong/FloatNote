@@ -8,7 +8,7 @@ function run(events: Parameters<typeof reduceEvents>[1][]): ChatState {
 /** 归一化：去掉生成的 id（消息/块），便于值比较。 */
 function norm(messages: ChatMessage[]): unknown[] {
   return messages.map((m) => {
-    if (m.role === "user") return { role: "user", text: m.text };
+    if (m.role === "user") return { role: "user", text: m.text, ...(m.references ? { references: m.references } : {}) };
     const { id: _m, ...rest } = m;
     return { ...rest, blocks: m.blocks.map((b) => {
       const { id: _b, ...rb } = b;
@@ -25,6 +25,25 @@ describe("reduceEvents", () => {
   it("appends a user message when the user sends", () => {
     const state = run([{ type: "user", text: "你好" }]);
     expect(norm(state.messages)).toEqual([{ role: "user", text: "你好" }]);
+  });
+
+  it("keeps submitted file and Skill references on the user message", () => {
+    const state = run([{
+      type: "user",
+      text: "请整理",
+      references: [
+        { kind: "file", id: "piece.md", display: "piece.md" },
+        { kind: "skill", id: "summarize", display: "summarize" },
+      ],
+    }]);
+    expect(norm(state.messages)).toEqual([{
+      role: "user",
+      text: "请整理",
+      references: [
+        { kind: "file", id: "piece.md", display: "piece.md" },
+        { kind: "skill", id: "summarize", display: "summarize" },
+      ],
+    }]);
   });
 
   it("shows a lightweight wait block instead of an assistant text bubble", () => {
@@ -118,7 +137,7 @@ describe("reduceEvents", () => {
 
     const ended = reduceEvents(started, { type: "tool", requestId: "r1", callId: "call-1", name: "write_note", phase: "end", result: "ok", isError: false });
     expect(norm(ended.messages)).toEqual([
-      { role: "assistant", streaming: true, blocks: [{ kind: "action", callId: "call-1", tool: "write_note", targets: ["piece.md"], decision: "pending", execution: "succeeded", resultSummary: "ok" }] },
+      { role: "assistant", streaming: true, blocks: [{ kind: "action", callId: "call-1", tool: "write_note", targets: ["piece.md"], decision: "pending", execution: "succeeded" }] },
     ]);
   });
 
@@ -161,7 +180,7 @@ describe("reduceEvents", () => {
     ]);
   });
 
-  it("keeps the action card as a record and adds a following text block", () => {
+  it("keeps only a compact completed tool result and adds a following text block", () => {
     const state = run([
       { type: "user", text: "整理一下" },
       { type: "tool", requestId: "r1", name: "write_note", phase: "start" },
@@ -199,7 +218,7 @@ describe("reduceEvents", () => {
     ]);
   });
 
-  it("fills action block detail on permission_request and resolves on permission_resolve", () => {
+  it("keeps permission details out of the conversation flow", () => {
     const started = run([{ type: "tool", requestId: "r1", callId: "call-1", name: "edit_note", phase: "start", args: { target: "piece.md" } }]);
     const filled = reduceEvents(started, {
       type: "permission_request",
@@ -214,22 +233,21 @@ describe("reduceEvents", () => {
     const action = (filled.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks[0];
     expect(action.kind).toBe("action");
     if (action.kind === "action") {
-      expect(action.requestId).toBe("pe-1");
-      expect(action.canSnapshot).toBe(true);
-      expect(action.newContent).toBe("b");
+      expect(action.requestId).toBeUndefined();
+      expect(action.detail).toBeUndefined();
       expect(action.decision).toBe("pending");
     }
 
     const resolved = reduceEvents(filled, { type: "permission_resolve", requestId: "pe-1", decision: "allow" });
     const after = (resolved.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks[0];
     if (after.kind === "action") {
-      expect(after.decision).toBe("allowed");
+      expect(after.decision).toBe("pending");
       expect(after.execution).toBe("running");
     }
 
     const ended = reduceEvents(resolved, { type: "tool", requestId: "r1", callId: "call-1", name: "edit_note", phase: "end", result: "written", isError: false });
     const finalBlock = (ended.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks[0];
-    expect(finalBlock).toMatchObject({ kind: "action", decision: "allowed", execution: "succeeded" });
+    expect(finalBlock).toMatchObject({ kind: "action", decision: "pending", execution: "succeeded" });
   });
 
   it("interleaves a full exchange", () => {

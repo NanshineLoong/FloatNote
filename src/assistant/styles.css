@@ -383,12 +383,12 @@ pre.chat-codeblock code {
   height: 6px;
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
+  transform: rotate(-45deg);
   transition: transform 0.18s ease;
   margin-left: 2px;
 }
 .chat-block-thinking:not(.chat-thinking-collapsed) .chat-thinking-head::after {
-  transform: rotate(225deg);
+  transform: rotate(45deg);
 }
 .chat-thinking-body {
   display: none;
@@ -881,7 +881,10 @@ pre.chat-codeblock code {
 }
 
 .assistant-expand {
-  flex: 0 0 auto;
+  position: absolute;
+  right: 44px;
+  bottom: 2px;
+  z-index: 1;
   width: 32px;
   height: 32px;
   padding: 0;
@@ -890,6 +893,11 @@ pre.chat-codeblock code {
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
+}
+
+.assistant-expand:disabled {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .assistant-expand:hover {
@@ -913,7 +921,8 @@ pre.chat-codeblock code {
   right: 14px;
   bottom: calc(100% + 6px);
   z-index: 6;
-  max-width: 360px;
+  width: min(360px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
 }
 
 .perm-bubble-root:empty {
@@ -935,6 +944,7 @@ pre.chat-codeblock code {
   font-size: 13px;
   line-height: 1.45;
   animation: perm-in 0.18s ease;
+  box-sizing: border-box;
 }
 
 @keyframes perm-in {
@@ -979,6 +989,24 @@ pre.chat-codeblock code {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.perm-document-label {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.perm-markdown-panel {
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 0.5px solid var(--color-border-hair);
+  border-radius: 8px;
+  background: var(--color-surface-3);
+  word-break: break-word;
+}
+
+.perm-markdown-panel > :first-child { margin-top: 0; }
+.perm-markdown-panel > :last-child { margin-bottom: 0; }
 
 .perm-mode {
   align-self: flex-start;
@@ -1141,6 +1169,7 @@ pre.chat-codeblock code {
   inset: 0;
   z-index: 40;
   background: rgba(0, 0, 0, 0.25);
+  pointer-events: none;
   animation: fn-overlay-in 0.16s ease;
 }
 
@@ -1161,15 +1190,15 @@ pre.chat-codeblock code {
   bottom: auto;
   top: 50%;
   transform: translate(-50%, -50%);
-  max-width: min(720px, 92vw);
-  width: 92vw;
+  max-width: min(900px, 94vw);
+  width: 94vw;
   opacity: 1;
   transition: none;
   z-index: 41;
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-  padding: 12px;
+  padding: 16px;
   border-radius: 14px;
   border: 0.5px solid var(--color-border);
   background: var(--color-surface);
@@ -1177,8 +1206,8 @@ pre.chat-codeblock code {
 }
 
 .assistant-input-wrap.fn-input-large .fn-assistant-input {
-  max-height: 70vh;
-  min-height: 160px;
+  max-height: 78vh;
+  min-height: min(320px, 64vh);
   border-radius: 12px;
 }
 
@@ -1186,8 +1215,53 @@ pre.chat-codeblock code {
   width: 100%;
 }
 
+.assistant-input-wrap.fn-input-large .assistant-expand {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  bottom: auto;
+  width: 32px;
+  height: 32px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.assistant-input-wrap.fn-input-large .assistant-expand .ph {
+  display: none;
+}
+
+.assistant-input-wrap.fn-input-large .assistant-expand::after {
+  content: "×";
+  font-size: 22px;
+  line-height: 1;
+}
+
+
 /* allow / deny 按钮：迁移到 createButton（.fn-btn--primary / --secondary），
    variant 接管颜色与 hover；这里只保留宽度等分布局。 */
 .perm-bubble-root > .fn-btn {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
 }
+
+.chat-reference-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 5px;
+}
+.chat-reference-chip {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 1px 7px;
+  border: 0.5px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-reference-chip.skill { color: var(--color-accent); background: var(--color-accent-fill); }
+.chat-reference-chip.file { color: var(--color-text-muted); background: var(--color-surface-2); }
+.chat-user-message-text { white-space: pre-wrap; }

@@ -131,7 +131,7 @@ export const inputTheme = EditorView.theme(
       lineHeight: "1.4",
       padding: "9px 12px",
       caretColor: "var(--color-text)",
-      background: "transparent",
+      background: "var(--color-surface)",
       overflowY: "auto",
       "&.cm-focused": { outline: "none" },
     },

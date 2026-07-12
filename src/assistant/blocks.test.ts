@@ -115,4 +115,20 @@ describe("reconcileMessages", () => {
     expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual(["复制原文", "重试"]);
     expect(buttons.every((button) => button.textContent === "")).toBe(true);
   });
+
+  it("renders structured references as chips in a user bubble", () => {
+    const scroll = makeScroll();
+    const map = new Map<string, HTMLElement>();
+    const state = run([{
+      type: "user",
+      text: "整理它",
+      references: [
+        { kind: "file", id: "piece.md", display: "piece.md" },
+        { kind: "skill", id: "summarize", display: "summarize" },
+      ],
+    }]);
+    reconcileMessages(scroll, state.messages, map);
+    expect(scroll.querySelector(".chat-reference-chip.file")?.textContent).toContain("piece.md");
+    expect(scroll.querySelector(".chat-reference-chip.skill")?.textContent).toContain("Skill · summarize");
+  });
 });

@@ -3,6 +3,7 @@ import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { AgentRunner, buildAgentModel, translateEvent } from "./agent.js";
 import type { SessionLike } from "./agent.js";
+import { displayMessagesFromSession } from "./runner.js";
 import type { SidecarToHost } from "./protocol.js";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -69,6 +70,21 @@ describe("translateEvent", () => {
       requestId: "r1",
       conversationId: "c1",
     });
+  });
+});
+
+describe("displayMessagesFromSession", () => {
+  it("does not restore tool calls as permanent conversation history", () => {
+    const session = {
+      sessionManager: {
+        getBranch: () => [
+          { type: "message", timestamp: "2026-07-12T00:00:00.000Z", message: { role: "user", content: "问题" } },
+          { type: "message", timestamp: "2026-07-12T00:00:01.000Z", message: { role: "tool", content: "写入成功" } },
+          { type: "message", timestamp: "2026-07-12T00:00:02.000Z", message: { role: "assistant", content: "完成" } },
+        ],
+      },
+    } as SessionLike;
+    expect(displayMessagesFromSession(session).map((message) => message.role)).toEqual(["user", "assistant"]);
   });
 });
 

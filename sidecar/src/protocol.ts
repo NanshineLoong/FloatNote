@@ -144,7 +144,6 @@ export type SidecarToHost =
 export type ChatDisplayMessage =
   | { role: "user"; text: string; timestamp: number }
   | { role: "assistant"; text: string; timestamp: number }
-  | { role: "tool"; label: string; timestamp: number }
   | { role: "error"; text: string; timestamp: number };
 
 /**

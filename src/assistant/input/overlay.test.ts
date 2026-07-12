@@ -51,10 +51,15 @@ describe("input overlay", () => {
     });
   });
 
-  it("点遮罩收回", () => {
+  it("点大输入框外的遮罩才收回", () => {
     overlay.expand();
-    const backdrop = document.querySelector(".fn-input-overlay-backdrop") as HTMLElement;
-    backdrop.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    vi.spyOn(host, "getBoundingClientRect").mockReturnValue({
+      bottom: 300, height: 200, left: 100, right: 500, top: 100, width: 400,
+      x: 100, y: 100, toJSON: () => ({}),
+    });
+    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 300, clientY: 200 }));
+    expect(overlay.isLarge()).toBe(true);
+    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 50, clientY: 50 }));
     expect(overlay.isLarge()).toBe(false);
     expect(collapsed).toBe(true);
   });

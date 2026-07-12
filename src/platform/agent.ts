@@ -16,7 +16,6 @@ export type AgentEvent =
 export type ChatDisplayMessage =
   | { role: "user"; text: string; timestamp: number }
   | { role: "assistant"; text: string; timestamp: number }
-  | { role: "tool"; label: string; timestamp: number }
   | { role: "error"; text: string; timestamp: number };
 
 export interface NoteUpdated {

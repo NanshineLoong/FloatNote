@@ -113,7 +113,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       <div class="assistant-perm-region"></div>
       <div class="assistant-input-wrap">
         <div class="assistant-input-host"></div>
-        <button class="assistant-expand" type="button" aria-label="展开输入框" title="展开输入框"><i class="ph ph-arrows-out"></i></button>
+        <button class="assistant-expand" type="button" aria-label="展开输入框" title="输入达到最大高度后可展开" disabled><i class="ph ph-arrows-out"></i></button>
         ${historyButton.outerHTML}
       </div>
     </div>
@@ -195,6 +195,19 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       : `<i class="ph ph-clock-counter-clockwise"></i>`;
   }
 
+  function updateExpandState() {
+    if (composer.isLarge()) {
+      expandBtn.disabled = false;
+      expandBtn.title = "收起输入框";
+      expandBtn.setAttribute("aria-label", "收起输入框");
+      return;
+    }
+    const available = composer.isHeightLimited();
+    expandBtn.disabled = !available;
+    expandBtn.title = available ? "展开输入框" : "输入达到最大高度后可展开";
+    expandBtn.setAttribute("aria-label", "展开输入框");
+  }
+
   async function submit(payload: PromptPayload) {
     const text = payload.userText.trim();
     const scope = currentScope;
@@ -209,7 +222,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     }
     await updateConversationTitle(conversation, text);
     state = { ...state, activeConversationId: conversation.id };
-    dispatch({ type: "user", conversationId: conversation.id, text });
+    dispatch({ type: "user", conversationId: conversation.id, text, references: payload.references });
     dispatch({ type: "pending", conversationId: conversation.id });
     try {
       activeRequestId = await deps.send({ ...payload, userText: text }, conversation.id);
@@ -304,10 +317,20 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     listSkills: deps.listSkills,
     onSubmit: (payload) => { void submit(payload); },
     onEmptySend: () => { void toggleHistoryPopover(); },
-    onChange: updateSendMode,
+    onChange: () => {
+      updateSendMode();
+      updateExpandState();
+      // CM6 的高度可能在 update listener 之后才由浏览器完成布局；下一帧复测，
+      // 确保刚达到上限时放大按钮立即出现。
+      requestAnimationFrame(updateExpandState);
+    },
   });
   sendBtn.addEventListener("click", () => composer.submit());
-  expandBtn.addEventListener("click", () => composer.expandLarge());
+  expandBtn.addEventListener("click", () => {
+    if (composer.isLarge()) composer.collapseLarge();
+    else composer.expandLarge();
+    updateExpandState();
+  });
   newBtn.addEventListener("click", () => { void startNewConversation(); });
 
   function onDocumentPointerDown(e: PointerEvent) {
@@ -321,6 +344,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
 
   rerender();
   updateSendMode();
+  updateExpandState();
 
   let destroyed = false;
   let unlisten: UnlistenFn | null = null;

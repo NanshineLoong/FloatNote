@@ -120,7 +120,23 @@ export function renderMessage(message: ChatMessage): HTMLElement {
   if (message.role === "user") {
     const body = document.createElement("div");
     body.className = "chat-msg-text";
-    body.textContent = message.text;
+    if (message.references?.length) {
+      const refs = document.createElement("div");
+      refs.className = "chat-reference-chips";
+      for (const reference of message.references) {
+        const chip = document.createElement("span");
+        chip.className = `chat-reference-chip ${reference.kind}`;
+        chip.textContent = reference.kind === "skill" ? `Skill · ${reference.display}` : `@ ${reference.display}`;
+        refs.appendChild(chip);
+      }
+      body.appendChild(refs);
+    }
+    if (message.text) {
+      const text = document.createElement("span");
+      text.className = "chat-user-message-text";
+      text.textContent = message.text;
+      body.appendChild(text);
+    }
     el.appendChild(body);
     attachCopyButton(el, message.text, "right");
     return el;

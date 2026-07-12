@@ -41,6 +41,13 @@ function renderProse(segment: string): string {
       continue;
     }
 
+    if (/^-{3,}$/.test(trimmed)) {
+      flushList();
+      out.push("<hr>");
+      i++;
+      continue;
+    }
+
     // 标题：# ~ ######
     const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
     if (heading) {
@@ -88,7 +95,7 @@ function renderProse(segment: string): string {
     flushList();
     const para: string[] = [trimmed];
     i++;
-    while (i < lines.length && lines[i].trim() !== "" && !/^(#{1,6}\s|[-*+]\s|\d+\.\s|>)/.test(lines[i].trim()) && !/^```/.test(lines[i].trim())) {
+    while (i < lines.length && lines[i].trim() !== "" && !/^(#{1,6}\s|[-*+]\s|\d+\.\s|>|-{3,}$)/.test(lines[i].trim()) && !/^```/.test(lines[i].trim())) {
       para.push(lines[i].trim());
       i++;
     }

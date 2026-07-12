@@ -34,16 +34,21 @@ export function mountInputOverlay(opts: InputOverlayOptions): InputOverlayHandle
   let backdrop: HTMLElement | null = null;
   let large = false;
 
+  function isInsideHost(event: MouseEvent): boolean {
+    const rect = host.getBoundingClientRect();
+    return event.clientX >= rect.left && event.clientX <= rect.right
+      && event.clientY >= rect.top && event.clientY <= rect.bottom;
+  }
+
+  function onDocumentMouseDown(event: MouseEvent): void {
+    if (large && !isInsideHost(event)) collapse();
+  }
+
   function ensureBackdrop(): HTMLElement {
     if (!backdrop) {
       const el = document.createElement("div");
       el.className = BACKDROP_CLASS;
       el.hidden = true;
-      el.addEventListener("mousedown", (e) => {
-        // 点遮罩收回（不抢编辑器焦点内的点击）
-        e.preventDefault();
-        collapse();
-      });
       document.body.appendChild(el);
       backdrop = el;
     }
@@ -85,11 +90,14 @@ export function mountInputOverlay(opts: InputOverlayOptions): InputOverlayHandle
   }
 
   function destroy(): void {
+    document.removeEventListener("mousedown", onDocumentMouseDown, true);
     host.classList.remove(LARGE_CLASS);
     backdrop?.remove();
     backdrop = null;
     large = false;
   }
+
+  document.addEventListener("mousedown", onDocumentMouseDown, true);
 
   return { expand, collapse, isLarge, toggle, destroy };
 }

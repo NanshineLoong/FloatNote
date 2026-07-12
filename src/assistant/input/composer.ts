@@ -64,6 +64,8 @@ export interface ComposerHandle {
   isPopoverOpen: () => boolean;
   closePopover: () => void;
   isLarge: () => boolean;
+  /** 常规输入区已达到最大高度，继续输入会在编辑器内滚动。 */
+  isHeightLimited: () => boolean;
   collapseLarge: () => void;
   expandLarge: () => void;
   setScope: (scope: ChatScope | null) => void;
@@ -73,6 +75,7 @@ export interface ComposerHandle {
 }
 
 const INPUT_CLASS = "fn-assistant-input";
+const COMPACT_INPUT_MAX_HEIGHT = 120;
 
 export function mountComposer(opts: ComposerOptions): ComposerHandle {
   let currentScope: ChatScope | null = opts.getScope();
@@ -374,6 +377,10 @@ export function mountComposer(opts: ComposerOptions): ComposerHandle {
     },
     isLarge() {
       return overlay.isLarge();
+    },
+    isHeightLimited() {
+      return Math.max(view.scrollDOM.clientHeight, view.scrollDOM.scrollHeight)
+        >= COMPACT_INPUT_MAX_HEIGHT;
     },
     collapseLarge() {
       overlay.collapse();

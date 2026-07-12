@@ -131,6 +131,31 @@ describe("composer", () => {
     expect(handle.isLarge()).toBe(false);
   });
 
+  it("仅在常规输入区长到最大高度时允许放大", () => {
+    const scroller = document.querySelector<HTMLElement>(".cm-scroller")!;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, value: 80 },
+      scrollHeight: { configurable: true, value: 80 },
+    });
+    expect(handle.isHeightLimited()).toBe(false);
+
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, value: 120 },
+      scrollHeight: { configurable: true, value: 160 },
+    });
+    expect(handle.isHeightLimited()).toBe(true);
+  });
+
+  it("输入器盒模型达到最大高度时允许放大", () => {
+    const scroller = document.querySelector<HTMLElement>(".cm-scroller")!;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, value: 120 },
+      scrollHeight: { configurable: true, value: 118 },
+    });
+
+    expect(handle.isHeightLimited()).toBe(true);
+  });
+
   it("Escape 关闭 popover 不影响已输入内容", async () => {
     handle.insertText("你好 @pi");
     await vi.waitFor(() => expect(handle.isPopoverOpen()).toBe(true));

@@ -4,15 +4,22 @@ import { renderPreviewCard } from "./permission-bubble.js";
 
 describe("renderPreviewCard", () => {
   it("renders diff card for edit_note", () => {
-    const el = renderPreviewCard({ tool: "edit_note", summary: "s", detail: { kind: "diff", hunks: "- a\n+ b" } }, true);
+    const el = renderPreviewCard({ tool: "edit_note", summary: "s", detail: { kind: "diff", hunks: "- a\n+ b" } }, true, "## b");
     expect(el.textContent).toContain("编辑文本");
-    expect(el.querySelector("pre")?.textContent).toContain("- a");
+    expect(el.querySelector(".perm-markdown-panel h2")?.textContent).toBe("b");
   });
-  it("shows snapshot option only when can_snapshot", () => {
-    const withSnap = renderPreviewCard({ tool: "edit_note", summary: "s", detail: { kind: "diff", hunks: "x" } }, true);
-    const noSnap = renderPreviewCard({ tool: "edit_note", summary: "s", detail: { kind: "diff", hunks: "x" } }, false);
+  it("shows snapshot option only for write_note", () => {
+    const withSnap = renderPreviewCard({ tool: "write_note", summary: "s", detail: { kind: "diff", hunks: "x" } }, true, "# 新内容");
+    const noSnap = renderPreviewCard({ tool: "edit_note", summary: "s", detail: { kind: "diff", hunks: "x" } }, true, "# 新内容");
     expect(withSnap.querySelector("option[value='snapshot']")).toBeTruthy();
     expect(noSnap.querySelector("option[value='snapshot']")).toBeNull();
+  });
+
+  it("renders write and create document contents as embedded Markdown panels", () => {
+    const write = renderPreviewCard({ tool: "write_note", summary: "", detail: { kind: "diff", hunks: "" } }, true, "# 标题\n\n正文");
+    expect(write.querySelector(".perm-markdown-panel h1")?.textContent).toBe("标题");
+    const create = renderPreviewCard({ tool: "create_note", summary: "", detail: { kind: "note_create", filename: "Ideas.md", contentPreview: "# 想法" } }, false);
+    expect(create.querySelector(".perm-markdown-panel h1")?.textContent).toBe("想法");
   });
   it("renders tag_assign card without raw marker", () => {
     const el = renderPreviewCard({ tool: "set_tag", summary: "s", detail: { kind: "tag_assign", blockPreview: "第一块", tagName: "review", tagColor: "#e5484d" } }, false);

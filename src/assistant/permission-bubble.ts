@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { createButton } from "../shared/ui/button";
+import { fillMarkdown } from "./markdown";
 
 // Local mirror of the permission://request payload emitted by Rust (agent.rs).
 // Kept in sync manually with sidecar/src/protocol.ts EditPreview + the
@@ -36,7 +37,7 @@ export interface PermissionRequest {
 
 /** 工具名 → 卡片标题（语义化中文标签，不暴露内部 tool 名）。 */
 export const TOOL_LABEL: Record<string, string> = {
-  read_note: "读取笔记",
+  read_note: "读取文档",
   list_tags: "列出标签",
   list_notes: "列出笔记",
   web_search: "搜索网页",
@@ -52,7 +53,7 @@ export const TOOL_LABEL: Record<string, string> = {
 };
 
 /** 渲染单张 preview 卡片（纯 DOM，便于测试）。 */
-export function renderPreviewCard(preview: EditPreview, canSnapshot: boolean): HTMLElement {
+export function renderPreviewCard(preview: EditPreview, canSnapshot: boolean, newContent = ""): HTMLElement {
   const card = document.createElement("div");
   card.className = "perm-card";
   const title = document.createElement("div");
@@ -69,9 +70,11 @@ export function renderPreviewCard(preview: EditPreview, canSnapshot: boolean): H
   detail.className = "perm-detail";
   switch (preview.detail.kind) {
     case "diff": {
-      const pre = document.createElement("pre");
-      pre.textContent = preview.detail.hunks;
-      detail.appendChild(pre);
+      const label = document.createElement("div");
+      label.className = "perm-document-label";
+      label.textContent = preview.tool === "write_note" ? "将写入以下内容" : "编辑后的内容";
+      detail.appendChild(label);
+      detail.appendChild(renderMarkdownPanel(newContent));
       break;
     }
     case "tag_assign": {
@@ -99,9 +102,7 @@ export function renderPreviewCard(preview: EditPreview, canSnapshot: boolean): H
     case "note_create": {
       const name = document.createElement("strong");
       name.textContent = preview.detail.filename;
-      const pre = document.createElement("pre");
-      pre.textContent = preview.detail.contentPreview;
-      detail.append("创建文档 ", name, pre);
+      detail.append("创建文档 ", name, renderMarkdownPanel(preview.detail.contentPreview));
       break;
     }
     case "tag_delete": {
@@ -110,20 +111,29 @@ export function renderPreviewCard(preview: EditPreview, canSnapshot: boolean): H
     }
   }
   card.appendChild(detail);
-  const select = document.createElement("select");
-  select.className = "perm-mode";
-  const direct = document.createElement("option");
-  direct.value = "direct";
-  direct.textContent = "直接写入";
-  select.appendChild(direct);
-  if (canSnapshot) {
+  if (preview.tool === "write_note") {
+    const select = document.createElement("select");
+    select.className = "perm-mode";
+    const direct = document.createElement("option");
+    direct.value = "direct";
+    direct.textContent = "直接写入";
+    select.appendChild(direct);
+    if (canSnapshot) {
     const snap = document.createElement("option");
     snap.value = "snapshot";
     snap.textContent = "保存快照后写入";
     select.appendChild(snap);
+    }
+    card.appendChild(select);
   }
-  card.appendChild(select);
   return card;
+}
+
+function renderMarkdownPanel(content: string): HTMLElement {
+  const panel = document.createElement("div");
+  panel.className = "perm-markdown-panel";
+  fillMarkdown(panel, content);
+  return panel;
 }
 
 export function mountPermissionBubble(
@@ -161,12 +171,12 @@ export function mountPermissionBubble(
   function show(req: PermissionRequest) {
     root.replaceChildren();
     currentReq = req;
-    const card = renderPreviewCard(req.preview, req.can_snapshot);
-    const select = card.querySelector<HTMLSelectElement>(".perm-mode")!;
+    const card = renderPreviewCard(req.preview, req.can_snapshot, req.new_content);
+    const select = card.querySelector<HTMLSelectElement>(".perm-mode");
     const allow = createButton({
       variant: "primary",
       label: "允许写入",
-      onClick: () => resolve("allow", select.value as WriteMode),
+      onClick: () => resolve("allow", (select?.value as WriteMode | undefined) ?? "direct"),
     });
     const deny = createButton({
       variant: "secondary",

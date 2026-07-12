@@ -22,17 +22,9 @@ function titleFor(tool: string): string {
 
 /** 写入/标签工具：产出可交互 action 卡（detail 由 permission://request 填充）。
  *  其余工具（read_note/list_tags/read_skill…）为只读，渲染为紧凑行。 */
-const INTERACTIVE_TOOLS = new Set([
-  "edit_note",
-  "write_note",
-  "create_note",
-  "set_tag",
-  "tag_create",
-  "tag_update",
-  "tag_delete",
-]);
-function isReadonly(tool: string): boolean {
-  return !INTERACTIVE_TOOLS.has(tool);
+function isReadonly(_tool: string): boolean {
+  // 所有工具统一为不可展开的结果行；写入确认仅由 dock 气泡承载。
+  return true;
 }
 
 /** SVG 图标（线性、stroke 1.5、与项目调性一致；aria-hidden）。 */
@@ -149,7 +141,7 @@ export function updateActionCard(el: HTMLElement, block: Extract<Block, { kind: 
 
   const titleEl = el.querySelector<HTMLElement>(".chat-action-title");
   const target = block.targets[0];
-  if (titleEl) titleEl.textContent = target ? `${titleFor(block.tool)} · ${target}` : titleFor(block.tool);
+  if (titleEl) titleEl.textContent = target ? `${titleFor(block.tool)} ${target}` : titleFor(block.tool);
 
   // 只读紧凑行：只切 done + spinner 可见性（无 summary/body/footer，无 ✓ 对勾）。
   if (el.classList.contains("chat-action-readonly")) {

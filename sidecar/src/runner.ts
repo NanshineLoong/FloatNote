@@ -348,9 +348,7 @@ export function displayMessagesFromSession(session: SessionLike): ChatDisplayMes
     if (message.role === "assistant") {
       return [{ role: "assistant", text, timestamp: safeTimestamp }];
     }
-    if (message.role === "tool") {
-      return [{ role: "tool", label: text, timestamp: safeTimestamp }];
-    }
+    // 工具消息仅服务于当前 Agent 上下文，恢复会话时不作为用户可见历史输出。
     return [];
   });
 }

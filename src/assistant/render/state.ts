@@ -26,7 +26,7 @@ export type ChatEvent =
   | { type: "done"; requestId: string; conversationId?: string }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }
-  | { type: "user"; conversationId?: string; text: string }
+  | { type: "user"; conversationId?: string; text: string; references?: ChatReference[] }
   | { type: "pending"; conversationId?: string }
   // thinking 块事件（sidecar 新转发）。
   | { type: "thinking_start"; requestId: string; conversationId?: string; blockId: string }
@@ -78,13 +78,16 @@ export type Block =
   | { id: string; kind: "error"; text: string };
 
 export type ChatMessage =
-  | { id: string; role: "user"; text: string }
+  | { id: string; role: "user"; text: string; references?: ChatReference[] }
   | { id: string; role: "assistant"; blocks: Block[]; streaming: boolean; pending?: true };
 
 export interface ChatState {
   activeConversationId?: string;
   messages: ChatMessage[];
 }
+
+/** 用户提交时已解析的文件/Skill 引用，供当前对话气泡渲染；不落入历史文本。 */
+export type ChatReference = { kind: "file" | "skill"; id: string; display: string; noteKind?: string };
 
 const EMPTY_RESPONSE_MESSAGE = "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。";
 
@@ -130,7 +133,12 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
 
     case "user":
       if (!acceptsConversation(state, event)) return state;
-      return push(state, { id: nextId("m"), role: "user", text: event.text });
+      return push(state, {
+        id: nextId("m"),
+        role: "user",
+        text: event.text,
+        ...(event.references?.length ? { references: event.references } : {}),
+      });
 
     case "pending":
       if (!acceptsConversation(state, event)) return state;
@@ -246,7 +254,6 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
       return updateAction(state, (b) => event.callId ? b.callId === event.callId : b.tool === event.name && b.execution === "running", (b) => ({
         ...b,
         execution: event.isError ? "failed" : "succeeded",
-        resultSummary: summarizeResult(event.result),
       }));
     }
 
@@ -360,31 +367,8 @@ function hasPending(state: ChatState): boolean {
  * 找不到则忽略（dock 固定弹窗作为兜底会处理）。
  */
 function fillActionBlock(state: ChatState, event: Extract<ChatEvent, { type: "permission_request" }>): ChatState {
-  const last = state.messages[state.messages.length - 1];
-  if (!last || last.role !== "assistant") return state;
-  const blocks = last.blocks.slice();
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    const b = blocks[i];
-    if (
-      b.kind === "action" &&
-      b.execution === "running" &&
-      b.requestId === undefined &&
-      b.tool === event.toolName &&
-      (!event.callId || b.callId === event.callId)
-    ) {
-      blocks[i] = {
-        ...b,
-        detail: event.detail,
-        summary: event.summary,
-        oldContent: event.oldContent,
-        newContent: event.newContent,
-        canSnapshot: event.canSnapshot,
-        requestId: event.requestId,
-        permissionError: undefined,
-      };
-      return updateLast(state, { ...last, blocks });
-    }
-  }
+  // 交互确认仅显示在 dock 气泡中。对话流中的 action 始终是不可展开的结果行。
+  void event;
   return state;
 }
 
@@ -455,24 +439,13 @@ function readGroupSummary(items: ActionBlock[]): string {
 function extractTargets(args: unknown): string[] {
   if (!args || typeof args !== "object") return [];
   const value = args as Record<string, unknown>;
-  const target = value.target ?? value.file_path ?? value.path;
+  const target = value.target ?? value.file_path ?? value.path ?? value.name ?? value.tagName ?? value.title;
   if (typeof target === "string" && target.trim()) return [target];
   if (target && typeof target === "object") {
     const named = (target as Record<string, unknown>).name;
     if (typeof named === "string" && named.trim()) return [named];
   }
   return [];
-}
-
-function summarizeResult(result: unknown): string | undefined {
-  if (result === undefined || result === null) return undefined;
-  if (typeof result === "string") return result.length > 120 ? `${result.slice(0, 117)}…` : result;
-  try {
-    const text = JSON.stringify(result);
-    return text.length > 120 ? `${text.slice(0, 117)}…` : text;
-  } catch {
-    return undefined;
-  }
 }
 
 function acceptsConversation(state: ChatState, event: { conversationId?: string }): boolean {
@@ -498,9 +471,6 @@ function displayMessageToChatMessage(message: ChatDisplayMessage): ChatMessage |
         blocks: [{ id: nextId("b"), kind: "error", text: message.text }],
         streaming: false,
       };
-    case "tool":
-      // 历史工具条目无结构化 detail，丢弃（实时工具走 action block 流）。
-      return null;
   }
 }
 

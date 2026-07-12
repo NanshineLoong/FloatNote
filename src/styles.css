@@ -161,7 +161,7 @@ body {
   bottom: 16px;
   width: auto;
   height: auto;
-  max-width: min(320px, 100% - 32px);
+  max-width: min(340px, 100% - 32px);
   max-height: calc(100% - 32px);
   z-index: 20;
   pointer-events: none;
@@ -240,10 +240,12 @@ body {
   justify-content: flex-start;
 }
 
-/* floating 输入框收紧（浮在正文上，无需 inline 那么宽）；与 layout 的 inputReserve 对齐，
-   小人左移量随之变小，不会滑到正文中央。 */
+/* floating 输入框使用固定可用宽度；与 layout 的 inputReserve 对齐，
+   内容增减不会改变 dock 的横向占位。窄窗时才按视口收缩。 */
 #app.mode-floating #assistant-region .assistant-input-wrap.open {
-  max-width: 240px;
+  flex: 0 0 min(240px, calc(100vw - 96px));
+  width: min(240px, calc(100vw - 96px));
+  max-width: none;
 }
 
 .topbar {
