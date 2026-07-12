@@ -1,4 +1,5 @@
-import { complete, type Context } from "@earendil-works/pi-ai";
+import { complete } from "@earendil-works/pi-ai/compat";
+import type { Context } from "@earendil-works/pi-ai";
 import {
   AuthStorage,
   createAgentSession,
@@ -329,6 +330,7 @@ const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager) 
     authStorage,
     modelRegistry,
     sessionManager,
+    thinkingLevel: cfg.thinkingLevel,
   });
   return session;
 };

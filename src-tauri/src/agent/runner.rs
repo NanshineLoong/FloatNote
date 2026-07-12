@@ -219,22 +219,22 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
                 }
                 // 从持久化配置自动恢复 AI 助手。
                 let config = state.config.lock().unwrap().clone();
-                if !config.ai_provider.is_empty() && !config.ai_model.is_empty() {
+                let connections = config.effective_ai_connections();
+                let selection = config.effective_ai_selection();
+                if let Some(connection) = connections.into_iter().find(|item| item.id == selection.connection_id) {
                     let mut guard = state.agent.lock().unwrap();
                     if let Some(agent) = guard.as_mut() {
                         let _ = agent.send(&HostToSidecar::Configure {
-                            provider: config.ai_provider,
-                            model: config.ai_model,
-                            api_key: if config.ai_api_key.is_empty() {
+                            provider: connection.provider.clone(),
+                            model: selection.model_id,
+                            api_key: if connection.api_key.is_empty() {
                                 None
                             } else {
-                                Some(config.ai_api_key)
+                                Some(connection.api_key.clone())
                             },
-                            base_url: if config.ai_base_url.is_empty() {
-                                None
-                            } else {
-                                Some(config.ai_base_url)
-                            },
+                            base_url: connection.base_url.clone(),
+                            connection: Some(connection),
+                            thinking_level: Some(selection.thinking_level),
                         });
                     }
                 }

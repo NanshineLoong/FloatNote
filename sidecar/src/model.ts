@@ -1,16 +1,21 @@
-import { getModel, type Api, type Model } from "@earendil-works/pi-ai";
+import { getModel } from "@earendil-works/pi-ai/compat";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import { buildConfiguredModel, type AiConnection, type ThinkingLevel } from "./model-config.js";
 
 export interface AgentConfig {
   provider: string;
   model: string;
   apiKey?: string;
   baseUrl?: string;
+  connection?: AiConnection;
+  thinkingLevel?: ThinkingLevel;
 }
 
 const DEFAULT_CUSTOM_CONTEXT_WINDOW = 128000;
 const DEFAULT_CUSTOM_MAX_TOKENS = 8192;
 
 export function buildAgentModel(cfg: AgentConfig): Model<Api> {
+  if (cfg.connection?.kind === "custom") return buildConfiguredModel(cfg.connection, cfg.model);
   const baseUrl = normalizeBaseUrl(cfg.baseUrl);
   if (baseUrl) {
     validateOpenAICompatibleBaseUrl(baseUrl);

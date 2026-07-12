@@ -6,6 +6,8 @@
  * writes SidecarToHost lines to stdout.
  */
 
+import type { AiConnection, ThinkingLevel } from "./model-config.js";
+
 /** Host → sidecar messages. */
 export type HostToSidecar =
   | {
@@ -14,6 +16,9 @@ export type HostToSidecar =
       model: string;
       apiKey?: string;
       baseUrl?: string;
+      /** PI-native connection; legacy fields remain during configuration migration. */
+      connection?: AiConnection;
+      thinkingLevel?: ThinkingLevel;
     }
   | {
       type: "open_session";

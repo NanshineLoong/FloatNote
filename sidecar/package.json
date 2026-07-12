@@ -15,8 +15,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.79.4",
-    "@earendil-works/pi-coding-agent": "^0.79.4",
+    "@earendil-works/pi-ai": "^0.80.6",
+    "@earendil-works/pi-coding-agent": "^0.80.6",
     "@floatnote/note-logic": "file:../shared/note-logic",
     "typebox": "^1.2.14"
   },

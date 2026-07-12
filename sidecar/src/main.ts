@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   const handle = async (msg: HostToSidecar): Promise<void> => {
     switch (msg.type) {
       case "configure":
-        await runner.configure({ provider: msg.provider, model: msg.model, apiKey: msg.apiKey, baseUrl: msg.baseUrl });
+        await runner.configure({ provider: msg.provider, model: msg.model, apiKey: msg.apiKey, baseUrl: msg.baseUrl, connection: msg.connection, thinkingLevel: msg.thinkingLevel });
         break;
       case "new_session":
         await runner.newSession(msg);

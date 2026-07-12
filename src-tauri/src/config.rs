@@ -1,6 +1,21 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AiConnection {
+    pub id: String, pub name: String, pub kind: String, pub provider: String,
+    pub protocol: String, pub api_key: String, pub base_url: Option<String>,
+    pub headers: std::collections::BTreeMap<String, String>,
+    pub models: Vec<AiCustomModel>,
+}
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AiCustomModel { pub id: String, pub name: Option<String>, pub reasoning: bool, pub input: Vec<String>, pub context_window: u32, pub max_tokens: u32, pub thinking_level_map: std::collections::BTreeMap<String, Option<String>> }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AiModelSelection { pub connection_id: String, pub model_id: String, pub thinking_level: String }
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
 pub struct WindowShortcuts {
@@ -62,6 +77,8 @@ pub struct Config {
     pub ai_api_key: String,
     /// 自定义 API 地址，仅 provider="custom" 时使用。
     pub ai_base_url: String,
+    pub ai_connections: Vec<AiConnection>,
+    pub ai_model_selection: Option<AiModelSelection>,
     /// Names of installed Skills intentionally excluded from the AI tutor.
     pub disabled_skills: Vec<String>,
 }
@@ -85,9 +102,21 @@ impl Default for Config {
             ai_model: String::new(),
             ai_api_key: String::new(),
             ai_base_url: String::new(),
+            ai_connections: Vec::new(),
+            ai_model_selection: None,
             disabled_skills: Vec::new(),
         }
     }
+}
+
+impl Config {
+    pub fn effective_ai_connections(&self) -> Vec<AiConnection> {
+        if !self.ai_connections.is_empty() { return self.ai_connections.clone(); }
+        if self.ai_provider.is_empty() { return Vec::new(); }
+        let official = self.ai_provider == "openai" || self.ai_provider == "anthropic";
+        vec![AiConnection { id: "migrated-default".into(), name: self.ai_provider.clone(), kind: if official { format!("official-{}", self.ai_provider) } else { "custom".into() }, provider: self.ai_provider.clone(), protocol: if self.ai_provider == "anthropic" { "anthropic-messages".into() } else { "openai-completions".into() }, api_key: self.ai_api_key.clone(), base_url: (!self.ai_base_url.is_empty()).then(|| self.ai_base_url.clone()), headers: Default::default(), models: (!self.ai_model.is_empty()).then(|| AiCustomModel { id: self.ai_model.clone(), name: None, reasoning: false, input: vec!["text".into()], context_window: 128000, max_tokens: 8192, thinking_level_map: Default::default() }).into_iter().collect() }]
+    }
+    pub fn effective_ai_selection(&self) -> AiModelSelection { self.ai_model_selection.clone().unwrap_or(AiModelSelection { connection_id: "migrated-default".into(), model_id: self.ai_model.clone(), thinking_level: "off".into() }) }
 }
 
 pub fn load(path: &Path) -> Config {
@@ -184,5 +213,14 @@ mod tests {
     fn partial_json_keeps_window_shortcuts_default() {
         let config: Config = serde_json::from_str(r#"{"font_size":20}"#).unwrap();
         assert_eq!(config.window_shortcuts.assistant, "Cmd+J");
+    }
+
+    #[test]
+    fn legacy_ai_fields_migrate_to_a_connection() {
+        let config: Config = serde_json::from_str(r#"{"ai_provider":"anthropic","ai_model":"claude-sonnet-4-5","ai_api_key":"k"}"#).unwrap();
+        let connections = config.effective_ai_connections();
+        assert_eq!(connections[0].protocol, "anthropic-messages");
+        assert_eq!(connections[0].provider, "anthropic");
+        assert_eq!(config.effective_ai_selection().model_id, "claude-sonnet-4-5");
     }
 }

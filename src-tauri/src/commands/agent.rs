@@ -1,5 +1,5 @@
 use crate::agent::{ActiveNote, HostToSidecar, NoteUpdated, PromptRef, PromptSkill, SkillSummary};
-use crate::state::AppState;
+use crate::{config::AiConnection, state::AppState};
 use std::{fs, path::{Path, PathBuf}, sync::atomic::Ordering};
 use tauri::{Emitter, Manager, State};
 
@@ -11,6 +11,8 @@ pub fn agent_configure(
     model: String,
     api_key: Option<String>,
     base_url: Option<String>,
+    connection: Option<AiConnection>,
+    thinking_level: Option<String>,
 ) -> Result<(), String> {
     let mut guard = state.agent.lock().unwrap();
     let agent = guard.as_mut().ok_or("助手未连接")?;
@@ -20,6 +22,8 @@ pub fn agent_configure(
             model,
             api_key,
             base_url,
+            connection,
+            thinking_level,
         })
         .map_err(|error| error.to_string())
 }

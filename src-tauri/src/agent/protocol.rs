@@ -4,6 +4,7 @@
 //! `protocol.ts` 对齐。纯数据类型，不含进程/IO 逻辑。
 
 use serde::{Deserialize, Serialize};
+use crate::config::AiConnection;
 
 /// Host → sidecar 消息。JSON 字段为 camelCase，与 Sprint 2 的 protocol.ts 对齐。
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
@@ -20,6 +21,10 @@ pub enum HostToSidecar {
         api_key: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         base_url: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        connection: Option<AiConnection>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        thinking_level: Option<String>,
     },
     OpenSession {
         conversation_id: String,
@@ -393,6 +398,8 @@ mod tests {
             model: "claude".into(),
             api_key: None,
             base_url: None,
+            connection: None,
+            thinking_level: None,
         };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(
