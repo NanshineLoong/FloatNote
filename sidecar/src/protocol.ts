@@ -41,6 +41,8 @@ export type HostToSidecar =
       error?: string;
     }
   | { type: "note_text"; callId: string; content: string; found: boolean }
+  | { type: "notes_list"; callId: string; notes: Array<{ kind: "inbox" | "tasks" | "piece"; name: string }> }
+  | { type: "create_note_result"; callId: string; ok: boolean; denied?: boolean; name?: string; error?: string }
   | {
       type: "cancel";
       requestId: string;
@@ -56,12 +58,14 @@ export type HostToSidecar =
       skillPaths: string[];
     };
 
-export type NoteTarget = { kind: "inbox" | "tasks" | "piece" | "doc"; name?: string };
+export type NoteTarget = { kind: "inbox" | "tasks" | "piece"; name?: string };
 
 export type EditPreviewDetail =
   | { kind: "diff"; hunks: string }
   | { kind: "tag_assign"; blockPreview: string; tagName: string; tagColor: string }
   | { kind: "tag_create"; tagName: string; tagColor: string }
+  | { kind: "tag_update"; tagId: string; oldName: string; oldColor: string; newName: string; newColor: string }
+  | { kind: "note_create"; filename: string; contentPreview: string }
   | { kind: "tag_delete"; tagName: string; markerCount: number };
 
 export interface EditPreview {
@@ -112,6 +116,8 @@ export type SidecarToHost =
       preview: EditPreview;
     }
   | { type: "get_note_text"; callId: string; conversationId: string; target?: NoteTarget }
+  | { type: "list_notes"; callId: string; conversationId: string }
+  | { type: "create_note"; callId: string; conversationId: string; toolCallId: string; title: string; content: string; preview: EditPreview }
   | { type: "done"; requestId: string; conversationId: string }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }

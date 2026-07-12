@@ -15,8 +15,9 @@ Entry: `src/main.ts`.
 - `protocol.ts` — `HostToSidecar`/`SidecarToHost` union types + line
   codec (`encodeLine`/`createLineDecoder`). `title` variant is declared but
   not emitted by the sidecar (kept intentionally for now).
-- `note-tools.ts` — the 8 agent tools (`read_note`/`list_tags`/`edit_note`/
-  `write_note`/`set_tag`/`tag_create`/`tag_delete`/`read_skill`). Tag tools
+- `note-tools.ts` — the note/project tools (`read_note`/`list_notes`/`list_tags`/
+  `edit_note`/`write_note`/`create_note`/`set_tag`/`tag_create`/`tag_update`/
+  `tag_delete`/`read_skill`). Tag tools
   reject non-`inbox` targets explicitly. Imports `applyChange`/`applyChanges`/
   `countMarkers`/`freeColors` from `@floatnote/note-logic` and
   `replaceOnce`/`findBlockByAnchor` from `./matching`.
@@ -24,6 +25,8 @@ Entry: `src/main.ts`.
   sidecar-only). Uses shared `blockRanges`/`stripTagMarker`.
 - `skills.ts` — skill directory loading + `formatSkillsForSystemPrompt`.
 - `tutor-prompt.ts` — `TUTOR_SYSTEM_PROMPT`.
+- `web-tools.ts` — bounded public-web search/fetch tools with redirect-aware
+  SSRF checks and untrusted-content wrappers.
 
 Build: `npm run build` (tsc), `npm run bundle` (single ESM runtime bundle),
 and `npm run prepare:tauri` (stage release resource + Node runtime). Tests:

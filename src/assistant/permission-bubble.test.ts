@@ -19,4 +19,12 @@ describe("renderPreviewCard", () => {
     expect(el.textContent).toContain("review");
     expect(el.textContent).not.toContain("floatnote:tag");
   });
+  it("renders note creation and tag update semantic cards", () => {
+    const create = renderPreviewCard({ tool: "create_note", summary: "创建", detail: { kind: "note_create", filename: "Ideas.md", contentPreview: "first line" } }, false);
+    expect(create.textContent).toContain("Ideas.md");
+    expect(create.textContent).toContain("first line");
+    const update = renderPreviewCard({ tool: "tag_update", summary: "修改", detail: { kind: "tag_update", tagId: "review", oldName: "复习", oldColor: "#e5484d", newName: "重点", newColor: "#f5a623" } }, false);
+    expect(update.textContent).toContain("复习");
+    expect(update.textContent).toContain("重点");
+  });
 });
