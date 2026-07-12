@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export type ChatScopeType = "project" | "document";
-export type ChatTitleState = "final" | "temporary";
+export type ChatTitleState = "final" | "temporary" | "generated" | "manual";
 
 export interface ChatScope {
   scopeType: ChatScopeType;
@@ -53,6 +53,10 @@ export function chatDelete(conversationId: string): Promise<ChatConversation | n
 
 export function chatClearBefore(timestamp: number): Promise<number> {
   return invoke<number>("chat_clear_before", { timestamp });
+}
+
+export function chatClearBeforeEntries(timestamp: number): Promise<ChatConversation[]> {
+  return invoke<ChatConversation[]>("chat_clear_before_entries", { timestamp });
 }
 
 export function sessionDirFromFile(sessionFile: string): string {

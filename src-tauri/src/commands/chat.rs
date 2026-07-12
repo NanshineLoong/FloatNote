@@ -89,6 +89,18 @@ pub fn chat_delete(
 }
 
 #[tauri::command]
+pub fn chat_clear_before_entries(
+    app: tauri::AppHandle,
+    timestamp: u64,
+) -> Result<Vec<ChatConversationIndexEntry>, String> {
+    let removed = chat_store()?
+        .clear_before_entries(timestamp)
+        .map_err(|error| error.to_string())?;
+    let _ = crate::tray::refresh_menu(&app);
+    Ok(removed)
+}
+
+#[tauri::command]
 pub fn chat_clear_before(app: tauri::AppHandle, timestamp: u64) -> Result<usize, String> {
     let removed = chat_store()?
         .clear_before(timestamp)

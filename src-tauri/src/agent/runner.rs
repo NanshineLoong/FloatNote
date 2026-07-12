@@ -241,6 +241,61 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             }
             let _ = app.emit("agent://event", &SidecarToHost::Ready);
         }
+        SidecarToHost::SessionOpened {
+            conversation_id,
+            session_file,
+            messages,
+        } => {
+            if let Ok(store) = crate::chat_history::ChatHistoryStore::default_for_user() {
+                let model = app
+                    .try_state::<AppState>()
+                    .map(|state| state.config.lock().unwrap().ai_model.clone())
+                    .unwrap_or_default();
+                let saved_messages = messages
+                    .iter()
+                    .filter_map(|message| match message {
+                        super::protocol::ChatDisplayMessage::User { text, timestamp } => {
+                            Some(crate::chat_history::ChatHistoryMessage {
+                                role: "user".into(),
+                                text: text.clone(),
+                                timestamp: *timestamp,
+                            })
+                        }
+                        super::protocol::ChatDisplayMessage::Assistant { text, timestamp } => {
+                            Some(crate::chat_history::ChatHistoryMessage {
+                                role: "assistant".into(),
+                                text: text.clone(),
+                                timestamp: *timestamp,
+                            })
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                let tools = messages
+                    .iter()
+                    .filter_map(|message| match message {
+                        super::protocol::ChatDisplayMessage::Tool { label, timestamp } => {
+                            Some(crate::chat_history::ChatToolSummary {
+                                name: label.clone(),
+                                status: "completed".into(),
+                                timestamp: *timestamp,
+                            })
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                let _ =
+                    store.update_session_history(&conversation_id, model, saved_messages, tools);
+            }
+            let _ = app.emit(
+                "agent://event",
+                &SidecarToHost::SessionOpened {
+                    conversation_id,
+                    session_file,
+                    messages,
+                },
+            );
+        }
         SidecarToHost::ApplyEdit {
             call_id,
             conversation_id,
@@ -296,11 +351,7 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             title,
         } => {
             if let Ok(store) = crate::chat_history::ChatHistoryStore::default_for_user() {
-                let _ = store.update_title(
-                    &conversation_id,
-                    &title,
-                    crate::chat_history::ChatTitleState::Final,
-                );
+                let _ = store.update_generated_title(&conversation_id, &title);
             }
             let _ = crate::tray::refresh_menu(app);
             let _ = app.emit(

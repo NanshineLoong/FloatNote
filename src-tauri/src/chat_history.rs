@@ -18,6 +18,24 @@ pub enum ChatScopeType {
 pub enum ChatTitleState {
     Final,
     Temporary,
+    Generated,
+    Manual,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatHistoryMessage {
+    pub role: String,
+    pub text: String,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatToolSummary {
+    pub name: String,
+    pub status: String,
+    pub timestamp: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,6 +51,12 @@ pub struct ChatConversationIndexEntry {
     pub created_at: u64,
     pub updated_at: u64,
     pub last_opened_at: u64,
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub messages: Vec<ChatHistoryMessage>,
+    #[serde(default)]
+    pub tool_summaries: Vec<ChatToolSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,6 +119,9 @@ impl ChatHistoryStore {
             created_at: now,
             updated_at: now,
             last_opened_at: now,
+            model: String::new(),
+            messages: Vec::new(),
+            tool_summaries: Vec::new(),
         };
         index.conversations.push(entry.clone());
         self.save_index(&index)?;
@@ -165,6 +192,54 @@ impl ChatHistoryStore {
         Ok(Some(opened))
     }
 
+    pub fn update_session_history(
+        &self,
+        conversation_id: &str,
+        model: String,
+        messages: Vec<ChatHistoryMessage>,
+        tool_summaries: Vec<ChatToolSummary>,
+    ) -> io::Result<Option<ChatConversationIndexEntry>> {
+        let mut index = self.load_index()?;
+        let Some(entry) = index
+            .conversations
+            .iter_mut()
+            .find(|entry| entry.id == conversation_id)
+        else {
+            return Ok(None);
+        };
+        entry.model = model;
+        entry.messages = messages;
+        entry.tool_summaries = tool_summaries;
+        entry.updated_at = now_millis();
+        let updated = entry.clone();
+        self.save_index(&index)?;
+        Ok(Some(updated))
+    }
+
+    pub fn update_generated_title(
+        &self,
+        conversation_id: &str,
+        title: &str,
+    ) -> io::Result<Option<ChatConversationIndexEntry>> {
+        let mut index = self.load_index()?;
+        let Some(entry) = index
+            .conversations
+            .iter_mut()
+            .find(|entry| entry.id == conversation_id)
+        else {
+            return Ok(None);
+        };
+        if entry.title_state == ChatTitleState::Manual {
+            return Ok(Some(entry.clone()));
+        }
+        entry.title = title.to_string();
+        entry.title_state = ChatTitleState::Generated;
+        entry.updated_at = now_millis();
+        let updated = entry.clone();
+        self.save_index(&index)?;
+        Ok(Some(updated))
+    }
+
     pub fn update_title(
         &self,
         conversation_id: &str,
@@ -204,6 +279,30 @@ impl ChatHistoryStore {
         }
         self.save_index(&index)?;
         Ok(Some(removed))
+    }
+
+    pub fn clear_before_entries(
+        &self,
+        timestamp: u64,
+    ) -> io::Result<Vec<ChatConversationIndexEntry>> {
+        let mut index = self.load_index()?;
+        let mut removed = Vec::new();
+        let mut keep = Vec::new();
+        for entry in index.conversations {
+            if entry.updated_at < timestamp {
+                match std::fs::remove_file(&entry.session_file) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error),
+                }
+                removed.push(entry);
+            } else {
+                keep.push(entry);
+            }
+        }
+        index.conversations = keep;
+        self.save_index(&index)?;
+        Ok(removed)
     }
 
     pub fn clear_before(&self, timestamp: u64) -> io::Result<usize> {
@@ -334,6 +433,9 @@ mod tests {
         assert_eq!(entry.scope_label, "Project");
         assert!(std::path::Path::new(&entry.session_file).starts_with(dir.path()));
         assert!(entry.title_state == ChatTitleState::Temporary);
+        assert!(entry.model.is_empty());
+        assert!(entry.messages.is_empty());
+        assert!(entry.tool_summaries.is_empty());
 
         let last = store
             .get_for_scope(ChatScopeType::Project, "/tmp/project")

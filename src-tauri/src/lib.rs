@@ -132,7 +132,6 @@ pub fn run() {
                 .handle()
                 .set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-
             // Hide instead of close the note window so it can be re-opened later.
             if let Some(note_win) = app.get_webview_window("main") {
                 let handle = app.handle().clone();
@@ -204,6 +203,7 @@ pub fn run() {
             commands::chat_update_title,
             commands::chat_delete,
             commands::chat_clear_before,
+            commands::chat_clear_before_entries,
             commands::watch_dir,
             commands::unwatch_dir,
             commands::agent_configure,
