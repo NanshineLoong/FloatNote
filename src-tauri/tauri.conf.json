@@ -28,11 +28,12 @@
       },
       {
         "label": "settings",
-        "title": "FloatNote 设置",
+        "title": "",
         "width": 420,
         "height": 500,
         "minHeight": 400,
         "visible": false,
+        "decorations": false,
         "url": "settings.html"
       },
       {

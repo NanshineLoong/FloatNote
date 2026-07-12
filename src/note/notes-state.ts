@@ -55,8 +55,8 @@ export interface Config {
   shortcut_toggle: string;
   shortcut_popup: string;
   auto_popup_mode: string;
-  piece_outline_default: boolean;
   font_size: number;
+  theme: "system" | "light" | "dark";
   launch_at_login: boolean;
   recent_projects: string[];
   recent_documents: string[];

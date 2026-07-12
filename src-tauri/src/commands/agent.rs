@@ -1,6 +1,6 @@
 use crate::agent::{ActiveNote, HostToSidecar, NoteUpdated, SkillSummary};
 use crate::state::AppState;
-use std::sync::atomic::Ordering;
+use std::{fs, path::{Path, PathBuf}, sync::atomic::Ordering};
 use tauri::{Emitter, Manager, State};
 
 /// Configure the sidecar provider/model connection.
@@ -174,6 +174,46 @@ pub async fn agent_list_skills(app: tauri::AppHandle) -> Result<Vec<SkillSummary
             Err("skill 列表超时".into())
         }
     }
+}
+
+#[tauri::command]
+pub fn agent_reload_skills(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
+    let paths = crate::agent::skill_paths_for_app(&app);
+    let disabled_skill_names = state.config.lock().unwrap().disabled_skills.clone();
+    let mut guard = state.agent.lock().unwrap();
+    let agent = guard.as_mut().ok_or("助手未连接")?;
+    agent.send(&HostToSidecar::SetSkillPaths { skill_paths: paths, disabled_skill_names }).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn agent_import_skill(app: tauri::AppHandle, source_path: String) -> Result<(), String> {
+    let source = PathBuf::from(source_path);
+    let skill_file = if source.is_dir() { source.join("SKILL.md") } else { source.clone() };
+    if skill_file.file_name().and_then(|n| n.to_str()) != Some("SKILL.md") || !skill_file.is_file() {
+        return Err("请选择包含 SKILL.md 的目录或 SKILL.md 文件".into());
+    }
+    let text = fs::read_to_string(&skill_file).map_err(|e| e.to_string())?;
+    let name = text.lines().find_map(|line| line.strip_prefix("name:").map(str::trim)).filter(|n| !n.is_empty()).ok_or("Skill 缺少 name")?;
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') { return Err("Skill name 只能包含字母、数字、-、_".into()); }
+    if !text.lines().any(|line| line.starts_with("description:") && !line[12..].trim().is_empty()) { return Err("Skill 缺少 description".into()); }
+    let root = crate::paths::floatnote_home().ok_or("无法确定应用数据目录")?.join("skills");
+    let destination = root.join(name);
+    if destination.exists() { return Err("同名 Skill 已存在".into()); }
+    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    copy_skill_dir(skill_file.parent().unwrap_or(Path::new(".")), &destination)?;
+    let app_for_state = app.clone();
+    let state = app_for_state.state::<AppState>();
+    agent_reload_skills(app, state)
+}
+
+fn copy_skill_dir(from: &Path, to: &Path) -> Result<(), String> {
+    fs::create_dir_all(to).map_err(|e| e.to_string())?;
+    for entry in fs::read_dir(from).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let target = to.join(entry.file_name());
+        if entry.file_type().map_err(|e| e.to_string())?.is_dir() { copy_skill_dir(&entry.path(), &target)?; } else { fs::copy(entry.path(), target).map_err(|e| e.to_string())?; }
+    }
+    Ok(())
 }
 
 #[tauri::command]

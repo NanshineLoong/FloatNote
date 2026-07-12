@@ -212,6 +212,8 @@ pub fn run() {
             commands::agent_open_session,
             commands::agent_cancel,
             commands::agent_list_skills,
+            commands::agent_reload_skills,
+            commands::agent_import_skill,
             commands::resolve_permission,
             commands::set_active_note,
             commands::get_active_note,

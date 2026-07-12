@@ -1,7 +1,7 @@
 use crate::state::AppState;
 use crate::{config::Config, notes, project, versions};
 use std::path::PathBuf;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 #[path = "commands/agent.rs"]
 mod agent;
@@ -19,10 +19,15 @@ pub fn get_config(state: State<AppState>) -> Config {
 }
 
 #[tauri::command]
-pub fn set_config(state: State<AppState>, new_config: Config) -> Result<(), String> {
+pub fn set_config(app: tauri::AppHandle, state: State<AppState>, new_config: Config) -> Result<(), String> {
     let mut config = state.config.lock().unwrap();
     *config = new_config;
-    crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())
+    crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
+    let _ = app.emit("appearance-changed", serde_json::json!({
+        "theme": config.theme.clone(),
+        "fontSize": config.font_size,
+    }));
+    Ok(())
 }
 
 #[tauri::command]

@@ -6,6 +6,9 @@ import { getCurrentWindow, LogicalPosition, LogicalSize, currentMonitor } from "
 import { placePopup, type Rect } from "./clamp";
 import { showToast } from "../shared/toast";
 import { createButton } from "../shared/ui/button";
+import { initializeAppearance } from "../shared/appearance";
+
+void initializeAppearance();
 
 const SHADOW_INSET = 6;
 const SHORTCUT_ERROR_MS = 1600;

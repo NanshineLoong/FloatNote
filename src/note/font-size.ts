@@ -8,6 +8,7 @@ let currentFontSize = 15;
 export function applyFontSize(size: number) {
   currentFontSize = Math.min(FONT_MAX, Math.max(FONT_MIN, size));
   document.documentElement.style.setProperty("--editor-font", `${currentFontSize}px`);
+  document.documentElement.style.setProperty("--fn-font-size", `${currentFontSize}px`);
 }
 
 async function saveFontSize() {

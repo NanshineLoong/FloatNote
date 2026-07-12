@@ -1,4 +1,5 @@
 import { startNoteApp } from "./note-app";
+import { initializeAppearance } from "../shared/appearance";
 
 // WebdriverIO 审查桥：仅当以 VITE_WDIO=1 构建时（npm run review:build）注入
 // @wdio/tauri-plugin，让 @wdio/tauri-service 能在 webview 内执行 JS、读取 console
@@ -7,5 +8,5 @@ if (import.meta.env.VITE_WDIO === "1") {
   void import("@wdio/tauri-plugin");
 }
 
+void initializeAppearance();
 startNoteApp();
-

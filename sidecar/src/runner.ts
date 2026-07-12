@@ -86,8 +86,8 @@ export class AgentRunner {
   }
 
   /** Deliver skill directories from the host; loads them into memory once. */
-  async setSkillPaths(paths: string[]): Promise<void> {
-    loadSkillPaths(paths);
+  async setSkillPaths(paths: string[], disabledSkillNames: string[] = []): Promise<void> {
+    loadSkillPaths(paths, disabledSkillNames);
   }
 
   /** Synchronous enumeration of loaded skills (no host round-trip). */
