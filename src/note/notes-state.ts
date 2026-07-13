@@ -205,6 +205,8 @@ interface PendingWrite {
 }
 
 const pending = new Map<string, PendingWrite>();
+const inFlight = new Map<string, Promise<void>>();
+const conflictResolutions = new Map<string, Promise<void>>();
 /** 最近一次已知磁盘 mtime（ms），用于写入时做冲突守卫。 */
 const lastKnown = new Map<string, number | null>();
 let conflictHandler:
@@ -218,6 +220,10 @@ const BACKOFF_MS = [500, 1000, 2000];
 /** 登记某路径最近一次已知的磁盘 mtime（读盘/AI 改写后调用）。 */
 export function setLastKnown(path: string, mtime: number | null): void {
   lastKnown.set(path, mtime);
+}
+
+export function lastKnownMtime(path: string): number | null | undefined {
+  return lastKnown.get(path);
 }
 
 /** 某路径是否有未保存的本地修改（外部文件变更时决定是否安全覆盖）。 */
@@ -247,7 +253,7 @@ export function scheduleSave(path: string, content: string): void {
   const entry = pending.get(path)!;
   entry.timer = setTimeout(() => {
     entry.timer = null;
-    void flushPath(path);
+    void runFlush(path);
   }, DEBOUNCE_MS);
 }
 
@@ -257,10 +263,32 @@ export async function saveImmediate(
   content: string,
   opts: { force?: boolean } = {},
 ): Promise<void> {
+  const samePendingWrite = pending.get(path)?.content === content;
+  if (opts.force !== true) {
+    await settlePendingWrites(path);
+    if (samePendingWrite && !pending.has(path)) return;
+  }
   const prev = pending.get(path);
   if (prev?.timer) clearTimeout(prev.timer);
   pending.set(path, { content, timer: null, retry: 0 });
-  await flushPath(path, opts.force === true);
+  await runFlush(path, opts.force === true);
+  if (pending.get(path)?.content === content) {
+    throw new Error(`save did not persist: ${path}`);
+  }
+}
+
+/** Wait until raw writes and any conflict dialog/forced retry for one path are
+ * settled. Callers must re-read editor state after this returns. */
+export async function settlePendingWrites(path: string): Promise<void> {
+  while (true) {
+    const write = inFlight.get(path);
+    if (write) await write.catch(() => {});
+    // Let the raw-write completion callback publish conflictResolutions.
+    await Promise.resolve();
+    const resolution = conflictResolutions.get(path);
+    if (resolution) await resolution.catch(() => {});
+    if (!inFlight.has(path) && !conflictResolutions.has(path)) return;
+  }
 }
 
 /** 关闭/隐藏前清空所有待保存：立即触发每条 pending 的写入（fire-and-forget）。 */
@@ -268,14 +296,58 @@ export function flushAll(): void {
   for (const [path, entry] of pending) {
     if (entry.timer) clearTimeout(entry.timer);
     entry.timer = null;
-    void flushPath(path);
+    void runFlush(path);
   }
 }
 
+function runFlush(path: string, force = false): Promise<void> {
+  const previous = inFlight.get(path) ?? Promise.resolve();
+  const operation = previous.catch(() => {}).then(async () => {
+    if (!force) {
+      const resolution = conflictResolutions.get(path);
+      if (resolution) await resolution.catch(() => {});
+    }
+    return flushPath(path, force);
+  });
+  const rawWrite = operation.then(() => undefined);
+  inFlight.set(path, rawWrite);
+  return operation.then(
+    async (conflict) => {
+      if (inFlight.get(path) === rawWrite) inFlight.delete(path);
+      if (!conflict) return;
+      if (!conflictHandler) {
+        console.error("save conflict (no handler registered)", path);
+        return;
+      }
+      const existing = conflictResolutions.get(path);
+      if (existing) {
+        await existing;
+        return;
+      }
+      const resolution = Promise.resolve()
+        .then(() => conflictHandler?.(conflict.path, conflict.content))
+        .then(() => undefined);
+      conflictResolutions.set(path, resolution);
+      try {
+        await resolution;
+      } finally {
+        if (conflictResolutions.get(path) === resolution) conflictResolutions.delete(path);
+      }
+    },
+    (error) => {
+      if (inFlight.get(path) === rawWrite) inFlight.delete(path);
+      throw error;
+    },
+  );
+}
+
 /** 执行一次写入：取 expectedMtime → invoke → 处理 conflict/重试/续写。 */
-async function flushPath(path: string, force = false): Promise<void> {
+async function flushPath(
+  path: string,
+  force = false,
+): Promise<{ path: string; content: string } | null> {
   const entry = pending.get(path);
-  if (!entry) return;
+  if (!entry) return null;
   const contentWritten = entry.content;
   const expectedMtime = force ? null : (lastKnown.get(path) ?? null);
   try {
@@ -285,16 +357,11 @@ async function flushPath(path: string, force = false): Promise<void> {
       expectedMtime,
     });
     if (outcome.conflict) {
-      if (conflictHandler) {
-        await conflictHandler(path, contentWritten);
-      } else {
-        console.error("save conflict (no handler registered)", path);
-      }
-      return;
+      return { path, content: contentWritten };
     }
     lastKnown.set(path, outcome.mtime);
     const cur = pending.get(path);
-    if (!cur) return;
+    if (!cur) return null;
     if (cur.content === contentWritten) {
       pending.delete(path);
     } else {
@@ -303,23 +370,25 @@ async function flushPath(path: string, force = false): Promise<void> {
       if (cur.timer) clearTimeout(cur.timer);
       cur.timer = setTimeout(() => {
         cur.timer = null;
-        void flushPath(path);
+        void runFlush(path);
       }, DEBOUNCE_MS);
     }
+    return null;
   } catch (error) {
     console.error("save failed", error);
     const cur = pending.get(path);
-    if (!cur) return;
+    if (!cur) return null;
     if (cur.retry < MAX_RETRIES) {
       const backoff = BACKOFF_MS[cur.retry] ?? BACKOFF_MS[BACKOFF_MS.length - 1];
       cur.retry += 1;
       if (cur.timer) clearTimeout(cur.timer);
       cur.timer = setTimeout(() => {
         cur.timer = null;
-        void flushPath(path, force);
+        void runFlush(path, force);
       }, backoff);
     }
     // 重试耗尽：保留 pending，下次 scheduleSave 会重置 retry 续写。
+    return null;
   }
 }
 
@@ -329,6 +398,8 @@ export function __resetSaveStateForTests(): void {
     if (entry.timer) clearTimeout(entry.timer);
   }
   pending.clear();
+  inFlight.clear();
+  conflictResolutions.clear();
   lastKnown.clear();
   conflictHandler = null;
 }

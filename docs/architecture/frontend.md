@@ -12,6 +12,7 @@ FloatNote 使用 Vite 多页面应用：根目录 HTML 是各 WebView 入口。`
   figure widget，并以精确源码偏移定位工具栏写回。Tab/Shift+Tab 对多行及完整
   列表子树操作。大纲模式是结构投影，只显示标题和有序/无序列表，其他 Markdown
   行保留在文档中但在大纲视图完全隐藏。
+  `piece-switcher.ts` 同时管理版本菜单与预览操作条；`version-preview.ts` 只保存预览前正文的状态语义，CodeMirror 的只读切换由 `editor.ts` 提供。版本列表用主标题与小号时间元信息分层显示，普通版本不显示“手动”来源，AI 快照保留低调标识。
 - `src/assistant/` 管理流式聊天、消息 reducer、渲染、技能和 mention 选择器；不得导入 `src/note/` 内部模块。assistant turn 是严格有序的 block 流，允许过程、文本、权限和错误多次交错；工具状态用稳定 `callId` 更新，不能用“最近一个工具”推断。
 - `src/history/`、`src/popup/`、`src/settings/` 分别是历史、选中文本弹窗和设置窗口的 UI。
 

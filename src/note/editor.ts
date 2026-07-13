@@ -2,7 +2,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { Autolink, Strikethrough, Table, TaskList } from "@lezer/markdown";
 import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
-import type { Extension } from "@codemirror/state";
+import { Compartment, EditorState, Transaction, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { livePreview, setNoteDir } from "./preview";
@@ -111,6 +111,8 @@ const baseContent = {
   padding: "16px 0",
 };
 
+const readOnlyCompartments = new WeakMap<EditorView, Compartment>();
+
 /** CodeMirror deliberately draws a selection through the full width of an
  * empty line. Keep the range itself unchanged, but label that paint fragment
  * so CSS can render a small line-start cue instead. */
@@ -179,10 +181,12 @@ export function createEditor(
   opts: { grow?: boolean; noteDirProvider?: () => string } = {},
 ): EditorView {
   const noteDirProvider = opts.noteDirProvider ?? (() => "");
+  const readOnlyCompartment = new Compartment();
   const view = new EditorView({
     parent,
     extensions: [
       history(),
+      readOnlyCompartment.of(EditorState.readOnly.of(false)),
       drawSelection({ cursorBlinkRate: 1200 }),
       compactBlankLineSelection,
       keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -217,6 +221,7 @@ export function createEditor(
       }),
     ],
   });
+  readOnlyCompartments.set(view, readOnlyCompartment);
   // Seed the image-widget noteDir map immediately; the ViewPlugin above keeps
   // it fresh on doc/selection/focus change before the preview plugin rebuilds.
   setNoteDir(view, noteDirProvider());
@@ -227,8 +232,21 @@ export function createEditor(
   return view;
 }
 
+export function setEditorReadOnly(view: EditorView, readOnly: boolean): void {
+  const compartment = readOnlyCompartments.get(view);
+  if (!compartment) return;
+  view.dispatch({ effects: compartment.reconfigure(EditorState.readOnly.of(readOnly)) });
+}
+
 export function setDoc(view: EditorView, content: string) {
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
+}
+
+export function replaceDocWithoutHistory(view: EditorView, content: string): void {
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: content },
+    annotations: Transaction.addToHistory.of(false),
+  });
 }
 
 export function requestEditorLayout(

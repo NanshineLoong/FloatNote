@@ -631,7 +631,6 @@ body {
   min-height: 16px;
   color: var(--color-danger);
 }
-.version-item,
 .version-empty {
   font-size: var(--fs-sm);
 }
@@ -649,6 +648,122 @@ body {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--color-divider);
   color: var(--color-accent);
+}
+
+.version-list-row {
+  display: flex;
+  align-items: center;
+  min-width: 210px;
+  padding: 2px 3px;
+  border-radius: var(--radius-sm);
+}
+
+.version-list-row:hover,
+.version-list-row.active {
+  background: var(--color-hover);
+}
+
+.version-row-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 6px 7px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.version-item-title {
+  overflow: hidden;
+  font-size: var(--fs-base);
+  line-height: var(--lh-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-item-meta {
+  margin-top: 3px;
+  color: var(--color-text-subtle);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.version-row-kebab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.version-list-row:hover .version-row-kebab,
+.version-row-kebab:focus-visible,
+.version-row-kebab[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.version-row-kebab:hover {
+  background: var(--color-selected);
+  color: var(--color-text);
+}
+
+.version-action {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.version-rename-input {
+  flex: 1;
+  margin: 3px 4px;
+}
+
+#piece-version-preview-root {
+  z-index: 20;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 46px;
+  padding: 7px 10px 7px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  background: color-mix(in srgb, var(--color-text) 88%, var(--color-surface));
+  color: var(--color-text-on-accent);
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.08);
+}
+
+#piece-version-preview-root[hidden] {
+  display: none;
+}
+
+.version-preview-info {
+  overflow: hidden;
+  min-width: 0;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-preview-spacer {
+  flex: 1;
+}
+
+#piece-version-preview-root .fn-btn--ghost {
+  color: inherit;
+}
+
+#piece-version-preview-root .fn-btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 

@@ -4,8 +4,10 @@ import {
   inboxEntry,
   scheduleSave,
   saveImmediate,
+  settlePendingWrites,
   flushAll,
   isDirty,
+  lastKnownMtime,
   onConflict,
   setLastKnown,
   discardPending,
@@ -109,6 +111,20 @@ describe("save scheduling", () => {
     expect(isDirty("/a.md")).toBe(false);
   });
 
+  it("rejects an immediate save that was not persisted before its retry", async () => {
+    mockedInvoke.mockRejectedValueOnce(new Error("io")).mockResolvedValueOnce(okWrite(3001));
+
+    await expect(saveImmediate("/a.md", "draft before restore")).rejects.toThrow(
+      "save did not persist",
+    );
+    expect(isDirty("/a.md")).toBe(true);
+    expect(mockedInvoke).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(mockedInvoke).toHaveBeenCalledTimes(2);
+    expect(isDirty("/a.md")).toBe(false);
+  });
+
   it("flushAll flushes every pending path immediately", async () => {
     mockedInvoke.mockResolvedValue(okWrite());
     scheduleSave("/a.md", "A");
@@ -148,6 +164,7 @@ describe("save scheduling", () => {
     mockedInvoke.mockResolvedValueOnce({ content: "disk", mtime: 42 });
     const content = await loadNote("/a.md");
     expect(content).toBe("disk");
+    expect(lastKnownMtime("/a.md")).toBe(42);
     mockedInvoke.mockResolvedValueOnce(okWrite(43));
     scheduleSave("/a.md", "edited");
     await vi.advanceTimersByTimeAsync(500);
@@ -167,5 +184,35 @@ describe("save scheduling", () => {
       content: "force",
       expectedMtime: null,
     });
+  });
+
+  it("saveImmediate waits for an in-flight autosave on the same path", async () => {
+    let resolveFirst!: (value: ReturnType<typeof okWrite>) => void;
+    mockedInvoke.mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }));
+    scheduleSave("/a.md", "current");
+    await vi.advanceTimersByTimeAsync(500);
+
+    const immediate = saveImmediate("/a.md", "current");
+    expect(mockedInvoke).toHaveBeenCalledTimes(1);
+    resolveFirst(okWrite(60));
+    await immediate;
+
+    expect(mockedInvoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows conflict resolution to force-save without waiting on itself", async () => {
+    mockedInvoke
+      .mockResolvedValueOnce({ conflict: true, mtime: null })
+      .mockResolvedValueOnce(okWrite(61));
+    onConflict(async (path, content) => {
+      await saveImmediate(path, content, { force: true });
+    });
+    scheduleSave("/a.md", "mine");
+    await vi.advanceTimersByTimeAsync(500);
+
+    await settlePendingWrites("/a.md");
+
+    expect(mockedInvoke).toHaveBeenCalledTimes(2);
+    expect(isDirty("/a.md")).toBe(false);
   });
 });

@@ -7,9 +7,10 @@ import {
   renameNote,
   type NoteEntry,
 } from "./notes-state";
-import { formatVersionLabel, type VersionEntry } from "./versions";
+import { formatVersionEntry, type VersionEntry } from "./versions";
 import { createIcon } from "../shared/ui/icon";
 import { createMenu, type MenuHandle } from "../shared/ui/menu";
+import { showToast } from "../shared/toast";
 
 export interface PieceHeaderHost {
   /** 当前项目文件夹路径。 */
@@ -19,11 +20,17 @@ export interface PieceHeaderHost {
   /** 切到某成品（switch / 新建 / 重命名后）。 */
   open: (entry: NoteEntry) => void;
   /** 读取当前成品的版本列表。 */
-  loadVersions: () => Promise<VersionEntry[]>;
+  loadVersions: (target: NoteEntry) => Promise<VersionEntry[]>;
   /** 手动记录当前成品为一个新版本。 */
-  snapshot: () => Promise<void>;
-  /** 恢复当前成品到版本 v（恢复前当前内容已自动存为新版本）。 */
-  restore: (v: number) => Promise<void>;
+  snapshot: (target: NoteEntry) => Promise<void>;
+  /** 无副作用地把版本 v 显示为只读预览。 */
+  preview: (target: NoteEntry, v: number) => Promise<boolean>;
+  /** 退出只读预览并恢复原本的编辑内容。 */
+  exitPreview: () => void;
+  /** 恢复当前成品到版本 v（不同的当前内容会存为“恢复前备份”）。 */
+  restore: (target: NoteEntry, v: number) => Promise<void>;
+  renameVersion: (target: NoteEntry, v: number, name: string) => Promise<void>;
+  deleteVersion: (target: NoteEntry, v: number) => Promise<void>;
   /** 删完当前 piece 后项目里已无 piece；切到 NO_PIECE 空态而非自动建空文件。 */
   onEmptied?: () => void;
   /** 聚焦并全选标题栏（新建 piece 后原地改名）。 */
@@ -55,11 +62,17 @@ export function outlineToggleState(outlineOn: boolean): { icon: string; pressed:
 export function createPieceHeader(args: {
   topbarMount: HTMLElement;
   titleMount: HTMLElement;
+  previewMount: HTMLElement;
   host: PieceHeaderHost;
 }) {
-  const { topbarMount, titleMount, host } = args;
+  const { topbarMount, titleMount, previewMount, host } = args;
   let menuEl: MenuHandle | null = null;
   let renaming = false;
+
+  function reportVersionError(action: string, error: unknown) {
+    console.error(`${action} failed`, error);
+    showToast(`${action}失败，请重试`);
+  }
 
   const crumb = document.createElement("button");
   crumb.className = "piece-breadcrumb";
@@ -207,9 +220,84 @@ export function createPieceHeader(args: {
   }
 
   let versionMenuEl: MenuHandle | null = null;
+  let versionMenuGeneration = 0;
+  let activePreview: VersionEntry | null = null;
   function closeVersionMenu() {
+    versionMenuGeneration += 1;
     versionMenuEl?.hide();
     versionMenuEl = null;
+  }
+
+  function closePreview() {
+    host.exitPreview();
+    activePreview = null;
+    title.readOnly = false;
+    previewMount.replaceChildren();
+    previewMount.hidden = true;
+  }
+
+  async function restoreEntry(target: NoteEntry, entry: VersionEntry) {
+    try {
+      await host.restore(target, entry.v);
+    } catch (error) {
+      reportVersionError("恢复版本", error);
+      return;
+    }
+    activePreview = null;
+    title.readOnly = false;
+    previewMount.replaceChildren();
+    previewMount.hidden = true;
+    closeVersionMenu();
+  }
+
+  function showPreviewBar(entry: VersionEntry) {
+    activePreview = entry;
+    title.readOnly = true;
+    const display = formatVersionEntry(entry);
+    const info = document.createElement("span");
+    info.className = "version-preview-info";
+    info.textContent = `${display.title} · ${display.meta} · 只读`;
+    const spacer = document.createElement("span");
+    spacer.className = "version-preview-spacer";
+    const exit = document.createElement("button");
+    exit.className = "fn-btn fn-btn--ghost fn-btn--sm version-preview-exit";
+    exit.textContent = "退出预览";
+    exit.onclick = closePreview;
+    const restore = document.createElement("button");
+    restore.className = "fn-btn fn-btn--primary fn-btn--sm version-preview-restore";
+    restore.textContent = "恢复此版本";
+    const target = host.current();
+    restore.disabled = !target;
+    restore.onclick = () => {
+      if (target) void restoreEntry(target, entry);
+    };
+    previewMount.replaceChildren(info, spacer, exit, restore);
+    previewMount.hidden = false;
+  }
+
+  async function previewEntry(target: NoteEntry, entry: VersionEntry) {
+    closeVersionMenu();
+    let applied: boolean;
+    try {
+      applied = await host.preview(target, entry.v);
+    } catch (error) {
+      reportVersionError("预览版本", error);
+      return;
+    }
+    if (!applied || host.current()?.path !== target.path) return;
+    showPreviewBar(entry);
+  }
+
+  function makeVersionAction(label: string, icon: string, run: () => void, danger = false) {
+    const item = document.createElement("button");
+    item.className = "fn-menu__item version-action";
+    if (danger) item.classList.add("fn-menu__item--danger");
+    item.append(createIcon({ phosphor: `ph ${icon}`, size: 13 }), document.createTextNode(label));
+    item.onclick = (event) => {
+      event.stopPropagation();
+      run();
+    };
+    return item;
   }
 
   async function openVersionMenu() {
@@ -217,8 +305,17 @@ export function createPieceHeader(args: {
       closeVersionMenu();
       return;
     }
-    if (!host.current()) return;
-    const entries = await host.loadVersions();
+    const target = host.current();
+    if (!target) return;
+    const generation = ++versionMenuGeneration;
+    let entries: VersionEntry[];
+    try {
+      entries = await host.loadVersions(target);
+    } catch (error) {
+      reportVersionError("加载版本", error);
+      return;
+    }
+    if (generation !== versionMenuGeneration || host.current()?.path !== target.path) return;
     const handle = createMenu({ anchor: versionBtn, placement: "down-right" });
     const items: HTMLElement[] = [];
 
@@ -229,7 +326,11 @@ export function createPieceHeader(args: {
     snap.onclick = async (e) => {
       e.stopPropagation();
       closeVersionMenu();
-      await host.snapshot();
+      try {
+        await host.snapshot(target);
+      } catch (error) {
+        reportVersionError("记录版本", error);
+      }
     };
     items.push(snap);
 
@@ -240,17 +341,95 @@ export function createPieceHeader(args: {
       items.push(empty);
     }
     for (const entry of [...entries].reverse()) {
-      const item = document.createElement("button");
-      item.className = "fn-menu__item version-item";
-      item.textContent = formatVersionLabel(entry);
-      item.onclick = () => {
-        closeVersionMenu();
-        void (async () => {
-          if (!(await confirmDialog("恢复到该版本？当前内容会被覆盖（已自动存为新版本）。"))) return;
-          host.restore(entry.v);
-        })();
+      const row = document.createElement("div");
+      row.className = "version-list-row";
+      if (activePreview?.v === entry.v) row.classList.add("active");
+
+      const main = document.createElement("button");
+      main.className = "version-row-main";
+      const display = formatVersionEntry(entry);
+      const titleEl = document.createElement("span");
+      titleEl.className = "version-item-title";
+      titleEl.textContent = display.title;
+      const meta = document.createElement("span");
+      meta.className = "version-item-meta";
+      meta.textContent = display.meta;
+      main.append(titleEl, meta);
+      main.onclick = () => void previewEntry(target, entry);
+
+      const kebab = document.createElement("button");
+      kebab.className = "version-row-kebab";
+      kebab.title = "更多";
+      kebab.setAttribute("aria-label", `${display.title}的更多操作`);
+      kebab.setAttribute("aria-haspopup", "menu");
+      kebab.setAttribute("aria-expanded", "false");
+      kebab.append(createIcon({ phosphor: "ph ph-dots-three-vertical", size: 13 }));
+      kebab.onclick = (event) => {
+        event.stopPropagation();
+        if (handle.isSubmenuOpenFor(kebab)) {
+          handle.closeSubmenu();
+          return;
+        }
+        const restore = makeVersionAction("恢复此版本", "ph-clock-counter-clockwise", () => {
+          handle.closeSubmenu();
+          void restoreEntry(target, entry);
+        });
+        const rename = makeVersionAction("重命名版本", "ph-pencil-simple", () => {
+          handle.closeSubmenu();
+          const input = document.createElement("input");
+          input.className = "fn-control version-rename-input";
+          input.value = display.title;
+          main.replaceWith(input);
+          input.focus();
+          input.select();
+          let submitting = false;
+          const commit = async () => {
+            if (submitting) return;
+            const name = input.value.trim();
+            if (!name || name === display.title) {
+              input.replaceWith(main);
+              return;
+            }
+            submitting = true;
+            try {
+              await host.renameVersion(target, entry.v, name);
+              entry.summary = name;
+              titleEl.textContent = name;
+              input.replaceWith(main);
+            } catch (error) {
+              reportVersionError("重命名版本", error);
+              input.replaceWith(main);
+            }
+          };
+          input.onblur = () => void commit();
+          input.onkeydown = (keyEvent) => {
+            if (keyEvent.key === "Enter") {
+              keyEvent.preventDefault();
+              void commit();
+            } else if (keyEvent.key === "Escape") {
+              keyEvent.preventDefault();
+              input.replaceWith(main);
+            }
+          };
+        });
+        const remove = makeVersionAction("删除版本", "ph-trash", () => {
+          handle.closeSubmenu();
+          void (async () => {
+            if (!(await confirmDialog(`删除「${formatVersionEntry(entry).title}」？此操作无法撤销。`))) return;
+            try {
+              await host.deleteVersion(target, entry.v);
+            } catch (error) {
+              reportVersionError("删除版本", error);
+              return;
+            }
+            if (activePreview?.v === entry.v) closePreview();
+            closeVersionMenu();
+          })();
+        }, true);
+        handle.openSubmenu(kebab, [restore, rename, remove]);
       };
-      items.push(item);
+      row.append(main, kebab);
+      items.push(row);
     }
 
     versionMenuEl = handle;
@@ -337,5 +516,13 @@ export function createPieceHeader(args: {
     handle.showAt(rect.left, rect.bottom + 4, items);
   }
 
-  return { setLabel, focusTitle, closeMenu, closeVersionMenu, setOutlineMode: syncOutlineMode };
+  previewMount.hidden = true;
+  return {
+    setLabel,
+    focusTitle,
+    closeMenu,
+    closeVersionMenu,
+    exitVersionPreview: closePreview,
+    setOutlineMode: syncOutlineMode,
+  };
 }

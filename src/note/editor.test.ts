@@ -4,7 +4,13 @@ import { EditorState, Transaction } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { Strikethrough, Table, TaskList } from "@lezer/markdown";
 import { describe, expect, it, vi } from "vitest";
-import { createEditor, requestEditorLayout, setDoc } from "./editor";
+import {
+  createEditor,
+  replaceDocWithoutHistory,
+  requestEditorLayout,
+  setDoc,
+  setEditorReadOnly,
+} from "./editor";
 import { livePreview, previewField } from "./preview";
 import type { Decoration, DecorationSet } from "@codemirror/view";
 
@@ -62,6 +68,49 @@ describe("setDoc undo", () => {
 
       undo(view);
       expect(view.state.doc.toString()).toBe("原文");
+    } finally {
+      view.destroy();
+      host.remove();
+    }
+  });
+});
+
+describe("setEditorReadOnly", () => {
+  it("toggles the editor read-only facet for version preview", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const view = createEditor(host, () => {});
+    try {
+      expect(view.state.readOnly).toBe(false);
+      setEditorReadOnly(view, true);
+      expect(view.state.readOnly).toBe(true);
+      setEditorReadOnly(view, false);
+      expect(view.state.readOnly).toBe(false);
+    } finally {
+      view.destroy();
+      host.remove();
+    }
+  });
+});
+
+describe("replaceDocWithoutHistory", () => {
+  it("keeps version previews out of undo history", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const view = createEditor(host, () => {});
+    try {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: "base" },
+        annotations: Transaction.addToHistory.of(false),
+      });
+      setDoc(view, "current edit");
+      const originalState = view.state;
+      replaceDocWithoutHistory(view, "historical preview");
+      view.setState(originalState);
+
+      undo(view);
+
+      expect(view.state.doc.toString()).toBe("base");
     } finally {
       view.destroy();
       host.remove();

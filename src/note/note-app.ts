@@ -5,7 +5,13 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { onFileChanged, onNoteUpdated } from "./agent";
 import { EditorView, placeholder } from "@codemirror/view";
-import { createEditor, requestEditorLayout, setDoc } from "./editor";
+import {
+  createEditor,
+  replaceDocWithoutHistory,
+  requestEditorLayout,
+  setDoc,
+  setEditorReadOnly,
+} from "./editor";
 import { blockHandleGutter, deleteBlock } from "./blocks/handle-gutter";
 import { cancelBlockDrag, scrollerPositionTheme } from "./blocks/drag";
 import { mountTagBar } from "./tags/bar";
@@ -31,6 +37,7 @@ import {
   getConfig,
   inboxEntry,
   isDirty,
+  lastKnownMtime,
   listPieces,
   listProjects,
   loadNote,
@@ -43,6 +50,8 @@ import {
   resolveProjects,
   saveImmediate,
   scheduleSave,
+  setLastKnown,
+  settlePendingWrites,
   setRecentDocuments,
   setRecentProjects,
   tasksPath,
@@ -68,7 +77,15 @@ import { canSplit } from "./split";
 import { buildBindings, installShortcuts, type ShortcutActions } from "./shortcuts";
 import { WINDOW_SHORTCUT_DEFAULTS, type WindowShortcutId } from "../shared/shortcuts";
 import { clearLocalSelection, localSelectionPublisher } from "./local-selection";
-import { listVersions, restoreVersion, snapshotNote } from "./versions";
+import {
+  deleteVersion,
+  listVersions,
+  readVersion,
+  renameVersion,
+  restoreVersion,
+  snapshotNote,
+} from "./versions";
+import { createVersionPreviewState } from "./version-preview";
 import { applyFontSize, bumpFont } from "./font-size";
 import { attachQuoteCapture } from "./quote-capture";
 import { attachAutomationToasts } from "./automation-toasts";
@@ -94,6 +111,7 @@ app.innerHTML = `
         <div id="piece-doc-header"></div>
         <div id="piece-editor-root"></div>
       </div>
+      <div id="piece-version-preview-root"></div>
       <div id="piece-empty-root"></div>
     </div>
     <div id="assistant-region"></div>
@@ -247,6 +265,7 @@ let layoutController: ReturnType<typeof createLayoutController> | null = null;
 const pieceEditorRoot = document.querySelector<HTMLElement>("#piece-editor-root")!;
 const pieceCol = document.querySelector<HTMLElement>("#piece-col")!;
 const pieceScroll = document.querySelector<HTMLElement>("#piece-scroll")!;
+const versionPreviewRoot = document.querySelector<HTMLElement>("#piece-version-preview-root")!;
 
 
 
@@ -277,6 +296,24 @@ const pieceEditor = createEditor(
         : (session.currentProject?.path ?? session.currentStartDir),
   },
 );
+const versionPreview = createVersionPreviewState();
+let versionPreviewEditorState: typeof pieceEditor.state | null = null;
+let versionPreviewGeneration = 0;
+
+function exitPieceVersionPreview() {
+  versionPreviewGeneration += 1;
+  versionPreview.exit();
+  setEditorReadOnly(pieceEditor, false);
+  if (versionPreviewEditorState) {
+    applyingRemote = true;
+    try {
+      pieceEditor.setState(versionPreviewEditorState);
+    } finally {
+      applyingRemote = false;
+      versionPreviewEditorState = null;
+    }
+  }
+}
 // 滑块挂在不滚动的 #piece-col 上，监听真正滚动的 #piece-scroll。
 requestAnimationFrame(() => initScrollbar(pieceCol, pieceScroll));
 
@@ -320,7 +357,11 @@ function resetPieceOutlineForOpen() {
 function mountPieceHeader() {
   const topbar = document.querySelector<HTMLElement>("#piece-topbar-root")!;
   const titleHost = document.querySelector<HTMLElement>("#piece-doc-header")!;
-  pieceHeader = createPieceHeader({ topbarMount: topbar, titleMount: titleHost, host: {
+  pieceHeader = createPieceHeader({
+    topbarMount: topbar,
+    titleMount: titleHost,
+    previewMount: versionPreviewRoot,
+    host: {
     dir: () =>
       session.mode === "document"
         ? session.currentDocument
@@ -342,30 +383,78 @@ function mountPieceHeader() {
         await openPiece(entry);
       }
     },
-    loadVersions: () => {
-      if (session.mode !== "project" || !session.currentProject || !session.currentPiece)
+    loadVersions: (target) => {
+      if (session.mode !== "project" || activePieceFile()?.path !== target.path)
         return Promise.resolve([]);
-      return listVersions(session.currentProject.path, session.currentPiece.name);
+      return listVersions(parentDir(target.path), target.name);
     },
-    snapshot: async () => {
-      if (session.mode !== "project" || !session.currentProject || !session.currentPiece) return;
+    snapshot: async (target) => {
+      if (session.mode !== "project" || activePieceFile()?.path !== target.path) return;
       await snapshotNote(
-        session.currentProject.path,
-        session.currentPiece.name,
-        pieceEditor.state.doc.toString(),
+        parentDir(target.path),
+        target.name,
+        versionPreview.contentForRestore(pieceEditor.state.doc.toString()),
         "manual",
       );
     },
-    restore: async (v) => {
-      if (session.mode !== "project" || !session.currentProject || !session.currentPiece) return;
-      const restored = await restoreVersion(
-        session.currentProject.path,
-        session.currentPiece.name,
-        session.currentPiece.path,
-        pieceEditor.state.doc.toString(),
-        v,
-      );
-      applyRemoteTo(pieceEditor, restored);
+    preview: async (target, v) => {
+      if (session.mode !== "project" || activePieceFile()?.path !== target.path) return false;
+      const generation = ++versionPreviewGeneration;
+      const content = await readVersion(parentDir(target.path), target.name, v);
+      if (generation !== versionPreviewGeneration || activePieceFile()?.path !== target.path) {
+        return false;
+      }
+      versionPreview.begin(pieceEditor.state.doc.toString());
+      versionPreviewEditorState ??= pieceEditor.state;
+      setEditorReadOnly(pieceEditor, true);
+      applyPreviewTo(pieceEditor, content);
+      return true;
+    },
+    exitPreview: exitPieceVersionPreview,
+    restore: async (target, v) => {
+      if (session.mode !== "project" || activePieceFile()?.path !== target.path) return;
+      versionPreviewGeneration += 1;
+      const path = target.path;
+      try {
+        await settlePendingWrites(path);
+        if (activePieceFile()?.path !== target.path) return;
+        let currentContent = versionPreview.contentForRestore(pieceEditor.state.doc.toString());
+        if (isDirty(path)) {
+          await saveImmediate(path, currentContent);
+          if (activePieceFile()?.path !== target.path) return;
+          currentContent = versionPreview.contentForRestore(pieceEditor.state.doc.toString());
+        }
+        const restored = await restoreVersion(
+          parentDir(target.path),
+          target.name,
+          path,
+          currentContent,
+          v,
+          lastKnownMtime(path) ?? null,
+        );
+        if (activePieceFile()?.path !== target.path) return;
+        setLastKnown(path, restored.mtime);
+        versionPreview.completeRestore();
+        if (versionPreviewEditorState) {
+          applyingRemote = true;
+          try {
+            pieceEditor.setState(versionPreviewEditorState);
+          } finally {
+            applyingRemote = false;
+            versionPreviewEditorState = null;
+          }
+        }
+        setEditorReadOnly(pieceEditor, false);
+        applyRemoteTo(pieceEditor, restored.content);
+      } catch (error) {
+        throw error;
+      }
+    },
+    renameVersion: async (target, v, name) => {
+      await renameVersion(parentDir(target.path), target.name, v, name);
+    },
+    deleteVersion: async (target, v) => {
+      await deleteVersion(parentDir(target.path), target.name, v);
     },
     onEmptied: () => {
       // 当前 piece 被删且项目已无 piece：清掉引用，切到 NO_PIECE 空态。
@@ -384,12 +473,13 @@ function mountPieceHeader() {
     },
     isOutlineMode: () => session.pieceOutlineOn,
     setOutlineMode: (next) => applyPieceOutlineMode(next, { user: true }),
-  },
+    },
   });
   pieceHeader.setOutlineMode(session.pieceOutlineOn);
 }
 
 async function openPiece(entry: NoteEntry) {
+  pieceHeader?.exitVersionPreview();
   session.currentPiece = entry;
   pieceHeader?.setLabel(entry.name);
   applyRemoteTo(pieceEditor, await loadNote(entry.path));
@@ -398,6 +488,7 @@ async function openPiece(entry: NoteEntry) {
 
 /** 打开一个独立文档：切到文档模式，复用 pieceEditor 渲染该文件。 */
 async function openDocument(doc: NoteEntry) {
+  pieceHeader?.exitVersionPreview();
   // 独立文档无 _tasks.md：进入文档模式时把行动「临时遮挡」——记下开关并关掉，
   // 返回项目时按记忆恢复（见 openProject）。
   const plan = actionTargetForTransition({
@@ -494,6 +585,16 @@ function applyRemoteTo(view: EditorView, content: string) {
   }
 }
 
+/** Version preview is a transient projection, not an edit or undo step. */
+function applyPreviewTo(view: EditorView, content: string) {
+  applyingRemote = true;
+  try {
+    replaceDocWithoutHistory(view, content);
+  } finally {
+    applyingRemote = false;
+  }
+}
+
 function applyRemoteDoc(content: string) {
   applyRemoteTo(editor, content);
 }
@@ -526,6 +627,7 @@ void onNoteUpdated(async (payload) => {
   // 成品 / 独立文档被 AI 改写（文档模式无文件监听，靠这条热刷新）。
   const f = activePieceFile();
   if (f && payload.path === f.path) {
+    pieceHeader?.exitVersionPreview();
     applyRemoteTo(pieceEditor, await loadNote(f.path));
   }
 });
@@ -560,6 +662,7 @@ void onFileChanged(async (changedPath) => {
   // 成品（piece）或独立文档被外部修改 / 删除。
   if (activeFile && changedPath === activeFile.path) {
     try {
+      pieceHeader?.exitVersionPreview();
       applyRemoteTo(pieceEditor, await loadNote(activeFile.path));
     } catch {
       // 文件已不存在（外部删除）→ 列剩余 pieces，切下一片或 NO_PIECE。
@@ -592,6 +695,7 @@ onConflict(async (path, localContent) => {
   if (session.currentInbox && path === session.currentInbox.entry.path) {
     applyRemoteDoc(await loadNote(path));
   } else if (activeFile && path === activeFile.path) {
+    pieceHeader?.exitVersionPreview();
     applyRemoteTo(pieceEditor, await loadNote(path));
   } else if (session.currentProject && path === tasksPath(session.currentProject.path)) {
     tasksPanel.reload();
@@ -684,6 +788,7 @@ async function rememberDocument(path: string) {
 }
 
 async function openProject(project: ProjectEntry) {
+  pieceHeader?.exitVersionPreview();
   // 从文档模式返回项目：按离开项目时记下的开关恢复行动面板。
   const wasDocument = session.mode === "document";
   session.mode = "project";
