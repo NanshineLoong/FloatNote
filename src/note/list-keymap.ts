@@ -10,6 +10,7 @@ import {
   prevListItemDepth,
   listSubtreeEnd,
   leadingColumns,
+  orderedListMarkerChanges,
 } from "./list-indent";
 
 const INDENT = "    ";
@@ -59,7 +60,16 @@ function dispatchIndent(view: EditorView, direction: "indent" | "outdent"): bool
     }
   }
   if (changes.length === 0) return false;
-  view.dispatch({ changes, scrollIntoView: true });
+  const indentedState = view.state.update({ changes }).state;
+  const normalization = orderedListMarkerChanges(indentedState.doc.toString());
+  if (normalization.length === 0) {
+    view.dispatch({ changes, scrollIntoView: true });
+  } else {
+    view.dispatch(
+      { changes, scrollIntoView: true },
+      { changes: normalization, sequential: true },
+    );
+  }
   return true;
 }
 
@@ -85,7 +95,7 @@ export function handleOutdent(view: EditorView): boolean {
 
 /** Backspace at column 0: remove one indent unit. No indent (empty list item)
  *  → return false so markdownKeymap's deleteMarkupBackward removes the marker. */
-function handleBackspace(view: EditorView): boolean {
+export function handleBackspace(view: EditorView): boolean {
   const state = view.state;
   const sel = state.selection.main;
   if (sel.from !== sel.to) return false;
@@ -95,10 +105,18 @@ function handleBackspace(view: EditorView): boolean {
   const before = outdentLine(line.text);
   const removed = line.text.length - before.length;
   if (removed === 0) return false;
-  view.dispatch({
-    changes: { from: line.from, to: line.from + removed, insert: "" },
-    selection: { anchor: line.from },
-  });
+  const changes = { from: line.from, to: line.from + removed, insert: "" };
+  const selection = { anchor: line.from };
+  const outdentedState = state.update({ changes, selection }).state;
+  const normalization = orderedListMarkerChanges(outdentedState.doc.toString());
+  if (normalization.length === 0) {
+    view.dispatch({ changes, selection });
+  } else {
+    view.dispatch(
+      { changes, selection },
+      { changes: normalization, sequential: true },
+    );
+  }
   return true;
 }
 

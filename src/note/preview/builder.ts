@@ -663,7 +663,7 @@ const previewTheme = EditorView.theme({
   ".cm-preview-link:hover": { color: ACCENT_HOVER },
   ".cm-preview-ol-mark": { color: "#374151", fontWeight: "600" },
   ".cm-preview-list": {
-    paddingLeft: "0.6em",
+    paddingLeft: "1.5em",
     listStyleType: "none",
   },
   ".cm-preview-figure.cm-img-active": { outline: `2px solid ${ACCENT}`, borderRadius: "4px" },

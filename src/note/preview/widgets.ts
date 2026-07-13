@@ -37,7 +37,13 @@ class OlNumberWidget extends WidgetType {
   toDOM(): HTMLElement {
     const span = document.createElement("span");
     span.className = "cm-preview-ol-mark";
-    span.textContent = `${this.ordinal}${this.delim}`;
+    const number = document.createElement("span");
+    number.className = "cm-preview-ol-number";
+    number.textContent = String(this.ordinal);
+    const delim = document.createElement("span");
+    delim.className = "cm-preview-ol-delim";
+    delim.textContent = this.delim;
+    span.append(number, delim);
     return span;
   }
   ignoreEvent() { return true; }

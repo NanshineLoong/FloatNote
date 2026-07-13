@@ -3,7 +3,13 @@ import { markdown } from "@codemirror/lang-markdown";
 import { Autolink, Strikethrough, Table, TaskList } from "@lezer/markdown";
 import type { Decoration, DecorationSet } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
-import { listFoldField, ListFoldEffect, parseListItems, remapFolded } from "./list-fold";
+import {
+  listFoldField,
+  ListFoldEffect,
+  listFoldTargetId,
+  parseListItems,
+  remapFolded,
+} from "./list-fold";
 import { OutlineToggleEffect, outlineMode } from "./outline-mode";
 
 function state(doc: string): EditorState {
@@ -57,8 +63,10 @@ describe("parseListItems", () => {
     // child span starts at the first child line's start (indent absorbed)
     expect(doc[a.childFrom]).toBe(" ");
     expect(doc[a.childFrom + 2]).toBe("-"); // first child marker
-    // child span ends at the end of the nested subtree (trailing newline absorbed)
-    expect(doc.slice(a.childFrom, a.childTo)).toBe("  - a1\n  - a2\n    - a2x\n");
+    // Keep the trailing newline outside the replacement so the next sibling's
+    // line decoration remains anchored at its own line start.
+    expect(doc.slice(a.childFrom, a.childTo)).toBe("  - a1\n  - a2\n    - a2x");
+    expect(doc[a.childTo]).toBe("\n");
   });
 
   it("counts all descendant ListItems", () => {
@@ -200,5 +208,34 @@ describe("listFoldField decorations", () => {
     expect(aNew.from).toBe("intro\n".length);
     expect(st.field(listFoldField).folded.has(aNew.id)).toBe(true);
     expect(hasFoldedSubtree(st)).toBe(true);
+  });
+});
+
+describe("list fold pointer targets", () => {
+  it("treats the chevron and a parent list marker as the same fold target", () => {
+    const editorState = state("- parent\n  - child\n- leaf\n");
+    const parent = byText(parseListItems(editorState), "parent");
+
+    const chevron = {
+      dataset: { listFoldId: parent.id },
+      closest(selector: string) { return selector === ".cm-list-fold-toggle" ? this : null; },
+    };
+    const bullet = {
+      closest(selector: string) { return selector === ".cm-list-fold-toggle" ? null : this; },
+    };
+    const leaf = {
+      closest(selector: string) { return selector === ".cm-list-fold-toggle" ? null : this; },
+    };
+
+    const view = {
+      state: editorState,
+      posAtDOM(node: unknown) {
+        return node === bullet ? parent.from : editorState.doc.toString().indexOf("- leaf");
+      },
+    } as any;
+
+    expect(listFoldTargetId(view, chevron as any)).toBe(parent.id);
+    expect(listFoldTargetId(view, bullet as any)).toBe(parent.id);
+    expect(listFoldTargetId(view, leaf as any)).toBeNull();
   });
 });

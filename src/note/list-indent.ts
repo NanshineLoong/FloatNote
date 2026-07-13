@@ -1,4 +1,5 @@
 import type { SyntaxNode } from "@lezer/common";
+import { parser } from "@lezer/markdown";
 
 export function isListItemLine(line: string): boolean {
   return /^\s*([-*+]|\d+\.)\s/.test(line);
@@ -52,6 +53,36 @@ export function olOrdinal(listMark: SyntaxNode): number {
     s = s.prevSibling;
   }
   return count + 1;
+}
+
+/** Source edits that synchronize ordered-list markers with the parsed list
+ * hierarchy while preserving each marker's delimiter (`.` or `)`). */
+export function orderedListMarkerChanges(source: string): Array<{ from: number; to: number; insert: string }> {
+  const changes: Array<{ from: number; to: number; insert: string }> = [];
+  const tree = parser.parse(source);
+  tree.iterate({
+    enter(node) {
+      if (node.name !== "ListMark" || node.node.parent?.name !== "ListItem") return;
+      const marker = source.slice(node.from, node.to);
+      const match = /^(\d+)([.)])$/.exec(marker);
+      if (!match) return;
+      const insert = `${olOrdinal(node.node)}${match[2]}`;
+      if (insert !== marker) changes.push({ from: node.from, to: node.to, insert });
+    },
+  });
+  return changes;
+}
+
+/** Rewrites ordered-list source markers to the ordinal implied by the Markdown
+ * tree. This keeps the editable source in sync after an item is indented or
+ * outdented, while preserving each marker's delimiter (`.` or `)`). */
+export function renumberOrderedListMarkers(source: string): string {
+  const changes = orderedListMarkerChanges(source);
+  for (let i = changes.length - 1; i >= 0; i--) {
+    const change = changes[i];
+    source = `${source.slice(0, change.from)}${change.insert}${source.slice(change.to)}`;
+  }
+  return source;
 }
 
 /** Depth of the nearest preceding list line. `index` is the current line's

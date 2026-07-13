@@ -1474,24 +1474,37 @@ body {
   font-size: 12px;
 }
 
-/* Logseq 式圆环节点：父项圆环可折叠，叶子为空心圆。交互热区大于图形，
-   hover/focus 不改变图形尺寸，因此正文不会跳动。 */
+/* 多级列表的 1.5em 一级缩进由 CodeMirror preview theme 统一提供；源码缩进
+   再叠加到每一级。Chevron 的 20px 回拉量小于该缩进，
+   因而最左侧始终落在正文起点右侧，不会侵入 14px 的拖拽 gutter。 */
 .cm-list-fold-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 13px;
-  min-width: 13px;
+  width: 18px;
+  min-width: 18px;
   height: 18px;
-  margin: 0 2px 0 -15px;
+  /* -20 + 18 + 2 = 0：chevron 不改变父节点标记的原始基线。 */
+  margin: 0 2px 0 -20px;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--color-text-subtle);
-  font-size: 12px;
   line-height: 1;
   cursor: pointer;
   vertical-align: middle;
+  overflow: hidden;
+}
+.cm-list-fold-chevron {
+  display: block;
+  transform: translateY(-0.5px);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 12px;
+  transition: transform 120ms ease;
+}
+.cm-list-fold-toggle:not(.cm-list-fold-toggle-folded) .cm-list-fold-chevron {
+  transform: translateY(-0.5px) rotate(90deg);
 }
 .cm-list-leaf-dot {
   display: inline-block;
@@ -1506,13 +1519,52 @@ body {
   margin: 0 5px 0 2px;
   color: var(--color-text-subtle);
 }
+.cm-list-fold-marker {
+  position: relative;
+  isolation: isolate;
+  cursor: pointer;
+}
+.cm-list-leaf-dot.cm-list-fold-marker {
+  background: currentColor;
+}
+.cm-list-fold-marker::before,
+.cm-preview-ol-number::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-hover);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+.cm-preview-ol-number {
+  position: relative;
+  display: inline-block;
+  isolation: isolate;
+}
+.cm-list-fold-toggle:hover {
+  color: var(--color-accent);
+}
+.cm-list-fold-toggle-folded {
+  color: var(--color-accent);
+}
+.cm-list-fold-marker:is(:hover, .cm-list-fold-marker-folded) {
+  color: var(--color-accent);
+}
+.cm-list-leaf-dot.cm-list-fold-marker:is(:hover, .cm-list-fold-marker-folded)::before,
+.cm-preview-ol-mark.cm-list-fold-marker:is(:hover, .cm-list-fold-marker-folded) .cm-preview-ol-number::before {
+  opacity: 1;
+}
 .cm-list-fold-toggle:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
   border-radius: 50%;
-}
-.cm-list-fold-toggle:hover {
-  color: var(--color-text);
 }
 .cm-selectionBackground.cm-selection-blank {
   width: 0.45em;

@@ -40,7 +40,7 @@ export interface ListFoldItem {
   from: number;
   /** 嵌套子树块替换起点（子列表首行的行首，吸收缩进）。 */
   childFrom: number;
-  /** 嵌套子树块替换终点（吸收末尾换行，避免留空行）。 */
+  /** 嵌套子树块替换终点（不跨入下一同级项的行首）。 */
   childTo: number;
   hasChildren: boolean;
   /** 首行 marker 之后的正文（已 strip tag/bid），摘要展示用。 */
@@ -92,7 +92,6 @@ export function parseListItems(state: EditorState): ListFoldItem[] {
       if (nested) {
         childFrom = doc.lineAt(nested.from).from;
         childTo = nested.to;
-        if (doc.sliceString(childTo, childTo + 1) === "\n") childTo += 1;
       }
       items.push({
         id: `list:${depth}:${node.from}:${text}`,
@@ -219,7 +218,25 @@ export const listFoldField = StateField.define<ListFoldState>({
   provide: (f) => EditorView.decorations.from(f, (v) => v.decorations),
 });
 
-/** bullet 旁 hover 显现的折叠三角。点击交给 listFoldPlugin 委托。 */
+/** 返回能触发折叠的列表父项 id；叶子标记仍保留普通编辑行为。 */
+export function listFoldTargetId(
+  view: Pick<EditorView, "state" | "posAtDOM">,
+  target: Element | null,
+): string | null {
+  const toggle = target?.closest<HTMLElement>(".cm-list-fold-toggle");
+  if (toggle?.dataset.listFoldId) return toggle.dataset.listFoldId;
+
+  const marker = target?.closest<HTMLElement>(".cm-list-leaf-dot, .cm-preview-ol-mark");
+  if (!marker) return null;
+  const position = view.posAtDOM(marker, 0);
+  const items = view.state.field(listFoldField, false)?.items ?? parseListItems(view.state);
+  const line = view.state.doc.lineAt(position);
+  const item = items.find((candidate) =>
+    candidate.hasChildren && candidate.from >= line.from && candidate.from <= line.to);
+  return item?.id ?? null;
+}
+
+/** bullet 旁的折叠箭头。 */
 class ListFoldToggleWidget extends WidgetType {
   constructor(readonly id: string, readonly folded: boolean, readonly descendantCount: number) {
     super();
@@ -229,7 +246,7 @@ class ListFoldToggleWidget extends WidgetType {
     return o.id === this.id && o.folded === this.folded && o.descendantCount === this.descendantCount;
   }
 
-  toDOM(): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "cm-list-fold-toggle" + (this.folded ? " cm-list-fold-toggle-folded" : "");
@@ -237,14 +254,16 @@ class ListFoldToggleWidget extends WidgetType {
     b.title = this.folded ? `展开 ${this.descendantCount} 个子项` : `折叠 ${this.descendantCount} 个子项`;
     b.setAttribute("aria-label", this.folded ? `展开 ${this.descendantCount} 个子项` : `折叠 ${this.descendantCount} 个子项`);
     b.setAttribute("aria-expanded", String(!this.folded));
-    // Keep the list's own bullet visible; this control only communicates the
-    // expansion state. A text chevron avoids the distorted ring/count layout.
-    b.textContent = this.folded ? "▸" : "▾";
+    const chevron = document.createElement("span");
+    chevron.className = "cm-list-fold-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "›";
+    b.appendChild(chevron);
     return b;
   }
 
   ignoreEvent(): boolean {
-    return false;
+    return true;
   }
 }
 
@@ -255,29 +274,60 @@ function toggleListFold(view: EditorView, id: string): void {
 
 const listFoldPlugin = ViewPlugin.fromClass(
   class {
-    constructor(readonly view: EditorView) {}
-    update() {}
-  },
-  {
-    eventHandlers: {
-      click(event: Event, view: EditorView): boolean {
-        const target = event.target as HTMLElement | null;
-        const btn = target?.closest<HTMLElement>(".cm-list-fold-toggle");
-        if (!btn) return false;
-        event.preventDefault();
-        event.stopPropagation();
-        toggleListFold(view, btn.dataset.listFoldId!);
-        return true;
-      },
-      keydown(event: KeyboardEvent, view: EditorView): boolean {
-        const target = event.target as HTMLElement | null;
-        const btn = target?.closest<HTMLElement>(".cm-list-fold-toggle");
-        if (!btn || (event.key !== "Enter" && event.key !== " ")) return false;
-        event.preventDefault();
-        toggleListFold(view, btn.dataset.listFoldId!);
-        return true;
-      },
-    },
+    private readonly onMouseDown = (event: MouseEvent) => {
+      const id = listFoldTargetId(this.view, event.target instanceof Element ? event.target : null);
+      if (!id) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    private readonly onClick = (event: MouseEvent) => {
+      const id = listFoldTargetId(this.view, event.target instanceof Element ? event.target : null);
+      if (!id) return;
+      event.preventDefault();
+      event.stopPropagation();
+      toggleListFold(this.view, id);
+    };
+
+    constructor(readonly view: EditorView) {
+      // List markers are replacement widgets, whose events CodeMirror does not
+      // delegate to ViewPlugin.eventHandlers. Capture on the editor root so a
+      // marker click is stopped before the editor can move its selection.
+      view.dom.addEventListener("mousedown", this.onMouseDown, true);
+      view.dom.addEventListener("click", this.onClick, true);
+      this.syncMarkerTargets();
+    }
+
+    update() {
+      this.syncMarkerTargets();
+    }
+
+    private syncMarkerTargets(): void {
+      this.view.requestMeasure({
+        read: (view) => {
+          const folded = view.state.field(listFoldField).folded;
+          return Array.from(view.dom.querySelectorAll<HTMLElement>(
+            ".cm-list-leaf-dot, .cm-preview-ol-mark",
+          )).map((marker) => {
+            const id = listFoldTargetId(view, marker);
+            return { marker, id, folded: !!id && folded.has(id) };
+          });
+        },
+        write: (markers) => {
+          for (const { marker, id, folded } of markers) {
+            marker.classList.toggle("cm-list-fold-marker", !!id);
+            marker.classList.toggle("cm-list-fold-marker-folded", folded);
+            if (id) marker.dataset.listFoldId = id;
+            else delete marker.dataset.listFoldId;
+          }
+        },
+      });
+    }
+
+    destroy(): void {
+      this.view.dom.removeEventListener("mousedown", this.onMouseDown, true);
+      this.view.dom.removeEventListener("click", this.onClick, true);
+    }
   },
 );
 

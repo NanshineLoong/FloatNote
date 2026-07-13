@@ -7,6 +7,7 @@ import {
   isListItemLine,
   lineDepth,
   olOrdinal,
+  renumberOrderedListMarkers,
   outdentLine,
   prevListItemDepth,
   listSubtreeEnd,
@@ -163,5 +164,17 @@ describe("olOrdinal", () => {
   });
   it("ignores the literal source digits — ordinal is tree-derived", () => {
     expect(ordinals("9. a\n1. b")).toEqual([1, 2]);
+  });
+});
+
+describe("renumberOrderedListMarkers", () => {
+  it("rewrites source markers to match their ordered-list hierarchy", () => {
+    expect(renumberOrderedListMarkers("1. first\n2. second\n    3. child\n3. third"))
+      .toBe("1. first\n2. second\n    1. child\n3. third");
+  });
+
+  it("preserves each marker's delimiter", () => {
+    expect(renumberOrderedListMarkers("8) first\n4) second\n    9. child"))
+      .toBe("1) first\n2) second\n    1. child");
   });
 });

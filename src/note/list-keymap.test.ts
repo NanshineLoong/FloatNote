@@ -2,7 +2,7 @@
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
-import { handleOutdent, handleTab } from "./list-keymap";
+import { handleBackspace, handleOutdent, handleTab } from "./list-keymap";
 
 function mount(doc: string, anchor: number, head = anchor): EditorView {
   const parent = document.createElement("div");
@@ -24,6 +24,16 @@ describe("list keymap indentation", () => {
     view.destroy();
   });
 
+  it("renumbers ordered-list source after indenting an item into a child list", () => {
+    const doc = "1. first\n2. second\n3. child\n4. tail";
+    const view = mount(doc, doc.indexOf("child"));
+
+    expect(handleTab(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe("1. first\n2. second\n    1. child\n3. tail");
+    expect(view.state.doc.lineAt(view.state.selection.main.head).text).toContain("child");
+    view.destroy();
+  });
+
   it("indents every line in a prose selection", () => {
     const view = mount("alpha\nbeta", 0, "alpha\nbeta".length);
     expect(handleTab(view)).toBe(true);
@@ -36,6 +46,16 @@ describe("list keymap indentation", () => {
     const view = mount(doc, doc.indexOf("parent"));
     expect(handleOutdent(view)).toBe(true);
     expect(view.state.doc.toString()).toBe("- parent\n    - child\n- next");
+    view.destroy();
+  });
+
+  it("renumbers ordered-list source after Backspace outdents an item", () => {
+    const doc = "1. first\n2. second\n    1. child\n3. tail";
+    const childStart = doc.indexOf("    1. child");
+    const view = mount(doc, childStart);
+
+    expect(handleBackspace(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe("1. first\n2. second\n3. child\n4. tail");
     view.destroy();
   });
 });
