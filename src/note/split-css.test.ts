@@ -162,6 +162,15 @@ describe("per-area topbars (采集 / 写作)", () => {
     );
   });
 
+  it("removes the empty writing control bar and its reserved row in document mode", () => {
+    expect(css).toMatch(
+      /#app\.doc-mode\s+#piece-topbar-root\s*\{[^}]*display:\s*none\s*!important;/s,
+    );
+    expect(css).toMatch(
+      /#app\.doc-mode\s+#piece-col\s*\{[^}]*grid-row:\s*1;/s,
+    );
+  });
+
   it("splits createPieceHeader across the topbar mount and the title mount", () => {
     expect(noteAppSource).toMatch(/createPieceHeader\(\{[^}]*topbarMount/);
     expect(pieceSwitcherSource).toMatch(/topbarMount\.appendChild\(crumbRow\)/);

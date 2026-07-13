@@ -1064,6 +1064,15 @@ body {
   grid-row: 2;
 }
 
+/* 独立文档没有项目内切换或版本操作：移除空顶栏，并让正文直接占据顶行。 */
+#app.doc-mode #piece-topbar-root {
+  display: none !important;
+}
+
+#app.doc-mode #piece-col {
+  grid-row: 1;
+}
+
 /* 「行动」面板：所有形态下视觉完全一致 —— 固定 260px、贴右缘 12px、顶部 8px、带投影，
    不随窗口伸缩变化。inline 与 floating 的唯一区别在「是否下推助手」，由 syncLayout
    写入 --action-h、再由 #app.assistant-on.mode-inline #assistant-region { top: var(--action-h) }
