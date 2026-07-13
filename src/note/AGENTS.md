@@ -1,8 +1,8 @@
 # src/note — note window
 
-The main note window (CodeMirror 6 editor + inbox/pieces/tasks + outline +
-assistant). Entry: `main.ts` calls `startNoteApp()` in `note-app.ts`. Two CM6 editors
-(inbox + piece) share preview/outline/tag decorations.
+The main note window (CodeMirror 6 editor + inbox/pieces/tasks + assistant).
+Entry: `main.ts` calls `startNoteApp()` in `note-app.ts`. Two CM6 editors
+(inbox + piece) share preview/tag decorations.
 
 ## Module map
 
@@ -12,8 +12,6 @@ assistant). Entry: `main.ts` calls `startNoteApp()` in `note-app.ts`. Two CM6 ed
 - `editor.ts` — CM6 editor construction, highlight style, insert helpers.
 - `preview/` — live-preview StateField split into `builder.ts`, `widgets.ts`,
   and `icons.ts`.
-- `outline-mode.ts` / `outline-tree.ts` / `outline-edit.ts` — structural outline
-  StateField, heading/list-only projection, folding, and structural edit commands.
 - `tasks-panel.ts` — `_tasks.md` checklist panel (render, mutate, drag-reorder,
   filter). Imports task logic from `./tasks` (migrated from shared).
 - `tags/` — tag system: `bar.ts` (gutter bar), `palette.ts` (re-exports

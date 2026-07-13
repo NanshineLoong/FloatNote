@@ -15,16 +15,14 @@ import {
 } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { stripTagMarker } from "@floatnote/note-logic";
-import { outlineStateField } from "./outline-mode";
 import { stripBidMarker } from "./quote";
 
 /**
- * 列表折叠（编辑区常驻，非大纲模式）。
+ * 列表折叠（编辑区常驻）。
  *
- * 镜像 outline-mode.ts 的折叠机制，但作用于 Lezer 的 ListItem 子树：每个含嵌套子项
+ * 作用于 Lezer 的 ListItem 子树：每个含嵌套子项
  * 的 ListItem 在其 marker 前放一个 hover 显现的三角按钮；折叠时把嵌套子树替换为
  * 一条 `▸ 文本 · N 项` 摘要（块替换、非可编辑，规避 CM6 嵌套 contenteditable 陷阱）。
- * 大纲模式开启时本扩展产出 Decoration.none，让位大纲自身的列表折叠。
  *
  * Lezer markdown 节点：ListItem 的嵌套子树即其 BulletList/OrderedList 子节点，
  * 该子节点的 [from,to] 覆盖整棵子树；ListItem.from == ListMark.from（marker 位置，
@@ -108,7 +106,7 @@ export function parseListItems(state: EditorState): ListFoldItem[] {
   return items;
 }
 
-/** 把旧的 folded id 集映射到编辑后的新 id 集（镜像 outline-mode.remmapFolded）。
+/** 把旧的 folded id 集映射到编辑后的新 id 集。
  *  先按 (depth, 映射后位置) 匹配，再按 fallbackId 兜底。 */
 export function remapFolded(
   oldFolded: Set<string>,
@@ -198,20 +196,16 @@ export const listFoldField = StateField.define<ListFoldState>({
         mustRebuild = true;
       }
     }
-    const outlineBefore = !!tr.startState.field(outlineStateField, false)?.on;
-    const outlineAfter = !!tr.state.field(outlineStateField, false)?.on;
-    if (outlineBefore !== outlineAfter) mustRebuild = true;
     if (!mustRebuild) return value;
 
     const items = parseListItems(tr.state);
     if (tr.docChanged) {
       folded = remapFolded(folded, value.items, items, (p) => tr.changes.mapPos(p, 1));
     }
-    const active = outlineAfter ? new Set<string>() : folded;
     return {
       folded,
       items,
-      decorations: outlineAfter ? Decoration.none : buildDecorations(tr.state, items, active),
+      decorations: buildDecorations(tr.state, items, folded),
     };
   },
 

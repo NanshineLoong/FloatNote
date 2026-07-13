@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { EditorState, Transaction } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { iconCacheStateKey, livePreview, previewField, rangeTouchesSelection, shouldMapPreviewDecorations, shouldRetryMissingIcon } from "./preview";
-import { OutlineToggleEffect, outlineMode } from "./outline-mode";
 import type { Decoration, DecorationSet } from "@codemirror/view";
 
 function decorations(set: DecorationSet): Array<{ from: number; to: number; spec: any }> {
@@ -82,22 +81,6 @@ describe("IME composition preview updates", () => {
     const transaction = state.update({ changes: { from: state.doc.length, insert: "中" } });
 
     expect(shouldMapPreviewDecorations(transaction)).toBe(false);
-  });
-});
-
-describe("preview in outline mode", () => {
-  it("rebuilds when outline toggles on and stops rendering its own list bullet widget", () => {
-    let state = EditorState.create({
-      doc: "- one",
-      extensions: [markdown(), ...livePreview(), ...outlineMode()],
-      selection: { anchor: 5 },
-    });
-    let previewDecorations = decorations(state.field(previewField));
-    expect(previewDecorations.some((d) => d.spec.widget)).toBe(true);
-
-    state = state.update({ effects: OutlineToggleEffect.of(true) }).state;
-    previewDecorations = decorations(state.field(previewField));
-    expect(previewDecorations.some((d) => d.spec.widget)).toBe(false);
   });
 });
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createPieceHeader, outlineToggleState } from "./piece-switcher";
+import { createPieceHeader } from "./piece-switcher";
 
 class ResizeObserverStub {
   observe() {}
@@ -10,22 +10,6 @@ class ResizeObserverStub {
 beforeEach(() => {
   document.body.innerHTML = "";
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
-});
-
-describe("outlineToggleState", () => {
-  it("uses text-align-left icon and unpressed when outline is off", () => {
-    expect(outlineToggleState(false)).toEqual({
-      icon: "ph-text-align-left",
-      pressed: false,
-    });
-  });
-
-  it("uses list-tree icon and pressed when outline is on", () => {
-    expect(outlineToggleState(true)).toEqual({
-      icon: "ph-list-tree",
-      pressed: true,
-    });
-  });
 });
 
 describe("version menu", () => {

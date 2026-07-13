@@ -10,7 +10,6 @@ import {
   parseListItems,
   remapFolded,
 } from "./list-fold";
-import { OutlineToggleEffect, outlineMode } from "./outline-mode";
 
 function state(doc: string): EditorState {
   return EditorState.create({
@@ -146,7 +145,7 @@ describe("listFoldField decorations", () => {
   function foldState(doc: string) {
     return EditorState.create({
       doc,
-      extensions: [markdown({ extensions: [Autolink, Table, Strikethrough, TaskList] }), listFoldField, ...outlineMode()],
+      extensions: [markdown({ extensions: [Autolink, Table, Strikethrough, TaskList] }), listFoldField],
     });
   }
 
@@ -182,20 +181,6 @@ describe("listFoldField decorations", () => {
     st = st.update({ effects: ListFoldEffect.of({ id: a.id, folded: false }) }).state;
     expect(st.field(listFoldField).folded.has(a.id)).toBe(false);
     expect(decorations(st.field(listFoldField).decorations).some((d) => typeof d.spec.class === "string" && d.spec.class.includes("cm-list-fold-hidden"))).toBe(false);
-  });
-
-  it("defers to outline mode (no decorations while outline is on)", () => {
-    let st = foldState("- a\n  - a1\n");
-    const a = byText(st.field(listFoldField).items, "a");
-    st = st.update({ effects: ListFoldEffect.of({ id: a.id, folded: true }) }).state;
-    expect(decorations(st.field(listFoldField).decorations).some((d) => d.spec.widget)).toBe(true);
-    st = st.update({ effects: OutlineToggleEffect.of(true) }).state;
-    // folded set preserved, but decorations suppressed
-    expect(st.field(listFoldField).folded.has(a.id)).toBe(true);
-    expect(decorations(st.field(listFoldField).decorations).some((d) => d.spec.widget)).toBe(false);
-    // turning outline off restores the fold (hidden lines reappear)
-    st = st.update({ effects: OutlineToggleEffect.of(false) }).state;
-    expect(hasFoldedSubtree(st)).toBe(true);
   });
 
   it("carries fold state across an edit (remap)", () => {

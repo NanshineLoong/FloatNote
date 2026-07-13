@@ -897,8 +897,7 @@ body {
   padding-left: var(--piece-content-inset);
 }
 
-/* 切换行：左 breadcrumb、右版本入口。作为固定顶栏的 flex 子项，与 .piece-mode-slot
-   共享一行，故用 flex:1 而非 width:100%（后者会挤掉 mode-slot）。 */
+/* 切换行：左 breadcrumb、右版本入口。 */
 .piece-crumb-row {
   display: flex;
   align-items: center;
@@ -926,8 +925,7 @@ body {
   color: var(--color-text-muted);
 }
 
-/* ── 文档模式（#app.doc-mode）：隐藏滑拨杆 / 行动 / 采集面，以及项目内导航控件。
-   顶栏保留给正文/大纲 toggle；独立文档无项目内切换、无版本历史。 */
+/* ── 文档模式（#app.doc-mode）：隐藏滑拨杆 / 行动 / 采集面，以及项目内导航控件。 */
 #app.doc-mode #view-seg,
 #app.doc-mode #tasks-toggle,
 #app.doc-mode .piece-breadcrumb,
@@ -1448,147 +1446,6 @@ body {
   user-select: none;
 }
 
-/* 模式切换预留位：正文 / 大纲 toggle；靠 .piece-crumb-row 的 flex:1 被推到右端。 */
-.piece-mode-slot {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-#app.doc-mode .piece-mode-slot {
-  margin-left: auto;
-}
-
-.piece-mode-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  min-height: 26px;
-  padding: 3px 7px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-subtle);
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.piece-mode-btn:hover {
-  background: var(--color-hover);
-  color: var(--color-text);
-}
-
-.piece-mode-btn.active {
-  border-color: var(--color-border);
-  background: var(--color-hover-strong);
-  color: var(--color-text);
-}
-
-.piece-mode-btn i {
-  font-size: 14px;
-}
-
-/* ── Outline Mode ───────────────────────────────────────────────────────
-   幕布式：每个节点行使用相同缩进变量，空行只压高度不从文档中删除。 */
-.cm-outline-mode .cm-content {
-  padding-left: 0;
-}
-
-.cm-outline-mode .cm-line.cm-outline-node {
-  position: relative;
-  padding-left: calc(var(--outline-indent, 0px) + 24px);
-}
-
-.cm-outline-bullet {
-  display: inline-flex;
-  align-items: center;
-  margin-left: -22px;
-  margin-right: 4px;
-  height: 1.6em;
-  vertical-align: middle;
-  color: var(--color-text);
-  opacity: calc(1 - max(0, var(--outline-depth, 1) - 1) * 0.12);
-}
-
-.cm-outline-leaf-dot,
-.cm-outline-ring {
-  display: inline-block;
-  box-sizing: border-box;
-  width: 9px;
-  height: 9px;
-  border: 1.25px solid currentColor;
-  border-radius: 50%;
-}
-.cm-outline-ring {
-  position: relative;
-}
-.cm-outline-ring::after {
-  content: "";
-  position: absolute;
-  inset: 2px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.cm-outline-fold-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--color-text-subtle);
-  line-height: 1;
-  cursor: pointer;
-}
-
-.cm-outline-fold-toggle:hover {
-  color: var(--color-text);
-}
-.cm-outline-fold-toggle:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-  border-radius: 50%;
-}
-
-.cm-outline-heading {
-  font-weight: 650;
-  color: var(--color-text);
-}
-
-.cm-outline-mode .cm-preview-h1,
-.cm-outline-mode .cm-preview-h2,
-.cm-outline-mode .cm-preview-h3,
-.cm-outline-mode .cm-preview-h4,
-.cm-outline-mode .cm-preview-h5,
-.cm-outline-mode .cm-preview-h6 {
-  font-size: 1em;
-  line-height: 1.6;
-}
-
-.cm-outline-mode .cm-line.cm-outline-blank,
-.cm-outline-mode .cm-line.cm-outline-hidden {
-  line-height: 0;
-  min-height: 0;
-  overflow: hidden;
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
-.cm-outline-fold-summary {
-  margin: 3px 0 5px calc(var(--outline-indent, 0px) + 24px);
-  padding: 3px 8px;
-  border-radius: 6px;
-  color: var(--color-text-subtle);
-  background: var(--color-hover);
-  font-size: 12px;
-}
-
 /* 多级列表的 1.5em 一级缩进由 CodeMirror preview theme 统一提供；源码缩进
    再叠加到每一级。Chevron 的 20px 回拉量小于该缩进，
    因而最左侧始终落在正文起点右侧，不会侵入 14px 的拖拽 gutter。 */
@@ -1685,39 +1542,6 @@ body {
   width: 0.45em;
   min-width: 0.45em;
   border-radius: 2px;
-}
-
-.cm-outline-card-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: calc(100% - (var(--outline-indent, 0px) + 22px));
-  min-height: 30px;
-  margin: 4px 0 4px calc(var(--outline-indent, 0px) + 22px);
-  padding: 5px 10px;
-  border: 1px solid var(--color-border-hair);
-  border-radius: 6px;
-  background: var(--color-surface-3);
-  color: var(--color-text-muted);
-  font-size: 13px;
-  text-align: left;
-}
-
-.cm-outline-card-chip .cm-outline-card-label {
-  flex: 1 1 auto;
-}
-
-.cm-outline-card-hr-card {
-  min-height: 0;
-  padding: 0;
-  border: none;
-  border-top: 1px solid var(--color-border-strong);
-  background: transparent;
-}
-
-.cm-outline-card-hr-card .cm-outline-dot,
-.cm-outline-card-hr-card .cm-outline-card-label {
-  display: none;
 }
 
 .tag-bar {

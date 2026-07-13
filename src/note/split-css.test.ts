@@ -162,17 +162,9 @@ describe("per-area topbars (采集 / 写作)", () => {
     );
   });
 
-  it("reserves a mode-toggle slot and lets the crumb row share the topbar row", () => {
-    expect(css).toMatch(/\.piece-mode-slot\s*\{[^}]*display:\s*flex;/s);
-    // crumb row must flex to share the row with .piece-mode-slot (was width:100%)
-    expect(css).toMatch(/\.piece-crumb-row\s*\{[^}]*flex:\s*1\s+1\s+auto;/s);
-    expect(css).not.toMatch(/\.piece-crumb-row\s*\{[^}]*width:\s*100%;/s);
-  });
-
   it("splits createPieceHeader across the topbar mount and the title mount", () => {
     expect(noteAppSource).toMatch(/createPieceHeader\(\{[^}]*topbarMount/);
     expect(pieceSwitcherSource).toMatch(/topbarMount\.appendChild\(crumbRow\)/);
-    expect(pieceSwitcherSource).toMatch(/topbarMount\.appendChild\(modeSlot\)/);
     expect(pieceSwitcherSource).toMatch(/titleMount\.appendChild\(title\)/);
   });
 });

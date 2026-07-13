@@ -18,9 +18,6 @@ export class NoteSession {
   mode: NoteMode = "project";
   surface: Surface = "inbox";
   actionDesiredOpen = false;
-  pieceOutlineDefault = false;
-  pieceOutlineSessionOverride: boolean | null = null;
-  pieceOutlineOn = false;
 
   openProject(project: ProjectEntry, inbox: CurrentNote) {
     this.mode = "project";

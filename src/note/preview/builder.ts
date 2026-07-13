@@ -15,7 +15,6 @@ import { readBidMarker, stripBidMarker } from "../quote";
 import { isSafeUrl } from "../inline";
 import { stripTagMarker } from "@floatnote/note-logic";
 import { olOrdinal } from "../list-indent";
-import { outlineStateField } from "../outline-mode";
 import { IconReadyEffect, iconStateKeyFor } from "./icons";
 import { ACCENT, ACCENT_HOVER } from "../../styles/accent";
 import { imageSourceField, SetImageSourceEffect } from "../image-interaction";
@@ -69,7 +68,6 @@ function buildDecorations(state: EditorState): DecorationSet {
   const entries: Array<{ from: number; to: number; deco: Decoration }> = [];
   const hide = Decoration.replace({});
   const doc = state.doc;
-  const outlineOn = !!state.field(outlineStateField, false)?.on;
   const imageSource = state.field(imageSourceField, false);
   // Live-preview decorations include block widgets (tables, code blocks) and
   // line-break-spanning replacements, which CodeMirror only permits from a
@@ -79,7 +77,7 @@ function buildDecorations(state: EditorState): DecorationSet {
   const vpFrom = 0;
   const vpTo = doc.length;
 
-  const onCursorLine = (pos: number) => outlineOn ? false : cursorLines.has(doc.lineAt(pos).number);
+  const onCursorLine = (pos: number) => cursorLines.has(doc.lineAt(pos).number);
   /** Inline-mark gate: hide/replace unless the cursor touches [from,to]. */
   const touches = (from: number, to: number) => rangeTouchesSelection(selRanges, from, to);
   const lineStart = (pos: number) => doc.lineAt(pos).from;
@@ -237,15 +235,9 @@ function buildDecorations(state: EditorState): DecorationSet {
               // A parent item keeps the same bullet as a leaf item. The fold
               // control is inserted before it, so adding a third level no
               // longer changes how the second level is rendered.
-              deco: outlineOn
-                ? hide
-                : Decoration.replace({ widget: new BulletWidget() }),
+              deco: Decoration.replace({ widget: new BulletWidget() }),
             });
           } else {
-            if (outlineOn) {
-              entries.push({ from: node.from, to: node.to, deco: hide });
-              return false;
-            }
             // Ordered list marker (`1.`, `2.` …): replace the literal digits
             // with a widget that shows the ordinal computed from the list tree,
             // so indent/outdent re-numbers automatically. Source digits are
@@ -277,7 +269,6 @@ function buildDecorations(state: EditorState): DecorationSet {
         }
 
         case "HorizontalRule": {
-          if (outlineOn) return false;
           if (onCursorLine(node.from)) return false;
           entries.push({
             from: node.from,
@@ -288,7 +279,6 @@ function buildDecorations(state: EditorState): DecorationSet {
         }
 
         case "Image": {
-          if (outlineOn) return false;
           if (imageSource && node.from >= imageSource.from && node.to <= imageSource.to) return false;
           const raw = doc.sliceString(node.from, node.to);
           // lang-markdown's Image node covers `![alt](url)` but NOT the trailing
@@ -368,7 +358,6 @@ function buildDecorations(state: EditorState): DecorationSet {
         }
 
         case "FencedCode": {
-          if (outlineOn) return false;
           // Keep the block editable: do NOT replace it with a block widget.
           // Instead style every line of the block with `cm-codeblock` (with
           // first/last variants so the grey rounded frame doesn't stack per
@@ -401,10 +390,6 @@ function buildDecorations(state: EditorState): DecorationSet {
         }
 
         case "TaskMarker": {
-          if (outlineOn) {
-            entries.push({ from: node.from, to: node.to, deco: hide });
-            return false;
-          }
           if (onCursorLine(node.from)) return false;
           const raw = doc.sliceString(node.from, node.to);
           const checked = /x/i.test(raw);
@@ -419,7 +404,6 @@ function buildDecorations(state: EditorState): DecorationSet {
         }
 
         case "Table": {
-          if (outlineOn) return false;
           // Reveal the whole table as source when the caret is on any of its
           // lines (so the clicked cell, whose offset the widget dispatched the
           // caret to, becomes editable text). Otherwise render the table.
@@ -446,7 +430,6 @@ function buildDecorations(state: EditorState): DecorationSet {
   // single Backspace unit retreats exactly one level. `cm-preview-list` gives
   // list lines a uniform `0.6em` marker-side baseline.
   for (const [lineNo, depth] of listLineDepth) {
-    if (outlineOn) continue;
     const cl = doc.line(lineNo);
     if (lineNo < vpFrom || lineNo > vpTo) continue;
     entries.push({
@@ -467,7 +450,7 @@ function buildDecorations(state: EditorState): DecorationSet {
   for (let pos = vpFrom; pos <= vpTo; ) {
     const line = doc.lineAt(pos);
     const m = /^(>\s*)(\[!\w+\]\s?)/.exec(line.text);
-    if (m && !outlineOn && !cursorLines.has(line.number)) {
+    if (m && !cursorLines.has(line.number)) {
       const start = line.from + m[1].length;
       entries.push({ from: start, to: start + m[2].length, deco: hide });
     }
@@ -481,7 +464,6 @@ function buildDecorations(state: EditorState): DecorationSet {
   // type marker is hidden by the callout-marker loop above, so the widget only
   // needs to cover the chips text itself — three adjacent, non-overlapping ranges.
   for (const firstLine of cardFirstLine) {
-    if (outlineOn) continue;
     const lastLine = cardLastLine.get(firstLine) ?? firstLine;
     for (let l = firstLine; l <= lastLine; l++) {
       const cl = doc.line(l);
@@ -556,9 +538,7 @@ export const previewField = StateField.define<DecorationSet>({
     if (shouldMapPreviewDecorations(tr)) return tr.docChanged ? deco.map(tr.changes) : deco;
     const iconReady = tr.effects.some((e) => e.is(IconReadyEffect));
     const imageModeChanged = tr.effects.some((e) => e.is(SetImageSourceEffect));
-    const outlineBefore = !!tr.startState.field(outlineStateField, false)?.on;
-    const outlineAfter = !!tr.state.field(outlineStateField, false)?.on;
-    if (tr.docChanged || tr.selection || iconReady || imageModeChanged || outlineBefore !== outlineAfter) {
+    if (tr.docChanged || tr.selection || iconReady || imageModeChanged) {
       return buildDecorations(tr.state);
     }
     return deco;
