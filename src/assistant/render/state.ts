@@ -27,6 +27,7 @@ export type ChatEvent =
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }
   | { type: "user"; conversationId?: string; text: string; references?: ChatReference[] }
+  | { type: "user_edit"; messageId: string; text: string }
   | { type: "pending"; conversationId?: string }
   // thinking 块事件（sidecar 新转发）。
   | { type: "thinking_start"; requestId: string; conversationId?: string; blockId: string }
@@ -139,6 +140,16 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
         text: event.text,
         ...(event.references?.length ? { references: event.references } : {}),
       });
+
+    case "user_edit":
+      return {
+        ...state,
+        messages: state.messages.map((message) =>
+          message.role === "user" && message.id === event.messageId
+            ? { ...message, text: event.text }
+            : message,
+        ),
+      };
 
     case "pending":
       if (!acceptsConversation(state, event)) return state;

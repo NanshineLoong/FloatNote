@@ -46,6 +46,23 @@ describe("reduceEvents", () => {
     }]);
   });
 
+  it("replaces one user message text while retaining its references", () => {
+    const state = run([
+      { type: "user", text: "old", references: [{ kind: "file", id: "piece.md", display: "piece.md" }] },
+      { type: "user", text: "later" },
+    ]);
+    const first = state.messages[0];
+    if (first.role !== "user") throw new Error("expected user message");
+
+    const edited = reduceEvents(state, { type: "user_edit", messageId: first.id, text: "new" });
+
+    expect(norm(edited.messages)).toEqual([
+      { role: "user", text: "new", references: [{ kind: "file", id: "piece.md", display: "piece.md" }] },
+      { role: "user", text: "later" },
+    ]);
+    expect(edited.messages[1]).toBe(state.messages[1]);
+  });
+
   it("shows a lightweight wait block instead of an assistant text bubble", () => {
     const state = run([{ type: "user", text: "你好" }, { type: "pending" }]);
     expect(norm(state.messages)).toEqual([
