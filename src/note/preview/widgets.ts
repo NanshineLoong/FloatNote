@@ -92,12 +92,15 @@ class ImgWidget extends WidgetType {
     const wrap = document.createElement("div");
     wrap.className = "cm-img-wrap";
     wrap.appendChild(img);
-    figure.appendChild(wrap);
+    const content = document.createElement("div");
+    content.className = "cm-img-content";
+    content.appendChild(wrap);
+    figure.appendChild(content);
     if (a && a.caption) {
       const fig = document.createElement("figcaption");
       fig.className = "cm-preview-figcaption";
       fig.textContent = a.caption;
-      figure.appendChild(fig);
+      content.appendChild(fig);
     }
     // Mirror CheckboxWidget's mousedown + preventDefault so CodeMirror doesn't
     // move the cursor onto this line (which would tear the widget down via the
@@ -111,7 +114,12 @@ class ImgWidget extends WidgetType {
     });
     return figure;
   }
-  ignoreEvent() { return false; } // allow clicks for the toolbar (Task 7)
+  ignoreEvent(event: Event): boolean {
+    const target = event.target;
+    return target instanceof Element && !!target.closest(
+      ".cm-img-toolbar, .cm-img-handles, .cm-img-caption-input",
+    );
+  }
 }
 
 class LinkWidget extends WidgetType {

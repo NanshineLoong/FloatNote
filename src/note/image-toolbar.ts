@@ -3,6 +3,7 @@ import type { EditorView } from "@codemirror/view";
 import { parseImage, writeAttrs, type ImageAlign, type ImageAttrs } from "./image-attrs";
 import { computeResize, HANDLE_SPECS, type HandleSpec } from "./image-resize";
 import { imageSourceField, SetImageSourceEffect } from "./image-interaction";
+import { createIcon } from "../shared/ui/icon";
 
 interface Active {
   view: EditorView;
@@ -121,23 +122,26 @@ function reattach(view: EditorView): void {
     return;
   }
   active.figure = figure;
-  figure.classList.add("cm-img-active");
+  figure.classList.add("cm-img-editing");
 
   const wrap = figure.querySelector(".cm-img-wrap") as HTMLElement | null;
   if (wrap) {
+    wrap.classList.add("cm-img-active");
     wrap.appendChild(handlesEl);
     wrap.appendChild(toolbarEl); // absolutely positioned → floats above image
   }
 
   const parsed = parseImage(active.raw);
   captionInput.value = pendingCaption != null ? pendingCaption : parsed?.caption ?? "";
-  // Hide the static figcaption while active — the input covers it.
-  const fig = figure.querySelector("figcaption");
-  if (fig) (fig as HTMLElement).style.display = "none";
   // Size the caption input to the image width so it sits directly under the
   // image at its horizontal extent (align-items centers/rights it with the img).
   const img = figure.querySelector("img") as HTMLImageElement | null;
   if (img) captionInput.style.width = `${img.offsetWidth || img.clientWidth || 120}px`;
+
+  const resolvedAlign = parsed?.align ?? "left";
+  for (const button of toolbarEl.querySelectorAll<HTMLButtonElement>("button[data-align]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.align === resolvedAlign));
+  }
 
   // Flip the toolbar below the image when there's no room above (image at the
   // top of the scroll viewport) so it isn't clipped by the editor bounds.
@@ -145,7 +149,8 @@ function reattach(view: EditorView): void {
   const viewTop = view.dom.getBoundingClientRect().top;
   toolbarEl.classList.toggle("cm-img-toolbar-below", figTop - viewTop < 40);
 
-  figure.appendChild(captionInput); // input as a sibling of the wrap
+  const content = figure.querySelector(".cm-img-content") as HTMLElement | null;
+  content?.appendChild(captionInput); // sibling of the image wrap, outside its selection border
 }
 
 /** True if `t` is inside any active overlay — clicks there must not re-open or
@@ -154,10 +159,13 @@ function isOverlayTarget(t: HTMLElement | null): boolean {
   return !!t && (!!toolbarEl?.contains(t) || !!handlesEl?.contains(t) || t === captionInput);
 }
 
-function buildAlignButton(al: ImageAlign, label: string): HTMLButtonElement {
+function buildAlignButton(al: ImageAlign, label: string, icon: string): HTMLButtonElement {
   const b = document.createElement("button");
   b.type = "button";
-  b.textContent = label;
+  b.dataset.align = al;
+  b.setAttribute("aria-label", label);
+  b.title = label;
+  b.appendChild(createIcon({ phosphor: `ph ${icon}`, size: 16 }));
   // Prevent mousedown from moving focus out of the caption input (which would
   // blur-commit-close and eat the align click). Focus stays in the input;
   // pendingCaption carries the in-progress caption through the write.
@@ -176,9 +184,9 @@ function buildAlignButton(al: ImageAlign, label: string): HTMLButtonElement {
 function buildToolbar(): HTMLElement {
   const bar = document.createElement("div");
   bar.className = "cm-img-toolbar";
-  bar.appendChild(buildAlignButton("left", "左"));
-  bar.appendChild(buildAlignButton("center", "中"));
-  bar.appendChild(buildAlignButton("right", "右"));
+  bar.appendChild(buildAlignButton("left", "图片左对齐", "ph-align-left"));
+  bar.appendChild(buildAlignButton("center", "图片居中", "ph-align-center-horizontal"));
+  bar.appendChild(buildAlignButton("right", "图片右对齐", "ph-align-right"));
   return bar;
 }
 
@@ -314,7 +322,10 @@ function openToolbar(view: EditorView, figure: HTMLElement): void {
 }
 
 function closeToolbar(): void {
-  if (active) active.figure.classList.remove("cm-img-active");
+  if (active) {
+    active.figure.classList.remove("cm-img-editing");
+    active.figure.querySelector(".cm-img-wrap")?.classList.remove("cm-img-active");
+  }
   toolbarEl?.remove();
   handlesEl?.remove();
   captionInput?.remove();
