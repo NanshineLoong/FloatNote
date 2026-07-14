@@ -1,4 +1,5 @@
 import { AgentRunner, type AgentConfig } from "./agent.js";
+import { createConfigurationGate } from "./configuration-gate.js";
 import { sanitizeAgentError } from "./model.js";
 import { createLineDecoder, encodeLine, type HostToSidecar, type SidecarToHost } from "./protocol.js";
 
@@ -35,6 +36,7 @@ async function main(): Promise<void> {
     process.stdout.write(encodeLine(msg));
   };
   const runner = new AgentRunner({ send });
+  const configurationGate = createConfigurationGate();
   let configuredSecrets: string[] = [];
   const safeError = (error: unknown, extraSecrets: string[] = []) =>
     sanitizeAgentError(error, [...configuredSecrets, ...extraSecrets]);
@@ -43,7 +45,12 @@ async function main(): Promise<void> {
     switch (msg.type) {
       case "configure":
         try {
-          await runner.configure({ provider: msg.provider, model: msg.model, apiKey: msg.apiKey, baseUrl: msg.baseUrl });
+          await configurationGate.run(() => runner.configure({
+            provider: msg.provider,
+            model: msg.model,
+            apiKey: msg.apiKey,
+            baseUrl: msg.baseUrl,
+          }));
           configuredSecrets = msg.apiKey ? [msg.apiKey] : [];
           send({ type: "configure_result", callId: msg.callId, ok: true });
         } catch (err) {
@@ -57,7 +64,7 @@ async function main(): Promise<void> {
         break;
       case "clear_configuration":
         try {
-          runner.clearConfiguration();
+          await configurationGate.run(() => runner.clearConfiguration());
           configuredSecrets = [];
           send({ type: "configure_result", callId: msg.callId, ok: true });
         } catch (err) {
@@ -65,9 +72,11 @@ async function main(): Promise<void> {
         }
         break;
       case "new_session":
+        await configurationGate.wait();
         await runner.newSession(msg);
         break;
       case "open_session":
+        await configurationGate.wait();
         await runner.openSession(msg);
         break;
       case "prompt":
