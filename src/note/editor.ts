@@ -14,6 +14,7 @@ import { htmlPasteHandler, imagePasteHandler } from "./paste";
 import { imageDropHandler } from "./image-drop";
 import { markdownInputKeymap } from "./markdown-keymap";
 import { preciseSelectionRendering } from "./selection-render";
+import { hardBreakSpacing } from "./hard-break-spacing";
 
 const highlight = HighlightStyle.define([
   { tag: tags.heading, fontWeight: "600" },
@@ -128,6 +129,9 @@ function buildTheme(grow: boolean) {
       ? { ...baseContent, padding: "16px var(--piece-content-inset, 0px)", minHeight: "100%" }
       : baseContent,
     ".cm-line": { minHeight: "1.6em" },
+    // Soft wrapping stays compact inside a single .cm-line. This class is
+    // attached only to a line with a preceding literal newline.
+    ".cm-hard-break-line": { marginTop: "0.14em" },
     ".cm-placeholder": {
       whiteSpace: "nowrap",
       overflow: "hidden",
@@ -157,6 +161,7 @@ export function createEditor(
       history(),
       readOnlyCompartment.of(EditorState.readOnly.of(false)),
       preciseSelectionRendering,
+      hardBreakSpacing,
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ extensions: [Autolink, Table, Strikethrough, TaskList], codeLanguages }),
       syntaxHighlighting(highlight),
