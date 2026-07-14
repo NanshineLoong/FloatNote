@@ -786,11 +786,12 @@ pre.chat-codeblock code {
 
 /* —— 底部 dock：机器人 + 按需展开输入框 —— */
 .assistant-dock {
+  --assistant-dock-inset: 14px;
   position: relative;
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  padding: 10px 14px 14px;
+  padding: 10px var(--assistant-dock-inset) 14px;
 }
 
 .assistant-bot {
@@ -1055,12 +1056,11 @@ pre.chat-codeblock code {
 /* permission bubble */
 .assistant-perm-region {
   position: absolute;
-  /* 坐落在 dock 右上角，不占流、不挡编辑区。 */
-  right: 14px;
+  left: var(--assistant-dock-inset);
+  right: var(--assistant-dock-inset);
   bottom: calc(100% + 6px);
   z-index: 6;
-  width: min(360px, calc(100vw - 24px));
-  max-width: calc(100vw - 24px);
+  max-width: calc(100vw - 2 * var(--assistant-dock-inset));
 }
 
 .perm-bubble-root:empty {
@@ -1069,10 +1069,6 @@ pre.chat-codeblock code {
 }
 
 .perm-bubble-root {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
-  gap: 10px;
   padding: 12px;
   border: 0.5px solid var(--color-border);
   border-radius: 10px;
@@ -1091,88 +1087,74 @@ pre.chat-codeblock code {
 }
 
 .perm-card {
-  flex: 1 1 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
 }
 
 .perm-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   font-weight: 600;
   font-size: 14px;
   color: var(--color-text);
 }
 
-.perm-summary {
-  color: var(--color-text-muted);
-  font-size: 13px;
+.perm-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.perm-detail {
-  color: var(--color-text);
-  font-size: 13px;
+.perm-title-color {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 50%;
 }
 
-.perm-detail pre {
-  margin: 0;
-  max-height: 180px;
-  overflow: auto;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--color-surface-3);
-  border: 0.5px solid var(--color-border-hair);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
+.perm-footer,
+.perm-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.perm-document-label {
-  color: var(--color-text-muted);
-  font-size: 12px;
+.perm-footer {
+  justify-content: space-between;
+  min-width: 0;
 }
 
-.perm-markdown-panel {
-  max-height: 180px;
-  overflow: auto;
-  padding: 8px 10px;
-  border: 0.5px solid var(--color-border-hair);
-  border-radius: 8px;
-  background: var(--color-surface-3);
-  word-break: break-word;
+.perm-footer-left {
+  min-width: 0;
 }
 
-.perm-markdown-panel > :first-child { margin-top: 0; }
-.perm-markdown-panel > :last-child { margin-bottom: 0; }
-
-.perm-mode {
-  align-self: flex-start;
-  max-width: 100%;
-  padding: 5px 10px;
-  border: 0.5px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 12px;
-  line-height: 1.3;
-  cursor: pointer;
-  outline: none;
+.perm-footer-actions {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
-.perm-mode:focus {
-  border-color: var(--color-accent);
+.perm-allow,
+.perm-allow-split {
+  display: inline-flex;
+  flex: 0 0 auto;
 }
 
-.tag-chip {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: 999px;
-  color: var(--color-text-on-accent);
-  font-size: 12px;
-  line-height: 1.5;
-  vertical-align: middle;
-  /* background 由 JS 内联设置 */
+.perm-allow-split .perm-allow-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.perm-allow-split .perm-allow-arrow {
+  width: 30px;
+  padding-inline: 0;
+  border-left: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 /* ── 引用 chip（CM6 widget 渲染）：原子区间，不可进入内部、整体删除 ─────── */
@@ -1338,6 +1320,164 @@ pre.chat-codeblock code {
   animation: fn-paper-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* ── 写入审查纸张：与聚焦输入共享尺寸和动效语言 ───────────────────── */
+.perm-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 32px 16px;
+  isolation: isolate;
+}
+
+.perm-dialog[hidden] { display: none; }
+
+.perm-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--color-focus-scrim);
+  animation: fn-overlay-in 0.16s ease;
+}
+
+.perm-dialog-paper {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(920px, calc(100vw - 32px));
+  height: min(720px, calc(100vh - 64px));
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl);
+  animation: fn-paper-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.perm-dialog-header,
+.perm-dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  background: var(--color-surface);
+}
+
+.perm-dialog-header { border-bottom: 1px solid var(--color-divider); }
+.perm-dialog-footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--color-divider);
+}
+
+.perm-dialog-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 16px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.perm-dialog-close { margin-left: auto; }
+.perm-dialog-body {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.perm-dialog-markdown {
+  box-sizing: border-box;
+  width: min(680px, 100%);
+  height: 100%;
+  margin: 0 auto;
+  overflow: auto;
+  padding: clamp(28px, 6vh, 56px) clamp(24px, 6vw, 64px);
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.perm-dialog-markdown > :first-child { margin-top: 0; }
+.perm-dialog-markdown > :last-child { margin-bottom: 0; }
+.perm-dialog-empty {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  color: var(--color-text-subtle);
+}
+
+.perm-diff-scroll {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.perm-diff {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+  min-width: 640px;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.perm-diff-label {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+.perm-diff-new-label,
+.perm-diff-new { border-left: 1px solid var(--color-divider); }
+.perm-diff-row { display: contents; }
+.perm-diff-cell {
+  min-width: 0;
+  padding: 3px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.perm-diff-row.is-removed .perm-diff-old,
+.perm-diff-row.is-replaced .perm-diff-old {
+  background: var(--color-danger-fill-strong);
+  text-decoration: line-through;
+}
+
+.perm-diff-row.is-added .perm-diff-new,
+.perm-diff-row.is-replaced .perm-diff-new { background: var(--color-accent-fill); }
+.perm-diff-collapsed {
+  grid-column: 1 / -1;
+  padding: 7px 12px;
+  border: none;
+  border-block: 1px solid var(--color-divider);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  text-align: center;
+}
+
+.perm-diff-fallback {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+  min-width: 640px;
+  height: 100%;
+  overflow: auto;
+}
+
+.perm-diff-fallback section { padding: 16px; }
+.perm-diff-fallback pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
 @keyframes fn-overlay-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -1425,17 +1565,12 @@ pre.chat-codeblock code {
 
 @media (prefers-reduced-motion: reduce) {
   .fn-input-overlay-backdrop,
-  .fn-input-paper {
+  .fn-input-paper,
+  .perm-bubble-root,
+  .perm-dialog-backdrop,
+  .perm-dialog-paper {
     animation: none;
   }
-}
-
-
-/* allow / deny 按钮：迁移到 createButton（.fn-btn--primary / --secondary），
-   variant 接管颜色与 hover；这里只保留宽度等分布局。 */
-.perm-bubble-root > .fn-btn {
-  flex: 1 1 0;
-  min-width: 0;
 }
 
 .chat-reference-chips {

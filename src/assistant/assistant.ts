@@ -503,6 +503,8 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
 
   const permBubble = mountPermissionBubble(permRegion, (req, decision, writeMode) => {
     return resolvePermission(req.request_id, decision, writeMode);
+  }, () => {
+    showToast("写入失败，请重试");
   });
   bot.addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -566,8 +568,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     if (message?.role === "user") void resendUserMessage(messageId, text, message.references ?? []);
   });
 
-  // permission://request：优先填充流内 action 卡；若无匹配卡（非流式即时请求），
-  // 回退到 dock 固定气泡。
+  // permission://request：对话内 action 行保持只读，审批始终由 dock 卡片承担。
   let permUnlisten: UnlistenFn | null = null;
   listen<PermissionRequest>("permission://request", (e) => {
     const req = e.payload;
@@ -583,13 +584,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       newContent: req.new_content,
       canSnapshot: req.can_snapshot,
     });
-    // 若 reducer 填充了对应 action 块（requestId 匹配），由流内卡处理；否则 dock 兜底。
-    const handled = state.messages.some(
-      (m) =>
-        m.role === "assistant" &&
-        m.blocks.some((b) => b.kind === "action" && b.requestId === req.request_id),
-    );
-    if (!handled) permBubble.show(req);
+    permBubble.show(req);
   }).then((un) => {
     if (destroyed) un();
     else permUnlisten = un;

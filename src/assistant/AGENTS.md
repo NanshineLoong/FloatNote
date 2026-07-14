@@ -15,13 +15,21 @@ into a reconciled message list with incremental DOM updates.
 - `blocks.ts` — incremental message-list reconciler (`reconcileMessages`).
 - `action-card.ts` — read-only action card (edit/tag diff preview, side-by-side
   with `mod`/`add`/`del`/`ctx` row kinds).
-- `permission-bubble.ts` — docked permission bubble for pending edits +
-  `EditPreviewDetail` types shared with action-card.
+- `permission-bubble.ts` — pending-request controller and compact dock card;
+  it is the only permission surface that initiates resolution.
+- `permission-model.ts` — pure semantic title, filename, view, and snapshot
+  projection. `EditPreviewDetail` and permission payload types live here and
+  are re-exported by `permission-bubble.ts` for compatibility.
+- `permission-dialog.ts` — complete create-Markdown and edit/rewrite review
+  paper; `permission-diff.ts` supplies aligned line rows and context folding.
+- `permission-allow-button.ts` — normal/split approval control. Snapshot mode
+  is an immediate menu action, not a stored select value.
 - `markdown.ts` — minimal block markdown renderer using shared Markdown
   primitives, never note internals.
 - `input/` — the CM6 assistant composer: atomic file/skill chips, unified
   caret-following candidate popover, structured clipboard/send payload, and
-  the body-level focused-paper portal. The portal moves the existing input
+  the body-level focused-paper portal. Its modal lifecycle is shared with the
+  permission review paper through `src/shared/ui/modal-paper.ts`. The portal moves the existing input
   host into its modal paper and restores it to the current dock; it must never
   create a second `EditorView`. Enter submits in compact mode but inserts a
   newline in the focused paper, where only the send button submits. Composer

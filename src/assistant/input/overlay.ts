@@ -25,36 +25,25 @@ export interface InputOverlayHandle {
   destroy: () => void;
 }
 
-interface InertSnapshot {
-  element: HTMLElement;
-  hadAttribute: boolean;
-}
-
 const LARGE_CLASS = "fn-input-large";
 
 export function mountInputOverlay(opts: InputOverlayOptions): InputOverlayHandle {
   const { host, getDockHost, getView, onCollapse, onLargeChange } = opts;
-  const layer = document.createElement("div");
-  layer.className = "fn-input-overlay";
-  layer.hidden = true;
-  layer.setAttribute("role", "dialog");
-  layer.setAttribute("aria-modal", "true");
-  layer.setAttribute("aria-label", "AI 助手输入");
-
-  const backdrop = document.createElement("div");
-  backdrop.className = "fn-input-overlay-backdrop";
-  backdrop.setAttribute("aria-hidden", "true");
-  const paper = document.createElement("div");
-  paper.className = "fn-input-paper";
-  layer.append(backdrop, paper);
-  document.body.appendChild(layer);
+  const modal = createModalPaper({
+    ariaLabel: "AI 助手输入",
+    layerClass: "fn-input-overlay",
+    backdropClass: "fn-input-overlay-backdrop",
+    paperClass: "fn-input-paper",
+    onEscape: collapse,
+  });
+  const { paper } = modal;
 
   let large = false;
   let destroyed = false;
   let originalParent: Node | null = null;
   let originalNextSibling: Node | null = null;
-  let inertSnapshots: InertSnapshot[] = [];
   let scheduledFrame: number | null = null;
+  let unregisterPortals: Array<() => void> = [];
 
   const observer = typeof ResizeObserver === "undefined"
     ? null
@@ -74,24 +63,6 @@ export function mountInputOverlay(opts: InputOverlayOptions): InputOverlayHandle
     });
   }
 
-  function disableBackground(): void {
-    inertSnapshots = [...document.body.children]
-      .filter((element): element is HTMLElement =>
-        element instanceof HTMLElement
-        && element !== layer
-        && !element.classList.contains("fn-ref-popover")
-        && !element.classList.contains("toast"))
-      .map((element) => ({ element, hadAttribute: element.hasAttribute("inert") }));
-    for (const snapshot of inertSnapshots) snapshot.element.setAttribute("inert", "");
-  }
-
-  function restoreBackground(): void {
-    for (const snapshot of inertSnapshots) {
-      if (!snapshot.hadAttribute) snapshot.element.removeAttribute("inert");
-    }
-    inertSnapshots = [];
-  }
-
   function restoreHost(): void {
     const parent = originalParent instanceof HTMLElement && originalParent.isConnected
       ? originalParent
@@ -107,10 +78,11 @@ export function mountInputOverlay(opts: InputOverlayOptions): InputOverlayHandle
     large = true;
     originalParent = host.parentNode;
     originalNextSibling = host.nextSibling;
-    disableBackground();
+    unregisterPortals = [...document.querySelectorAll<HTMLElement>(".fn-ref-popover, .toast")]
+      .map((root) => modal.registerPortalRoot(root));
     paper.appendChild(host);
     host.classList.add(LARGE_CLASS);
-    layer.hidden = false;
+    modal.open({ restoreFocus: false });
     onLargeChange?.(true);
     scheduleLayout();
   }
@@ -119,41 +91,13 @@ export function mountInputOverlay(opts: InputOverlayOptions): InputOverlayHandle
     if (!large) return;
     large = false;
     restoreHost();
-    restoreBackground();
+    modal.close({ restoreFocus: false });
+    unregisterPortals.forEach((unregister) => unregister());
+    unregisterPortals = [];
     host.classList.remove(LARGE_CLASS);
-    layer.hidden = true;
     onLargeChange?.(false);
     scheduleLayout();
     onCollapse?.();
-  }
-
-  function onDocumentKeyDown(event: KeyboardEvent): void {
-    if (!large || event.defaultPrevented) return;
-    if (event.key === "Escape") {
-      event.preventDefault();
-      collapse();
-      return;
-    }
-    if (event.key !== "Tab") return;
-
-    const focusable = [...paper.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), '
-      + 'select:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]',
-    )].filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
-    if (focusable.length === 0) {
-      event.preventDefault();
-      return;
-    }
-    const active = document.activeElement;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && (active === first || !paper.contains(active))) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && (active === last || !paper.contains(active))) {
-      event.preventDefault();
-      first.focus();
-    }
   }
 
   function destroy(): void {
@@ -161,18 +105,17 @@ export function mountInputOverlay(opts: InputOverlayOptions): InputOverlayHandle
     if (large) {
       large = false;
       restoreHost();
-      restoreBackground();
+      modal.close({ restoreFocus: false });
     }
     destroyed = true;
     if (scheduledFrame !== null) cancelAnimationFrame(scheduledFrame);
     scheduledFrame = null;
-    document.removeEventListener("keydown", onDocumentKeyDown);
     observer?.disconnect();
     host.classList.remove(LARGE_CLASS);
-    layer.remove();
+    unregisterPortals.forEach((unregister) => unregister());
+    unregisterPortals = [];
+    modal.destroy();
   }
-
-  document.addEventListener("keydown", onDocumentKeyDown);
 
   return {
     expand,
@@ -182,3 +125,4 @@ export function mountInputOverlay(opts: InputOverlayOptions): InputOverlayHandle
     destroy,
   };
 }
+import { createModalPaper } from "../../shared/ui/modal-paper";
