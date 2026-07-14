@@ -10,7 +10,7 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 ```
 
 - **Primitive**：色阶（indigo、中性灰）、tag 调色板（仅文档/可追溯，源在 `shared/note-logic/.../palette.ts`）、danger/success、motion、基础 radius。组件**不直接**消费。
-- **Semantic**：`--color-surface*` / `--color-text*` / `--color-border*` / `--color-accent*` / `--color-hover` / `--color-selected` / `--color-focus-ring` / `--shadow-*` / `--radius-*` / `--space-*` / `--font-*` / `--fs-*`，并在 `@media (prefers-color-scheme: dark)` 内重定义。组件与窗口样式引用这些。
+- **Semantic**：`--color-surface*` / `--color-text*` / `--color-border*` / `--color-accent*` / `--color-hover` / `--color-selected` / `--color-focus-ring` / `--color-focus-scrim` / `--shadow-*` / `--radius-*` / `--space-*` / `--font-*` / `--fs-*`，并在 `@media (prefers-color-scheme: dark)` 内重定义。组件与窗口样式引用这些。
 - **Component**：`.fn-*` 共享组件样式，以及设置窗口使用的
   `--settings-shell-surface` / `--settings-canvas-surface` /
   `--settings-card-*` / `--settings-control-height` / `--settings-row-padding`
@@ -44,6 +44,7 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 ## 交互状态（在 `base.css`）
 
 - **focus**：全局 `:where(button,a,input,select,textarea,[tabindex]):focus-visible` → `outline: 2px solid var(--color-accent)` + `box-shadow: 0 0 0 4px var(--color-focus-ring)`。修复了此前仅 history 有 focus 环的可达性缺口。组件**不得**覆盖 `outline`。
+- 助手紧凑输入器的 CodeMirror 根节点不是原生表单控件，且外层展开动画会裁剪外描边；因此由静态组件 CSS 持有 18px 圆角与 `--fn-border-width` 常驻边框，聚焦时用 accent 向内描边，避免 WebKit 绘制矩形 outline。只有进入聚焦纸张后才移除这层输入器 chrome。
 - **hover**：`--color-hover`（ghost）/ `--color-accent-hover`（primary）。
 - **selected/active**：`.is-on { background: var(--color-selected); color: var(--color-accent) }`。
 - **disabled**：`opacity: .4; cursor: default`。
@@ -51,7 +52,19 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 
 ## 边框宽度
 
-两套边框**未强行统一**，仅命名：`--fn-border-width`(1px，菜单/输入/设置/历史) 与 `--fn-border-hair`(0.5px，助手/浮层 macOS 发丝线)。强制统一会改变助手发丝线视觉。
+两套边框**未强行统一**，仅命名：`--fn-border-width`(1px，菜单/输入/设置/历史，包括助手紧凑输入器) 与 `--fn-border-hair`(0.5px，助手卡片/浮层 macOS 发丝线)。强制统一会改变助手发丝线视觉。
+
+## 助手聚焦纸张
+
+长输入使用 `body` 顶层 `.fn-input-overlay`，遮罩消费
+`--color-focus-scrim`，纸张消费 `--color-surface` 与 `--shadow-xl`。纸张宽高分别为
+`min(920px, calc(100vw - 32px))` 和
+`min(720px, calc(100vh - 64px))`；内容 padding 用 `clamp()` 连续变化。
+聚焦态的 CodeMirror 根节点、滚动区与内容区不再绘制独立边框、背景或圆角，正文
+行内边距同时约束文本和选区，顶部与底部分别留出关闭、发送按钮安全区。关闭与
+发送按钮的命中区均为 44px；聚焦态 Enter 只换行，发送只能点击右下角按钮。
+候选 popover 位于聚焦层之上，toast 再位于两者之上；动画遵循
+`prefers-reduced-motion`。
 
 ## 共享组件（`src/shared/ui/`，`fn-` 前缀）
 

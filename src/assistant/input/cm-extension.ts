@@ -119,25 +119,12 @@ export function insertRefTransaction(ref: Ref, from: number, to: number = from):
   };
 }
 
-/** 输入框主题：单行/多行自适应、字体、max-height 内部滚动。 */
+/** 输入框 CodeMirror 内部布局；外层 chrome 由 assistant/styles.css 稳定绘制。 */
 export const inputTheme = EditorView.theme(
   {
-    ".fn-assistant-input": {
-      flex: "1",
-      maxHeight: "120px",
-      border: "var(--fn-border-hair) solid",
-      borderRadius: "18px",
-      fontSize: "var(--fs-md)",
-      lineHeight: "1.4",
-      padding: "9px 12px",
-      caretColor: "var(--color-text)",
-      background: "var(--color-surface)",
-      overflowY: "auto",
-      "&.cm-focused": { outline: "none" },
-    },
-    ".fn-assistant-input .cm-scroller": { overflowY: "auto" },
-    ".fn-assistant-input .cm-content": { padding: "0" },
-    ".fn-assistant-input .cm-line": { padding: "0" },
+    "&.fn-assistant-input .cm-scroller": { overflowY: "auto" },
+    "&.fn-assistant-input .cm-content": { padding: "0" },
+    "&.fn-assistant-input .cm-line": { padding: "0" },
   },
   { dark: false },
 );

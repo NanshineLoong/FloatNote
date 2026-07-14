@@ -11,6 +11,7 @@
   --color-surface-2:    var(--gray-50);   /* titlebar / tinted card */
   --color-surface-3:    var(--gray-100);
   --color-overlay:      rgba(255, 255, 255, 0.95);
+  --color-focus-scrim:  rgba(17, 24, 39, 0.22);
 
   /* ── Text ── */
   --color-text:         var(--gray-800);
@@ -97,6 +98,7 @@
     --color-surface-2:    var(--dark-surface-1);
     --color-surface-3:    #333333;
     --color-overlay:      rgba(30, 30, 30, 0.95);
+    --color-focus-scrim:  rgba(0, 0, 0, 0.48);
 
     --color-text:         #ececec;
     --color-text-muted:   var(--gray-400);
@@ -139,6 +141,7 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
+  --color-focus-scrim: rgba(17, 24, 39, 0.22);
 }
 
 :root[data-theme="dark"] {
@@ -147,6 +150,7 @@
   --color-surface: var(--dark-surface-2);
   --color-surface-2: var(--dark-surface-1);
   --color-surface-3: #333333;
+  --color-focus-scrim: rgba(0, 0, 0, 0.48);
   --color-text: #ececec;
   --color-text-muted: var(--gray-400);
   --color-text-subtle: var(--gray-500);

@@ -876,8 +876,28 @@ pre.chat-codeblock code {
 
 .assistant-input,
 .fn-assistant-input {
+  flex: 1;
   width: 100%;
   max-height: 120px;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: var(--fn-border-width) solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  caret-color: var(--color-text);
+  font-size: var(--fs-md);
+  line-height: 1.4;
+  overflow-y: auto;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+
+/* CodeMirror 根节点不是原生 input；用圆角内描边表达焦点，避免 WebKit 把
+   outline 绘制成截图中的矩形，也避免外层展开动画裁掉焦点环。 */
+.assistant-input-wrap .fn-assistant-input.cm-focused {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .assistant-expand {
@@ -1093,7 +1113,7 @@ pre.chat-codeblock code {
 /* ── 候选 popover（caret-following，@ 与 / 复用）────────────────────────── */
 .fn-ref-popover {
   position: fixed;
-  z-index: 50;
+  z-index: 110;
   min-width: 200px;
   max-width: 320px;
   max-height: 240px;
@@ -1163,18 +1183,41 @@ pre.chat-codeblock code {
   font-size: 12px;
 }
 
-/* ── 大输入覆盖层：同一 CM6 输入器切换为固定全屏形态 ──────────────────── */
-.fn-input-overlay-backdrop {
+/* ── 聚焦纸张：body 顶层 portal，Floating / Inline 共用同一表面 ───────── */
+.fn-input-overlay {
   position: fixed;
   inset: 0;
-  z-index: 40;
-  background: rgba(0, 0, 0, 0.25);
-  pointer-events: none;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 32px 16px;
+  isolation: isolate;
+}
+
+.fn-input-overlay[hidden] {
+  display: none;
+}
+
+.fn-input-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--color-focus-scrim);
   animation: fn-overlay-in 0.16s ease;
 }
 
-.fn-input-overlay-backdrop[hidden] {
-  display: none;
+.fn-input-paper {
+  position: relative;
+  z-index: 1;
+  width: min(920px, calc(100vw - 32px));
+  height: min(720px, calc(100vh - 64px));
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl);
+  animation: fn-paper-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes fn-overlay-in {
@@ -1182,58 +1225,91 @@ pre.chat-codeblock code {
   to { opacity: 1; }
 }
 
-/* 展开：宿主脱离 dock 流，固定居中成为大编辑区；停用滑入过渡。 */
+@keyframes fn-paper-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 宿主成为纸张内的无 chrome 布局容器，不再承担定位、背景或边框。 */
 .assistant-input-wrap.fn-input-large {
-  position: fixed;
-  left: 50%;
-  right: auto;
-  bottom: auto;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  max-width: min(900px, 94vw);
-  width: 94vw;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: none;
   opacity: 1;
+  overflow: hidden;
+  transform: none;
   transition: none;
-  z-index: 41;
-  flex-direction: column;
   align-items: stretch;
-  gap: 8px;
-  padding: 16px;
-  border-radius: 14px;
-  border: 0.5px solid var(--color-border);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-lg);
+  gap: 0;
 }
 
 .assistant-input-wrap.fn-input-large .fn-assistant-input {
-  max-height: 78vh;
-  min-height: min(320px, 64vh);
-  border-radius: 12px;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  overflow: hidden;
 }
 
 .assistant-input-wrap.fn-input-large .assistant-input-host {
   width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.assistant-input-wrap.fn-input-large .cm-scroller {
+  height: 100%;
+  max-height: none;
+  overflow-y: auto;
+  background: transparent;
+}
+
+.assistant-input-wrap.fn-input-large .cm-content {
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: clamp(56px, 8vh, 80px) 0 clamp(88px, 12vh, 120px);
+}
+
+/* drawSelection 依据行内边距计算跨行选区边缘。把水平留白放到行上，
+   选区就会止于正文区域，而不会铺到纸张左右边界。 */
+.assistant-input-wrap.fn-input-large .cm-line {
+  padding-inline: clamp(28px, 7vw, 80px);
 }
 
 .assistant-input-wrap.fn-input-large .assistant-expand {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: clamp(6px, 1.5vh, 10px);
+  right: clamp(12px, 2.5vw, 20px);
   bottom: auto;
-  width: 32px;
-  height: 32px;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
   opacity: 1;
   pointer-events: auto;
 }
 
-.assistant-input-wrap.fn-input-large .assistant-expand .ph {
-  display: none;
+.assistant-input-wrap.fn-input-large .assistant-send {
+  position: absolute;
+  right: clamp(16px, 3vw, 28px);
+  bottom: clamp(16px, 3vh, 28px);
+  z-index: 2;
+  width: 44px;
+  height: 44px;
 }
 
-.assistant-input-wrap.fn-input-large .assistant-expand::after {
-  content: "×";
-  font-size: 22px;
-  line-height: 1;
+@media (prefers-reduced-motion: reduce) {
+  .fn-input-overlay-backdrop,
+  .fn-input-paper {
+    animation: none;
+  }
 }
 
 

@@ -2,11 +2,11 @@
  * Composer：把 CM6 编辑器 + 引用 chip + 统一候选 popover + 大输入 overlay + 键盘/IME
  * + 提交编排成一个可挂载的组件。assistant.ts 把原 `<textarea>` 换成它。
  *
- * 单一 EditorState 真源：普通态与大输入 overlay 共用同一个 EditorView（overlay 只是
- * 给宿主加 CSS 类），文本/光标/选区/引用/撤销重做/IME 全部原位保留。
+ * 单一 EditorState 真源：普通态与聚焦纸张共用同一个 EditorView（overlay 只移动
+ * 同一宿主节点），文本/光标/选区/引用/撤销重做/IME 全部原位保留。
  *
- * 键盘与 IME：用 domEventHandlers 的 keydown 拿到原始 event，Enter 仅在非组合输入
- * 且 popover 未开时提交；popover 打开时 ArrowUp/Down/Enter/Tab/Esc 交给 popover。
+ * 键盘与 IME：用 domEventHandlers 的 keydown 拿到原始 event。普通态 Enter 提交，
+ * 聚焦纸张中 Enter 换行；popover 打开时 ArrowUp/Down/Enter/Tab/Esc 交给 popover。
  */
 import { EditorState } from "@codemirror/state";
 import {
@@ -33,16 +33,20 @@ export interface ComposerOptions {
   editorHost: HTMLElement;
   /** .assistant-input-wrap：overlay 加类用。 */
   wrapHost: HTMLElement;
+  /** 原 dock 被替换时返回当前恢复宿主。 */
+  getDockHost?: () => HTMLElement;
   placeholder: string;
   getScope: () => ChatScope | null;
   listFiles: (scope: ChatScope) => Promise<MentionFile[]>;
   listSkills: () => Promise<SkillSummary[]>;
   /** 提交时调用，收到结构化 payload。 */
-  onSubmit: (payload: PromptPayload) => void;
+  onSubmit: (payload: PromptPayload) => Promise<boolean>;
   /** 输入为空触发 send（Enter/点发送）时回调（assistant 切历史浮层）。 */
   onEmptySend?: () => void;
   /** 文档变更时通知宿主更新发送按钮等派生 UI。 */
   onChange?: () => void;
+  /** 聚焦纸张展开状态变化。 */
+  onLargeChange?: (large: boolean) => void;
 }
 
 export interface ComposerHandle {
@@ -83,12 +87,15 @@ export function mountComposer(opts: ComposerOptions): ComposerHandle {
   let skillCache: SkillSummary[] | null = null;
   let recomputeToken = 0;
   let isComposing = false;
+  let submitting = false;
+  let destroyed = false;
 
   const view = new EditorView({
     state: EditorState.create({
       doc: "",
       extensions: [
         history(),
+        EditorView.editorAttributes.of({ class: INPUT_CLASS }),
         EditorView.lineWrapping,
         drawSelection(),
         placeholder(opts.placeholder),
@@ -159,13 +166,14 @@ export function mountComposer(opts: ComposerOptions): ComposerHandle {
     }),
     parent: opts.editorHost,
   });
-  view.scrollDOM.classList.add(INPUT_CLASS);
-  view.dom.classList.add(INPUT_CLASS);
 
+  const dockHost = opts.wrapHost.parentElement ?? document.body;
   const overlay = mountInputOverlay({
     host: opts.wrapHost,
+    getDockHost: opts.getDockHost ?? (() => dockHost),
     getView: () => view,
     onCollapse: () => view.focus(),
+    onLargeChange: opts.onLargeChange,
   });
 
   const popover = new RefPopover({
@@ -266,6 +274,8 @@ export function mountComposer(opts: ComposerOptions): ComposerHandle {
       popover.confirm();
       return true;
     }
+    // 聚焦纸张是长文本编辑面：放行给后续 defaultKeymap 插入换行，提交只由按钮触发。
+    if (overlay.isLarge()) return false;
     submit();
     return true;
   }
@@ -293,15 +303,32 @@ export function mountComposer(opts: ComposerOptions): ComposerHandle {
 
   // ── 提交 ─────────────────────────────────────────────────────────────
   function submit(): void {
+    if (submitting || destroyed) return;
     const doc = view.state.doc.toString();
     const payload = composePromptPayload(doc);
     const empty = !payload.userText.trim() && payload.references.length === 0 && !payload.skill;
     if (empty) {
-      opts.onEmptySend?.();
+      if (!overlay.isLarge()) opts.onEmptySend?.();
       return;
     }
-    opts.onSubmit(payload);
-    clear();
+    submitting = true;
+    let result: Promise<boolean>;
+    try {
+      result = opts.onSubmit(payload);
+    } catch {
+      submitting = false;
+      return;
+    }
+    void result.then((accepted) => {
+      if (!accepted || destroyed) return;
+      if (view.state.doc.toString() !== doc) return;
+      clear();
+      overlay.collapse();
+    }).catch(() => {
+      // 宿主负责呈现错误；composer 必须保留用户输入与聚焦状态。
+    }).finally(() => {
+      submitting = false;
+    });
   }
 
   function clear(): void {
@@ -335,6 +362,7 @@ export function mountComposer(opts: ComposerOptions): ComposerHandle {
 
   return {
     destroy() {
+      destroyed = true;
       popover.destroy();
       overlay.destroy();
       view.destroy();

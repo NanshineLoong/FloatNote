@@ -1,81 +1,156 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mountInputOverlay } from "./overlay";
 
+class ResizeObserverStub {
+  static instances: ResizeObserverStub[] = [];
+  readonly observe = vi.fn();
+  readonly disconnect = vi.fn();
+  private readonly callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    ResizeObserverStub.instances.push(this);
+  }
+
+  notify(): void {
+    this.callback([], this as unknown as ResizeObserver);
+  }
+}
+
 describe("input overlay", () => {
+  let dock: HTMLElement;
+  let before: HTMLElement;
   let host: HTMLElement;
+  let after: HTMLElement;
   let view: { requestMeasure: () => void; focus: () => void };
   let collapsed: boolean;
   let overlay: ReturnType<typeof mountInputOverlay>;
 
   beforeEach(() => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    ResizeObserverStub.instances = [];
+    dock = document.createElement("div");
+    dock.className = "assistant-dock";
+    before = document.createElement("div");
     host = document.createElement("div");
-    document.body.appendChild(host);
+    host.className = "assistant-input-wrap";
+    after = document.createElement("div");
+    dock.append(before, host, after);
+    document.body.appendChild(dock);
     view = { requestMeasure: vi.fn(), focus: vi.fn() };
     collapsed = false;
     overlay = mountInputOverlay({
       host,
+      getDockHost: () => dock,
       getView: () => view,
       onCollapse: () => (collapsed = true),
     });
   });
+
   afterEach(() => {
     overlay.destroy();
+    vi.unstubAllGlobals();
     document.body.replaceChildren();
   });
 
-  it("expand 加 .fn-input-large 类 + 遮罩可见", () => {
+  it("creates a body-level modal layer and moves the same host into its paper", () => {
     overlay.expand();
+
+    const layer = document.querySelector<HTMLElement>(".fn-input-overlay")!;
+    const paper = layer.querySelector<HTMLElement>(".fn-input-paper")!;
+    expect(layer.parentElement).toBe(document.body);
+    expect(layer.getAttribute("role")).toBe("dialog");
+    expect(layer.getAttribute("aria-modal")).toBe("true");
+    expect(layer.getAttribute("aria-label")).toBe("AI 助手输入");
+    expect(layer.hidden).toBe(false);
+    expect(paper.firstElementChild).toBe(host);
     expect(host.classList.contains("fn-input-large")).toBe(true);
-    const backdrop = document.querySelector(".fn-input-overlay-backdrop") as HTMLElement;
-    expect(backdrop).toBeTruthy();
-    expect(backdrop.hidden).toBe(false);
-    expect(overlay.isLarge()).toBe(true);
+    expect(dock.hasAttribute("inert")).toBe(true);
   });
 
-  it("collapse 去类 + 隐藏遮罩 + 触发 onCollapse", () => {
+  it("collapse restores the host to its exact sibling position and interactive state", () => {
     overlay.expand();
     overlay.collapse();
+
+    expect([...dock.children]).toEqual([before, host, after]);
     expect(host.classList.contains("fn-input-large")).toBe(false);
-    expect((document.querySelector(".fn-input-overlay-backdrop") as HTMLElement).hidden).toBe(true);
+    expect(document.querySelector<HTMLElement>(".fn-input-overlay")!.hidden).toBe(true);
+    expect(dock.hasAttribute("inert")).toBe(false);
     expect(collapsed).toBe(true);
     expect(overlay.isLarge()).toBe(false);
   });
 
-  it("expand 后 requestAnimationFrame 触发 view.requestMeasure + focus", () => {
+  it("falls back to the current dock when the original parent disappears", () => {
     overlay.expand();
-    // rAF 在 jsdom 下不自动跑；手动 flush
-    return new Promise((resolve) => requestAnimationFrame(() => resolve(null))).then(() => {
-      expect(view.requestMeasure).toHaveBeenCalled();
-      expect(view.focus).toHaveBeenCalled();
-    });
+    const replacementDock = document.createElement("div");
+    document.body.appendChild(replacementDock);
+    dock.remove();
+    dock = replacementDock;
+
+    overlay.collapse();
+
+    expect(host.parentElement).toBe(replacementDock);
   });
 
-  it("点大输入框外的遮罩才收回", () => {
+  it("does not collapse when the backdrop is clicked", () => {
     overlay.expand();
-    vi.spyOn(host, "getBoundingClientRect").mockReturnValue({
-      bottom: 300, height: 200, left: 100, right: 500, top: 100, width: 400,
-      x: 100, y: 100, toJSON: () => ({}),
-    });
-    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 300, clientY: 200 }));
+    document.querySelector<HTMLElement>(".fn-input-overlay-backdrop")!
+      .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+
     expect(overlay.isLarge()).toBe(true);
-    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 50, clientY: 50 }));
+    expect(collapsed).toBe(false);
+  });
+
+  it("keeps the caret candidate popover interactive above the modal layer", () => {
+    const popover = document.createElement("div");
+    popover.className = "fn-ref-popover";
+    document.body.appendChild(popover);
+
+    overlay.expand();
+
+    expect(popover.hasAttribute("inert")).toBe(false);
+  });
+
+  it("collapses on Escape when the event was not consumed by the editor", () => {
+    overlay.expand();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+
     expect(overlay.isLarge()).toBe(false);
     expect(collapsed).toBe(true);
   });
 
-  it("toggle 在展开/收回间切换", () => {
-    expect(overlay.isLarge()).toBe(false);
-    overlay.toggle();
+  it("leaves the paper open when an inner popover consumes Escape", () => {
+    overlay.expand();
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    host.addEventListener("keydown", (innerEvent) => innerEvent.preventDefault(), { once: true });
+    host.dispatchEvent(event);
+
     expect(overlay.isLarge()).toBe(true);
-    overlay.toggle();
-    expect(overlay.isLarge()).toBe(false);
   });
 
-  it("destroy 清类 + 移除遮罩", () => {
+  it("requests editor measurement after expand, resize, and collapse", async () => {
+    overlay.expand();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(view.requestMeasure).toHaveBeenCalledTimes(1);
+    expect(view.focus).toHaveBeenCalledTimes(1);
+
+    ResizeObserverStub.instances[0].notify();
+    expect(view.requestMeasure).toHaveBeenCalledTimes(2);
+
+    overlay.collapse();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(view.requestMeasure).toHaveBeenCalledTimes(3);
+    expect(view.focus).toHaveBeenCalledTimes(2);
+  });
+
+  it("destroy restores the host, disconnects observation, and removes the layer", () => {
     overlay.expand();
     overlay.destroy();
+
+    expect([...dock.children]).toEqual([before, host, after]);
     expect(host.classList.contains("fn-input-large")).toBe(false);
-    expect(document.querySelector(".fn-input-overlay-backdrop")).toBeNull();
+    expect(document.querySelector(".fn-input-overlay")).toBeNull();
+    expect(ResizeObserverStub.instances[0].disconnect).toHaveBeenCalledOnce();
   });
 });

@@ -19,6 +19,7 @@ import {
 } from "./render";
 import { reconcileMessages } from "./blocks";
 import { createButton } from "../shared/ui/button";
+import { showToast } from "../shared/toast";
 
 /**
  * 与挂载点无关的助手组件。挂在笔记窗内的 `#assistant-region`，inline/floating 共用同一份。
@@ -131,6 +132,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   let currentScope: ChatScope | null = null;
   let activeConversation: ChatConversation | null = null;
   let scopeToken = 0;
+  let conversationToken = 0;
   // 消息节点复用表（增量渲染，消灭闪烁）。会话切换时由 reconcile 的 stale 清理自动清空。
   const msgMap = new Map<string, HTMLElement>();
 
@@ -147,6 +149,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   }
 
   function setActiveConversation(conversation: ChatConversation | null, clearMessages = false) {
+    conversationToken += 1;
     activeConversation = conversation;
     root.dataset.conversationId = conversation?.id ?? "";
     if (!conversation) return;
@@ -156,15 +159,23 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     if (clearMessages) rerender();
   }
 
-  async function updateConversationTitle(conversation: ChatConversation, text: string) {
-    if (conversation.titleState !== "temporary" || conversation.title !== "新对话") return;
+  async function updateConversationTitle(
+    conversation: ChatConversation,
+    text: string,
+  ): Promise<ChatConversation> {
+    if (conversation.titleState !== "temporary" || conversation.title !== "新对话") {
+      return conversation;
+    }
     const derived = deriveTitleFromFirstMessage(text);
+    let resolved: ChatConversation;
     try {
       const updated = await deps.updateTitle(conversation.id, derived.title, derived.titleState);
-      activeConversation = updated ?? { ...conversation, ...derived };
+      resolved = updated ?? { ...conversation, ...derived };
     } catch {
-      activeConversation = { ...conversation, ...derived };
+      resolved = { ...conversation, ...derived };
     }
+    if (activeConversation?.id === conversation.id) activeConversation = resolved;
+    return resolved;
   }
 
   let inputOpen = false;
@@ -188,9 +199,10 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   function updateSendMode() {
     const payload = composePromptPayload(composer.getDoc());
     const hasContent = payload.userText.trim().length > 0 || payload.references.length > 0;
-    sendBtn.setAttribute("aria-label", hasContent ? "发送" : "查看项目对话历史");
-    sendBtn.title = hasContent ? "发送" : "查看项目对话历史";
-    sendBtn.innerHTML = hasContent
+    const isSend = hasContent || composer.isLarge();
+    sendBtn.setAttribute("aria-label", isSend ? "发送" : "查看项目对话历史");
+    sendBtn.title = isSend ? "发送" : "查看项目对话历史";
+    sendBtn.innerHTML = isSend
       ? `<i class="ph ph-arrow-up"></i>`
       : `<i class="ph ph-clock-counter-clockwise"></i>`;
   }
@@ -198,37 +210,61 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   function updateExpandState() {
     if (composer.isLarge()) {
       expandBtn.disabled = false;
-      expandBtn.title = "收起输入框";
-      expandBtn.setAttribute("aria-label", "收起输入框");
+      expandBtn.title = "关闭聚焦输入";
+      expandBtn.setAttribute("aria-label", "关闭聚焦输入");
+      expandBtn.innerHTML = `<i class="ph ph-x"></i>`;
       return;
     }
     const available = composer.isHeightLimited();
     expandBtn.disabled = !available;
     expandBtn.title = available ? "展开输入框" : "输入达到最大高度后可展开";
     expandBtn.setAttribute("aria-label", "展开输入框");
+    expandBtn.innerHTML = `<i class="ph ph-arrows-out"></i>`;
   }
 
-  async function submit(payload: PromptPayload) {
+  async function submit(payload: PromptPayload): Promise<boolean> {
     const text = payload.userText.trim();
     const scope = currentScope;
     if (!scope) {
       dispatch({ type: "error", requestId: null, message: "当前没有打开的项目或文档，请稍后再试" });
-      return;
+      showToast("当前没有打开的项目或文档，输入内容已保留");
+      return false;
     }
-    let conversation = activeConversation;
-    if (!conversation) {
-      conversation = await deps.createConversation(scope);
-      setActiveConversation(conversation);
-    }
-    await updateConversationTitle(conversation, text);
-    state = { ...state, activeConversationId: conversation.id };
-    dispatch({ type: "user", conversationId: conversation.id, text, references: payload.references });
-    dispatch({ type: "pending", conversationId: conversation.id });
+    const submittedScopeToken = scopeToken;
+    let expectedConversationToken = conversationToken;
+    const isCurrentSubmission = (conversationId?: string) =>
+      scopeToken === submittedScopeToken
+      && conversationToken === expectedConversationToken
+      && (!conversationId || activeConversation?.id === conversationId);
     try {
-      activeRequestId = await deps.send({ ...payload, userText: text }, conversation.id);
+      let conversation = activeConversation;
+      if (!conversation) {
+        const created = await deps.createConversation(scope);
+        if (!isCurrentSubmission()) return false;
+        conversation = created;
+        setActiveConversation(conversation);
+        expectedConversationToken = conversationToken;
+      }
+      conversation = await updateConversationTitle(conversation, text);
+      if (!isCurrentSubmission(conversation.id)) return false;
+      state = { ...state, activeConversationId: conversation.id };
+      dispatch({ type: "user", conversationId: conversation.id, text, references: payload.references });
+      dispatch({ type: "pending", conversationId: conversation.id });
+      const requestId = await deps.send({ ...payload, userText: text }, conversation.id);
+      if (!isCurrentSubmission(conversation.id)) return false;
+      activeRequestId = requestId;
+      return true;
     } catch (err) {
+      if (!isCurrentSubmission()) return false;
       const message = err instanceof Error ? err.message : String(err);
-      dispatch({ type: "error", requestId: null, conversationId: conversation.id, message });
+      dispatch({
+        type: "error",
+        requestId: null,
+        conversationId: activeConversation?.id,
+        message,
+      });
+      showToast("发送失败，输入内容已保留");
+      return false;
     }
   }
 
@@ -311,11 +347,12 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   const composer: ComposerHandle = mountComposer({
     editorHost: inputHost,
     wrapHost: inputWrap,
+    getDockHost: () => root.querySelector<HTMLElement>(".assistant-dock") ?? root,
     placeholder: "说点什么…",
     getScope: () => currentScope,
     listFiles: deps.listFiles,
     listSkills: deps.listSkills,
-    onSubmit: (payload) => { void submit(payload); },
+    onSubmit: submit,
     onEmptySend: () => { void toggleHistoryPopover(); },
     onChange: () => {
       updateSendMode();
@@ -323,6 +360,10 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       // CM6 的高度可能在 update listener 之后才由浏览器完成布局；下一帧复测，
       // 确保刚达到上限时放大按钮立即出现。
       requestAnimationFrame(updateExpandState);
+    },
+    onLargeChange: () => {
+      updateSendMode();
+      updateExpandState();
     },
   });
   sendBtn.addEventListener("click", () => composer.submit());

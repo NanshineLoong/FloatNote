@@ -14,16 +14,19 @@ interface Setup {
   submitted: PromptPayload[];
   getEmptySends: () => number;
   editorHost: HTMLElement;
+  resolveSubmit: (accepted: boolean) => void;
 }
 
 function makeComposer(opts: {
   files?: { name: string; kind: "inbox" | "tasks" | "piece" | "doc" }[];
   skills?: { name: string; description: string }[];
+  submitImmediately?: boolean;
 } = {}): Setup {
   const files = opts.files ?? [{ name: "piece.md", kind: "piece" as const }];
   const skills = opts.skills ?? [{ name: "summarize", description: "总结" }];
   const submitted: PromptPayload[] = [];
   let emptySends = 0;
+  let resolveSubmit = (_accepted: boolean) => {};
   const wrapHost = document.createElement("div");
   wrapHost.className = "assistant-input-wrap";
   const editorHost = document.createElement("div");
@@ -37,10 +40,22 @@ function makeComposer(opts: {
     getScope: () => ({ scopeType: "project", scopePath: "p", scopeLabel: "p", cwd: "p" }),
     listFiles: async () => files,
     listSkills: async () => skills,
-    onSubmit: (p) => submitted.push(p),
+    onSubmit: (p) => {
+      submitted.push(p);
+      if (opts.submitImmediately !== false) return Promise.resolve(true);
+      return new Promise<boolean>((resolve) => {
+        resolveSubmit = resolve;
+      });
+    },
     onEmptySend: () => (emptySends += 1),
   });
-  return { handle, submitted, getEmptySends: () => emptySends, editorHost };
+  return {
+    handle,
+    submitted,
+    getEmptySends: () => emptySends,
+    editorHost,
+    resolveSubmit: (accepted) => resolveSubmit(accepted),
+  };
 }
 
 describe("composer", () => {
@@ -78,12 +93,24 @@ describe("composer", () => {
     expect(handle.getDoc()).toContain(REF_OPEN);
   });
 
-  it("无候选时 Enter 提交结构化 payload", () => {
+  it("无候选时 Enter 提交结构化 payload", async () => {
     handle.insertText("你好");
     handle.pressKey("Enter");
     expect(submitted.length).toBe(1);
     expect(submitted[0].userText).toBe("你好");
     expect(submitted[0].references).toEqual([]);
+    await vi.waitFor(() => expect(handle.getDoc()).toBe(""));
+  });
+
+  it("聚焦纸张中 Enter 插入换行且不提交", () => {
+    handle.insertText("第一行");
+    handle.expandLarge();
+
+    handle.pressKey("Enter");
+
+    expect(handle.getDoc()).toBe("第一行\n");
+    expect(submitted).toEqual([]);
+    expect(handle.isLarge()).toBe(true);
   });
 
   it("Shift-Enter 插入换行而不提交", () => {
@@ -101,7 +128,7 @@ describe("composer", () => {
     expect(submitted.length).toBe(0);
   });
 
-  it("IME 组合中 Enter 不提交，也不让默认键位改写文档", () => {
+  it("IME 组合中 Enter 不提交，也不让默认键位改写文档", async () => {
     handle.__setComposing(true);
     handle.insertText("正在组合");
     const before = handle.getDoc();
@@ -113,6 +140,7 @@ describe("composer", () => {
     handle.__setComposing(false);
     handle.pressKey("Enter");
     expect(submitted).toEqual([{ userText: "正在组合", references: [] }]);
+    await vi.waitFor(() => expect(handle.getDoc()).toBe(""));
   });
 
   it("openSkillPicker 插入 / 并打开 skill 候选", async () => {
@@ -129,6 +157,33 @@ describe("composer", () => {
     expect(handle.isLarge()).toBe(true);
     handle.collapseLarge();
     expect(handle.isLarge()).toBe(false);
+  });
+
+  it("只把输入框主题类挂到 CodeMirror 根节点", () => {
+    const editor = document.querySelector<HTMLElement>(".cm-editor")!;
+    const scroller = document.querySelector<HTMLElement>(".cm-scroller")!;
+
+    expect(editor.classList.contains("fn-assistant-input")).toBe(true);
+    expect(scroller.classList.contains("fn-assistant-input")).toBe(false);
+  });
+
+  it("CodeMirror 重写聚焦属性后仍保留输入框主题类", async () => {
+    const editor = document.querySelector<HTMLElement>(".cm-editor")!;
+    const content = document.querySelector<HTMLElement>(".cm-content")!;
+
+    expect(editor.classList.contains("fn-assistant-input")).toBe(true);
+
+    handle.focus();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(editor.classList.contains("cm-focused")).toBe(true);
+    expect(editor.classList.contains("fn-assistant-input")).toBe(true);
+
+    content.blur();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    handle.focus();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(editor.classList.contains("cm-focused")).toBe(true);
+    expect(editor.classList.contains("fn-assistant-input")).toBe(true);
   });
 
   it("仅在常规输入区长到最大高度时允许放大", () => {
@@ -162,5 +217,72 @@ describe("composer", () => {
     handle.pressKey("Escape");
     expect(handle.isPopoverOpen()).toBe(false);
     expect(handle.getDoc()).toBe("你好 @pi");
+  });
+
+  it("成功提交后清空并收起聚焦纸张", async () => {
+    const setup = makeComposer({ submitImmediately: false });
+    setup.handle.insertText("保留到后端接受");
+    setup.handle.expandLarge();
+
+    setup.handle.submit();
+    expect(setup.handle.getDoc()).toBe("保留到后端接受");
+    expect(setup.handle.isLarge()).toBe(true);
+
+    setup.resolveSubmit(true);
+    await vi.waitFor(() => expect(setup.handle.getDoc()).toBe(""));
+    expect(setup.handle.isLarge()).toBe(false);
+    setup.handle.destroy();
+  });
+
+  it("失败提交保留文档并保持聚焦纸张打开", async () => {
+    const setup = makeComposer({ submitImmediately: false });
+    setup.handle.insertText("不要丢失");
+    setup.handle.expandLarge();
+
+    setup.handle.submit();
+    setup.resolveSubmit(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(setup.handle.getDoc()).toBe("不要丢失");
+    expect(setup.handle.isLarge()).toBe(true);
+    setup.handle.destroy();
+  });
+
+  it("提交握手未完成时不会重复发送", () => {
+    const setup = makeComposer({ submitImmediately: false });
+    setup.handle.insertText("只发送一次");
+
+    setup.handle.submit();
+    setup.handle.submit();
+
+    expect(setup.submitted).toHaveLength(1);
+    setup.resolveSubmit(false);
+    setup.handle.destroy();
+  });
+
+  it("旧提交成功不会清空等待期间继续编辑的新草稿", async () => {
+    const setup = makeComposer({ submitImmediately: false });
+    setup.handle.insertText("已提交");
+    setup.handle.expandLarge();
+    setup.handle.submit();
+    setup.handle.insertText(" 后续草稿");
+
+    setup.resolveSubmit(true);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(setup.handle.getDoc()).toBe("已提交 后续草稿");
+    expect(setup.handle.isLarge()).toBe(true);
+    setup.handle.destroy();
+  });
+
+  it("聚焦纸张中的空提交不收起也不打开历史入口", () => {
+    handle.expandLarge();
+    handle.submit();
+
+    expect(handle.isLarge()).toBe(true);
+    expect(getEmptySends()).toBe(0);
+    expect(submitted).toEqual([]);
   });
 });

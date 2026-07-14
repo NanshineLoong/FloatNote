@@ -1,21 +1,20 @@
 /**
- * 大输入覆盖层：在应用内把同一份 CM6 输入器切换为固定全屏覆盖形态。
+ * 顶层聚焦纸张 portal。
  *
- * 关键设计：不另建 EditorView、不做 state 迁移，而是给同一个输入器宿主加
- * `.fn-input-large` 类 + 背景遮罩，由 CSS 改写定位/尺寸。因为编辑器实例不变，
- * 文本 / Markdown / 光标 / 选区 / 文件引用 / Skill 引用 / 撤销重做 / IME 全部
- * 原位保留，无需任何同步逻辑。收回时去类即可。
- *
- * 只管 DOM 形态与遮罩；键盘（Esc 收回、Enter 发送）由 composer keymap 调
- * collapse()，避免与全局 Esc 链抢键。
+ * 展开时把同一个输入器宿主移动到 body 下的纸张容器，收起时再插回原来的
+ * DOM 位置。EditorView 从未重建，因此文本、选区、历史与 IME 状态自然保留。
  */
 export interface InputOverlayOptions {
   /** 输入器宿主（.assistant-input-wrap）。 */
   host: HTMLElement;
-  /** 展开/收回后需让 CM6 重测布局并聚焦。 */
+  /** 原父节点失效时，返回当前助手 dock 作为恢复位置。 */
+  getDockHost: () => HTMLElement;
+  /** 展开、尺寸变化与收回后让 CM6 重测布局。 */
   getView: () => { requestMeasure: () => void; focus: () => void } | null;
-  /** 收回时回调（供 composer 清状态）。 */
+  /** 收回时回调。 */
   onCollapse?: () => void;
+  /** 展开状态变化时回调。 */
+  onLargeChange?: (large: boolean) => void;
 }
 
 export interface InputOverlayHandle {
@@ -26,78 +25,160 @@ export interface InputOverlayHandle {
   destroy: () => void;
 }
 
+interface InertSnapshot {
+  element: HTMLElement;
+  hadAttribute: boolean;
+}
+
 const LARGE_CLASS = "fn-input-large";
-const BACKDROP_CLASS = "fn-input-overlay-backdrop";
 
 export function mountInputOverlay(opts: InputOverlayOptions): InputOverlayHandle {
-  const { host, getView, onCollapse } = opts;
-  let backdrop: HTMLElement | null = null;
+  const { host, getDockHost, getView, onCollapse, onLargeChange } = opts;
+  const layer = document.createElement("div");
+  layer.className = "fn-input-overlay";
+  layer.hidden = true;
+  layer.setAttribute("role", "dialog");
+  layer.setAttribute("aria-modal", "true");
+  layer.setAttribute("aria-label", "AI 助手输入");
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "fn-input-overlay-backdrop";
+  backdrop.setAttribute("aria-hidden", "true");
+  const paper = document.createElement("div");
+  paper.className = "fn-input-paper";
+  layer.append(backdrop, paper);
+  document.body.appendChild(layer);
+
   let large = false;
+  let destroyed = false;
+  let originalParent: Node | null = null;
+  let originalNextSibling: Node | null = null;
+  let inertSnapshots: InertSnapshot[] = [];
+  let scheduledFrame: number | null = null;
 
-  function isInsideHost(event: MouseEvent): boolean {
-    const rect = host.getBoundingClientRect();
-    return event.clientX >= rect.left && event.clientX <= rect.right
-      && event.clientY >= rect.top && event.clientY <= rect.bottom;
+  const observer = typeof ResizeObserver === "undefined"
+    ? null
+    : new ResizeObserver(() => {
+      if (large) getView()?.requestMeasure();
+    });
+  observer?.observe(paper);
+
+  function scheduleLayout(): void {
+    if (scheduledFrame !== null) cancelAnimationFrame(scheduledFrame);
+    scheduledFrame = requestAnimationFrame(() => {
+      scheduledFrame = null;
+      if (destroyed) return;
+      const view = getView();
+      view?.requestMeasure();
+      view?.focus();
+    });
   }
 
-  function onDocumentMouseDown(event: MouseEvent): void {
-    if (large && !isInsideHost(event)) collapse();
+  function disableBackground(): void {
+    inertSnapshots = [...document.body.children]
+      .filter((element): element is HTMLElement =>
+        element instanceof HTMLElement
+        && element !== layer
+        && !element.classList.contains("fn-ref-popover")
+        && !element.classList.contains("toast"))
+      .map((element) => ({ element, hadAttribute: element.hasAttribute("inert") }));
+    for (const snapshot of inertSnapshots) snapshot.element.setAttribute("inert", "");
   }
 
-  function ensureBackdrop(): HTMLElement {
-    if (!backdrop) {
-      const el = document.createElement("div");
-      el.className = BACKDROP_CLASS;
-      el.hidden = true;
-      document.body.appendChild(el);
-      backdrop = el;
+  function restoreBackground(): void {
+    for (const snapshot of inertSnapshots) {
+      if (!snapshot.hadAttribute) snapshot.element.removeAttribute("inert");
     }
-    return backdrop;
+    inertSnapshots = [];
+  }
+
+  function restoreHost(): void {
+    const parent = originalParent instanceof HTMLElement && originalParent.isConnected
+      ? originalParent
+      : getDockHost();
+    if (originalNextSibling?.parentNode === parent) parent.insertBefore(host, originalNextSibling);
+    else parent.appendChild(host);
+    originalParent = null;
+    originalNextSibling = null;
   }
 
   function expand(): void {
-    if (large) return;
+    if (large || destroyed) return;
     large = true;
+    originalParent = host.parentNode;
+    originalNextSibling = host.nextSibling;
+    disableBackground();
+    paper.appendChild(host);
     host.classList.add(LARGE_CLASS);
-    const bd = ensureBackdrop();
-    bd.hidden = false;
-    requestAnimationFrame(() => {
-      const v = getView();
-      v?.requestMeasure();
-      v?.focus();
-    });
+    layer.hidden = false;
+    onLargeChange?.(true);
+    scheduleLayout();
   }
 
   function collapse(): void {
     if (!large) return;
     large = false;
+    restoreHost();
+    restoreBackground();
     host.classList.remove(LARGE_CLASS);
-    if (backdrop) backdrop.hidden = true;
-    requestAnimationFrame(() => {
-      const v = getView();
-      v?.requestMeasure();
-      v?.focus();
-    });
+    layer.hidden = true;
+    onLargeChange?.(false);
+    scheduleLayout();
     onCollapse?.();
   }
 
-  function isLarge(): boolean {
-    return large;
-  }
+  function onDocumentKeyDown(event: KeyboardEvent): void {
+    if (!large || event.defaultPrevented) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      collapse();
+      return;
+    }
+    if (event.key !== "Tab") return;
 
-  function toggle(): void {
-    large ? collapse() : expand();
+    const focusable = [...paper.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), '
+      + 'select:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]',
+    )].filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+    if (focusable.length === 0) {
+      event.preventDefault();
+      return;
+    }
+    const active = document.activeElement;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (active === first || !paper.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !paper.contains(active))) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function destroy(): void {
-    document.removeEventListener("mousedown", onDocumentMouseDown, true);
+    if (destroyed) return;
+    if (large) {
+      large = false;
+      restoreHost();
+      restoreBackground();
+    }
+    destroyed = true;
+    if (scheduledFrame !== null) cancelAnimationFrame(scheduledFrame);
+    scheduledFrame = null;
+    document.removeEventListener("keydown", onDocumentKeyDown);
+    observer?.disconnect();
     host.classList.remove(LARGE_CLASS);
-    backdrop?.remove();
-    backdrop = null;
-    large = false;
+    layer.remove();
   }
 
-  document.addEventListener("mousedown", onDocumentMouseDown, true);
+  document.addEventListener("keydown", onDocumentKeyDown);
 
-  return { expand, collapse, isLarge, toggle, destroy };
+  return {
+    expand,
+    collapse,
+    isLarge: () => large,
+    toggle: () => (large ? collapse() : expand()),
+    destroy,
+  };
 }

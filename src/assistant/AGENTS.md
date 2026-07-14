@@ -18,9 +18,17 @@ into a reconciled message list with incremental DOM updates.
   primitives, never note internals.
 - `input/` — the CM6 assistant composer: atomic file/skill chips, unified
   caret-following candidate popover, structured clipboard/send payload, and
-  the in-window large-input overlay. `mention-picker.ts` and `skill-picker.ts`
-  remain the data-type sources for the composer; their legacy textarea menus
-  are no longer mounted by `assistant.ts`.
+  the body-level focused-paper portal. The portal moves the existing input
+  host into its modal paper and restores it to the current dock; it must never
+  create a second `EditorView`. Enter submits in compact mode but inserts a
+  newline in the focused paper, where only the send button submits. Composer
+  submission is asynchronous: clear and
+  collapse only after `send` returns a request id, while failures retain the
+  draft. If the user edits while that handshake is pending, the newer live
+  draft wins and is not cleared by the older completion. `mention-picker.ts`
+  and `skill-picker.ts` remain the data-type sources
+  for the composer; their legacy textarea menus are no longer mounted by
+  `assistant.ts`.
 - `styles.css` — assistant card/bubble/diff/picker styling.
 
 Cross-feature contracts come from `src/platform/`; shared helpers/UI come from
