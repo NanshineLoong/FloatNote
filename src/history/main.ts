@@ -4,6 +4,7 @@ import "@phosphor-icons/web/regular";
 import { chatClearBeforeEntries, chatDelete, chatListAll, chatUpdateTitle, type ChatConversation } from "../platform/chat-history";
 import { formatHistoryTime } from "../platform/chat-history-format";
 import { filterAndGroupHistory, scopeFilterKey } from "./history-model";
+import { createClearAllHistoryItem, createHistoryMoreButton } from "./history-ui";
 import { createButton } from "../shared/ui/button";
 import { createMenu } from "../shared/ui/menu";
 import { initializeAppearance } from "../shared/appearance";
@@ -20,11 +21,11 @@ app.innerHTML = `
       ${createButton({ variant: "secondary", icon: "ph-broom", iconOnly: true, label: "清理旧记录", title: "清理旧记录" }).outerHTML}
     </nav>
     <section class="history-list" aria-label="对话历史"></section>
-    ${createButton({ variant: "secondary", label: "加载更多" }).outerHTML}
+    ${createHistoryMoreButton().outerHTML}
   </main>`;
 
 const listEl = app.querySelector<HTMLElement>(".history-list")!;
-const moreBtn = app.querySelector<HTMLButtonElement>(".fn-btn--secondary:last-child")!;
+const moreBtn = app.querySelector<HTMLButtonElement>(".history-more")!;
 const filterEl = app.querySelector<HTMLSelectElement>(".history-project-filter")!;
 const clearTrigger = app.querySelector<HTMLButtonElement>(".history-toolbar .fn-btn")!;
 const clearMenu = createMenu({ anchor: clearTrigger, placement: "down-right", inside: [clearTrigger] });
@@ -40,7 +41,7 @@ filterEl.addEventListener("change", render);
 moreBtn.addEventListener("click", () => { void loadMore(); });
 clearTrigger.addEventListener("click", () => {
   if (clearMenu.isOpen()) return clearMenu.hide();
-  clearMenu.show([clearItem(7), clearItem(30)]);
+  clearMenu.show([clearItem(7), clearItem(30), createClearAllHistoryItem(clearAll)]);
 });
 
 async function reload() {
@@ -139,4 +140,13 @@ function clearItem(days: number): HTMLButtonElement {
     if (removed.some((deleted) => deleted.id === activeConversationId)) { activeConversationId = null; void emit("chat://deleted", ""); }
     await reload(); void emit("chat://history-changed");
   }); return item;
+}
+
+async function clearAll() {
+  clearMenu.hide();
+  if (!await confirm("将删除所有对话。删除后无法恢复。", { title: "清理全部对话记录", kind: "warning" })) return;
+  const removed = await chatClearBeforeEntries(Number.MAX_SAFE_INTEGER);
+  if (removed.some((entry) => entry.id === activeConversationId)) { activeConversationId = null; void emit("chat://deleted", ""); }
+  await reload();
+  void emit("chat://history-changed");
 }
