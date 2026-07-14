@@ -10,6 +10,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+e2e-wdio = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
+
 [dependencies]
 chrono = "0.4"
 serde = { version = "1", features = ["derive"] }
@@ -21,11 +24,9 @@ tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-shell = "2"
-# WebdriverIO 审查支持（仅 debug 构建使用）：tauri-plugin-wdio 提供
-# webview 内 JS 执行/IPC mock/日志捕获，tauri-plugin-wdio-webdriver 提供
-# embedded WebDriver 服务（macOS 无需系统 safaridriver）。
-tauri-plugin-wdio = "1"
-tauri-plugin-wdio-webdriver = "1"
+# WebdriverIO 原生诊断仅由 e2e-wdio feature 启用。
+tauri-plugin-wdio = { version = "1", optional = true }
+tauri-plugin-wdio-webdriver = { version = "1", optional = true }
 trash = "5"
 base64 = "0.22"
 percent-encoding = "2"

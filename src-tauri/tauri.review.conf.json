@@ -1,6 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "app": {
-    "withGlobalTauri": true
+    "withGlobalTauri": true,
+    "security": {
+      "capabilities": [
+        "default",
+        {
+          "identifier": "review",
+          "description": "WebdriverIO permission for explicit native diagnostics",
+          "local": true,
+          "windows": ["main"],
+          "permissions": ["wdio:default"]
+        }
+      ]
+    }
   }
 }

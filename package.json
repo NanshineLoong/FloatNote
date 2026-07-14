@@ -19,12 +19,13 @@
     "tauri": "tauri",
     "test:frontend": "vitest run",
     "test:sidecar": "npm test --workspace=floatnote-agent-sidecar",
-    "test": "npm run test:frontend && npm run test:sidecar",
+    "test:infra": "node --test ./scripts/*.test.mjs",
+    "test": "npm run test:frontend && npm run test:infra && npm run test:sidecar",
     "smoke:sidecar": "npm run smoke --workspace=floatnote-agent-sidecar",
     "package:sidecar": "npm run package:sidecar --workspace=floatnote-agent-sidecar",
     "check": "npm run test && npm run build && npm run smoke:sidecar",
-    "review:build": "VITE_WDIO=1 npm run tauri build -- --debug --no-bundle --config src-tauri/tauri.review.conf.json",
-    "review:app": "wdio run ./wdio.conf.ts"
+    "review:ui": "node ./scripts/review-ui.mjs",
+    "review:native:doctor": "node ./scripts/native-review-doctor.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.0",

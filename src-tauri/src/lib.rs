@@ -76,10 +76,8 @@ pub fn run() {
             }
         });
 
-    // WebdriverIO 审查支持：仅在 debug 构建注册，避免进入 release 产物。
-    // tauri-plugin-wdio 提供 webview 内 execute / IPC mock / 前后端日志捕获；
-    // tauri-plugin-wdio-webdriver 提供 embedded WebDriver（macOS 无需 safaridriver）。
-    #[cfg(debug_assertions)]
+    // 原生 WebDriver 只用于显式 e2e-wdio debug 诊断；普通 dev/release 均不加载。
+    #[cfg(all(debug_assertions, feature = "e2e-wdio"))]
     {
         builder = builder.plugin(tauri_plugin_wdio::init());
         builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
