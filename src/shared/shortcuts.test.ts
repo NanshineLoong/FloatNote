@@ -3,6 +3,7 @@ import {
   canonicalize,
   checkConflict,
   findAllConflicts,
+  findShortcutConflicts,
   eventToCombo,
   WINDOW_SHORTCUT_DEFAULTS,
   WINDOW_SHORTCUT_IDS,
@@ -59,10 +60,9 @@ describe("checkConflict", () => {
     expect(r?.kind).toBe("reserved");
     expect(r?.message).toContain("关闭窗口");
   });
-  it("保留键：Mod+= 字号", () => {
+  it("不再为已移除的字号控制保留 Mod+=", () => {
     const r = checkConflict({ combo: "Cmd+=", id: "assistant", all: all(), globals });
-    expect(r?.kind).toBe("reserved");
-    expect(r?.message).toContain("字号");
+    expect(r).toBeNull();
   });
   it("保留键：Shift+Mod+K（CM 占用）", () => {
     const r = checkConflict({ combo: "Cmd+Shift+K", id: "assistant", all: all(), globals });
@@ -100,6 +100,16 @@ describe("findAllConflicts", () => {
     const r = findAllConflicts(all, { capture: "Alt+Cmd+C", toggle: "Alt+Cmd+N", popup: "Alt+Cmd+P" });
     expect(r.assistant?.kind).toBe("window");
     expect(r.action_panel?.kind).toBe("window");
+  });
+});
+
+describe("findShortcutConflicts", () => {
+  it("marks both global and window fields when their values collide", () => {
+    const windows = { ...WINDOW_SHORTCUT_DEFAULTS };
+    const globals = { capture: "Cmd+J", toggle: "Alt+Cmd+N", popup: "Alt+Cmd+P" };
+    const conflicts = findShortcutConflicts(windows, globals);
+    expect(conflicts.assistant?.message).toContain("划线引用");
+    expect(conflicts.capture?.message).toContain("切换 AI 助手");
   });
 });
 

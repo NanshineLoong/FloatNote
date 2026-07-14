@@ -1,7 +1,7 @@
 use crate::state::AppState;
 use crate::{config::Config, notes, project, versions};
 use std::path::PathBuf;
-use tauri::{Emitter, Manager, State};
+use tauri::{Manager, State};
 
 #[path = "commands/agent.rs"]
 mod agent;
@@ -22,24 +22,13 @@ pub fn get_config(state: State<AppState>) -> Config {
 }
 
 #[tauri::command]
-pub async fn set_config(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    new_config: Config,
-) -> Result<(), String> {
+pub async fn set_config(state: State<'_, AppState>, new_config: Config) -> Result<(), String> {
     let _transaction = state.ai_settings_tx.lock().await;
     let current_ai_settings = state.config.lock().unwrap().ai_settings.clone();
     let mut candidate = new_config;
     candidate.ai_settings = current_ai_settings;
     crate::config::save(&state.config_path, &candidate).map_err(|error| error.to_string())?;
-    *state.config.lock().unwrap() = candidate.clone();
-    let _ = app.emit(
-        "appearance-changed",
-        serde_json::json!({
-            "theme": candidate.theme.clone(),
-            "fontSize": candidate.font_size,
-        }),
-    );
+    *state.config.lock().unwrap() = candidate;
     Ok(())
 }
 

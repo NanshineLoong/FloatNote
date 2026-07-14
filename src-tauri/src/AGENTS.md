@@ -41,6 +41,12 @@ profiles plus an optional active ID. Provider save/activation belongs in
 configure result before persistence and must not reintroduce legacy connection
 migration.
 
+Skill catalog discovery and safe directory import belong to
+`commands/agent.rs` on the Rust host. Listing must remain available without a
+sidecar; `agent_reload_skills` only synchronizes the already-persisted catalog
+state into a live runtime. `Config` has no theme or configurable UI font-size
+fields; legacy JSON keys are ignored and disappear on the next save.
+
 ## Conventions
 
 - `rustfmt`, snake_case, `serde`-serializable command payloads.

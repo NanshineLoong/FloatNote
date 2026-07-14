@@ -154,9 +154,6 @@ pub struct Config {
     pub auto_popup_mode: String,
     /// 笔记窗内快捷键（窗口聚焦时生效，纯前端分派）。默认值见 WindowShortcuts::default。
     pub window_shortcuts: WindowShortcuts,
-    pub font_size: u32,
-    /// "system" | "light" | "dark". Frontend resolves `system` per window.
-    pub theme: String,
     pub launch_at_login: bool,
     /// 助手是否展开显示（折叠则隐藏）。助手始终活在笔记窗内，按窗宽自动 inline/floating。
     pub assistant_open: bool,
@@ -181,8 +178,6 @@ impl Default for Config {
             shortcut_popup: "Alt+Cmd+P".to_string(),
             auto_popup_mode: "auto".to_string(),
             window_shortcuts: WindowShortcuts::default(),
-            font_size: 15,
-            theme: "system".to_string(),
             launch_at_login: false,
             assistant_open: false,
             recent_projects: Vec::new(),
@@ -284,9 +279,20 @@ mod tests {
 
     #[test]
     fn partial_json_keeps_other_defaults() {
-        let config: Config = serde_json::from_str(r#"{"font_size":20}"#).unwrap();
-        assert_eq!(config.font_size, 20);
+        let config: Config = serde_json::from_str(r#"{"launch_at_login":true}"#).unwrap();
+        assert!(config.launch_at_login);
         assert_eq!(config.shortcut_capture, "Alt+Cmd+C");
+    }
+
+    #[test]
+    fn legacy_appearance_fields_are_ignored_and_not_saved() {
+        let config: Config =
+            serde_json::from_str(r#"{"theme":"dark","font_size":20,"launch_at_login":true}"#)
+                .unwrap();
+        assert!(config.launch_at_login);
+        let saved = serde_json::to_value(config).unwrap();
+        assert!(saved.get("theme").is_none());
+        assert!(saved.get("font_size").is_none());
     }
 
     #[test]
@@ -325,7 +331,7 @@ mod tests {
 
     #[test]
     fn partial_json_keeps_popup_default() {
-        let config: Config = serde_json::from_str(r#"{"font_size":20}"#).unwrap();
+        let config: Config = serde_json::from_str("{}").unwrap();
         assert_eq!(config.shortcut_popup, "Alt+Cmd+P");
     }
 
@@ -343,11 +349,6 @@ mod tests {
     }
 
     #[test]
-    fn theme_defaults_to_system() {
-        assert_eq!(Config::default().theme, "system");
-    }
-
-    #[test]
     fn window_shortcuts_default() {
         let c = Config::default();
         assert_eq!(c.window_shortcuts.assistant, "Cmd+J");
@@ -356,7 +357,7 @@ mod tests {
 
     #[test]
     fn partial_json_keeps_window_shortcuts_default() {
-        let config: Config = serde_json::from_str(r#"{"font_size":20}"#).unwrap();
+        let config: Config = serde_json::from_str("{}").unwrap();
         assert_eq!(config.window_shortcuts.assistant, "Cmd+J");
     }
 

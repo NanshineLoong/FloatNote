@@ -11,7 +11,10 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 
 - **Primitive**：色阶（indigo、中性灰）、tag 调色板（仅文档/可追溯，源在 `shared/note-logic/.../palette.ts`）、danger/success、motion、基础 radius。组件**不直接**消费。
 - **Semantic**：`--color-surface*` / `--color-text*` / `--color-border*` / `--color-accent*` / `--color-hover` / `--color-selected` / `--color-focus-ring` / `--shadow-*` / `--radius-*` / `--space-*` / `--font-*` / `--fs-*`，并在 `@media (prefers-color-scheme: dark)` 内重定义。组件与窗口样式引用这些。
-- **Component**：`.fn-*` 共享组件样式（见下）。
+- **Component**：`.fn-*` 共享组件样式，以及设置窗口使用的
+  `--settings-shell-surface` / `--settings-canvas-surface` /
+  `--settings-card-*` / `--settings-control-height` / `--settings-row-padding`
+  组件 token（见下）。
 
 四个文件由 `src/styles/index.css` 聚合（**保持 import-only**：CSS 规范要求 `@import` 在前，混入普通规则会导致构建静默丢弃 import）。
 
@@ -62,6 +65,12 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 | Form control | `components.css` | `.fn-control` | settings 的 text/password/select 与 assistant 输入框 |
 | EmptyState | `empty-state.ts` | `.fn-empty*` + `.fn-btn*` actions | 笔记窗口全页 `NO_PROJECT` / `PATH_ERROR` / `NO_PIECE` |
 
+设置窗口采用不透明内容画布与柔和描边卡片。标题栏和侧栏可以消费外壳表面
+token，内容卡片只消费 settings component token，不直接读取 primitive。原生
+`select` 保留键盘与系统语义，通过 `.select-wrap` 统一单箭头、高度和状态；开关
+继续由原生 checkbox 承载状态，并把 label 点击区扩展到至少 44px。快捷键录制器
+使用 `recording` / `has-value` / `has-error` 状态，所有动画服从全局 reduced-motion。
+
 组件按阶段增量接线：Phase 0 修组件（`createButton` iconOnly、`createMenu` 子菜单 Escape/焦点/互斥单浮层）→ icon → button → menu。窗口样式迁移到 `fn-` 类与 token。`src/note/empty-state.ts`、`src/note/scrollbar.ts` 已改为 `src/shared/ui/` 的 re-export，调用方不变。OS 级确认继续用原生 Tauri `confirm`（`notes-state.ts`），不引入 in-DOM modal。
 
 ## 迁移状态
@@ -72,6 +81,8 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 - ✅ 历史窗口：工具栏/删除/加载更多切到 `createButton`，清理时间菜单切到 `createMenu`；移除 `.history-icon-btn` / `.history-clear-options` 重复样式。
 - ✅ 弹窗：采集操作切到 `createButton`，移除 `.popup-btn*` 手写按钮体系。
 - ✅ 设置与助手：设置页原生 text/password/select、助手输入框切到 `.fn-control`；助手的新对话与历史入口切到 `createButton`。
+- ✅ 设置窗口成为第一套完整迁移样板：原生平台外壳、侧栏导航、不透明卡片、
+  内缩分隔线、统一 select/switch/recorder/error 状态均由现有三层 token 驱动。
 - ✅ 阶段二（第一批）：笔记窗口的项目/成品/版本/标签/块操作菜单统一 `.fn-menu` / `.fn-menu__item`；全页 EmptyState 统一 `.fn-empty*` 与 `.fn-btn*` actions；assistant 的 history / skill / mention 下拉复用 `.fn-popover` 表面。`createMenu` 外点监听修复为在子菜单交互后仍保持有效，并有回归测试。
 - ⏳ 后续：继续逐调用点切到 `createButton`/`createIcon`，重点收敛笔记窗口遗留 `.icon-btn`；任务面板菜单与编辑器专属控件需保留其定位、拖拽或 CodeMirror 交互，再按行为抽取。
 - 守卫：`src/styles/tokens.test.ts` 断言窗口 CSS 无残留 accent/danger rgba、无 per-window dark `@media` 块、danger 语义 token 存在、组件层不裸用 primitives。

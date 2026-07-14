@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+const source = ["main.ts", "shell.ts", "general.ts", "skills.ts", "shortcuts.ts"]
+  .map((file) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8"))
+  .join("\n");
 
 describe("selection popup settings", () => {
   it("offers auto, shortcut-only, and off without modifier mode", () => {
@@ -20,5 +22,22 @@ describe("selection popup settings", () => {
     expect(source).not.toContain('piece-outline-default');
     expect(source).not.toContain('未配置');
     expect(source).not.toContain('value="google"');
+  });
+
+  it("matches the approved settings information architecture", () => {
+    expect(source).toContain("<span>AI</span>");
+    expect(source).not.toContain("AI 导师");
+    expect(source).toContain("开机启动");
+    expect(source).not.toContain("界面字号");
+    expect(source).not.toContain("跟随系统");
+    expect(source).toContain('id="popup-shortcut-row"');
+    expect(source).toContain('config.auto_popup_mode === "shortcut"');
+    expect(source).toContain("自动弹出");
+    expect(source).toContain("快捷键");
+  });
+
+  it("imports a directory rather than a markdown file", () => {
+    expect(source).toContain("directory: true");
+    expect(source).not.toContain('extensions: ["md"]');
   });
 });

@@ -1,10 +1,12 @@
-use crate::agent::{ActiveNote, HostToSidecar, NoteUpdated, PromptRef, PromptSkill, SkillSummary};
+use crate::agent::{ActiveNote, HostToSidecar, NoteUpdated, PromptRef, PromptSkill};
 use crate::{
     config::{AiProviderConfig, AiProviderId},
     state::AppState,
 };
 use std::{
+    collections::HashSet,
     fs,
+    io::Read,
     path::{Path, PathBuf},
     sync::atomic::Ordering,
 };
@@ -222,34 +224,24 @@ pub fn agent_cancel(state: State<AppState>, request_id: String) -> Result<(), St
         .map_err(|error| error.to_string())
 }
 
+#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillCatalogEntry {
+    name: String,
+    description: String,
+    source: String,
+    enabled: bool,
+}
+
 #[tauri::command]
-pub async fn agent_list_skills(app: tauri::AppHandle) -> Result<Vec<SkillSummary>, String> {
-    let state = app.state::<AppState>();
-    let seq = state.agent_seq.fetch_add(1, Ordering::Relaxed) + 1;
-    let call_id = format!("sl{seq}");
-    let (tx, rx) = tokio::sync::oneshot::channel::<Vec<SkillSummary>>();
-    state
-        .pending_skill_lists
-        .lock()
-        .unwrap()
-        .insert(call_id.clone(), tx);
-    {
-        let mut guard = state.agent.lock().unwrap();
-        let agent = guard.as_mut().ok_or("助手未连接")?;
-        agent
-            .send(&HostToSidecar::ListSkills {
-                call_id: call_id.clone(),
-            })
-            .map_err(|error| error.to_string())?;
-    }
-    match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
-        Ok(Ok(skills)) => Ok(skills),
-        Ok(Err(_)) => Err("skill 列表响应已丢弃".into()),
-        Err(_) => {
-            state.pending_skill_lists.lock().unwrap().remove(&call_id);
-            Err("skill 列表超时".into())
-        }
-    }
+pub fn agent_list_skills(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+) -> Result<Vec<SkillCatalogEntry>, String> {
+    let disabled = state.config.lock().unwrap().disabled_skills.clone();
+    let builtin = builtin_skill_roots(&app);
+    let imported = crate::paths::floatnote_home().map(|path| path.join("skills"));
+    catalog_skills(&builtin, imported.as_deref(), &disabled)
 }
 
 #[tauri::command]
@@ -269,59 +261,415 @@ pub fn agent_reload_skills(app: tauri::AppHandle, state: State<AppState>) -> Res
 #[tauri::command]
 pub fn agent_import_skill(app: tauri::AppHandle, source_path: String) -> Result<(), String> {
     let source = PathBuf::from(source_path);
-    let skill_file = if source.is_dir() {
-        source.join("SKILL.md")
-    } else {
-        source.clone()
-    };
-    if skill_file.file_name().and_then(|n| n.to_str()) != Some("SKILL.md") || !skill_file.is_file()
-    {
-        return Err("请选择包含 SKILL.md 的目录或 SKILL.md 文件".into());
-    }
-    let text = fs::read_to_string(&skill_file).map_err(|e| e.to_string())?;
-    let name = text
-        .lines()
-        .find_map(|line| line.strip_prefix("name:").map(str::trim))
-        .filter(|n| !n.is_empty())
-        .ok_or("Skill 缺少 name")?;
-    if !name
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-    {
-        return Err("Skill name 只能包含字母、数字、-、_".into());
-    }
-    if !text
-        .lines()
-        .any(|line| line.starts_with("description:") && !line[12..].trim().is_empty())
-    {
-        return Err("Skill 缺少 description".into());
-    }
     let root = crate::paths::floatnote_home()
         .ok_or("无法确定应用数据目录")?
         .join("skills");
-    let destination = root.join(name);
-    if destination.exists() {
-        return Err("同名 Skill 已存在".into());
-    }
-    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
-    copy_skill_dir(skill_file.parent().unwrap_or(Path::new(".")), &destination)?;
-    let app_for_state = app.clone();
-    let state = app_for_state.state::<AppState>();
-    agent_reload_skills(app, state)
+    let reserved = catalog_skills(&builtin_skill_roots(&app), Some(&root), &[])?
+        .into_iter()
+        .map(|skill| skill.name)
+        .collect::<Vec<_>>();
+    import_skill_dir(&source, &root, &reserved)?;
+    Ok(())
 }
 
-fn copy_skill_dir(from: &Path, to: &Path) -> Result<(), String> {
-    fs::create_dir_all(to).map_err(|e| e.to_string())?;
-    for entry in fs::read_dir(from).map_err(|e| e.to_string())? {
+fn copy_skill_dir_inner(from: &cap_std::fs::Dir, to: &cap_std::fs::Dir) -> Result<(), String> {
+    for entry in from.entries().map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
-        let target = to.join(entry.file_name());
-        if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
-            copy_skill_dir(&entry.path(), &target)?;
+        let name = entry.file_name();
+        let file_type = from
+            .symlink_metadata(&name)
+            .map_err(|e| e.to_string())?
+            .file_type();
+        if file_type.is_symlink() {
+            return Err(format!(
+                "Skill 目录包含符号链接：{}",
+                name.to_string_lossy()
+            ));
+        }
+        if file_type.is_dir() {
+            to.create_dir(&name).map_err(|error| error.to_string())?;
+            let source_child = from.open_dir(&name).map_err(|error| error.to_string())?;
+            let destination_child = to.open_dir(&name).map_err(|error| error.to_string())?;
+            copy_skill_dir_inner(&source_child, &destination_child)?;
+        } else if file_type.is_file() {
+            let mut source = from.open(&name).map_err(|error| {
+                format!(
+                    "无法在所选目录边界内读取 {}：{error}",
+                    name.to_string_lossy()
+                )
+            })?;
+            let mut options = cap_std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            let mut destination = to.open_with(&name, &options).map_err(|e| e.to_string())?;
+            std::io::copy(&mut source, &mut destination).map_err(|e| e.to_string())?;
         } else {
-            fs::copy(entry.path(), target).map_err(|e| e.to_string())?;
+            return Err(format!(
+                "Skill 目录包含不支持的文件类型：{}",
+                name.to_string_lossy()
+            ));
         }
     }
     Ok(())
+}
+
+#[derive(Debug)]
+struct SkillMetadata {
+    name: String,
+    description: String,
+}
+
+fn builtin_skill_roots(app: &tauri::AppHandle) -> Vec<PathBuf> {
+    let bundled = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|path| path.join("skills"));
+    if let Some(path) = bundled.filter(|path| path.is_dir()) {
+        return vec![path];
+    }
+    #[cfg(debug_assertions)]
+    {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("skills");
+        if path.is_dir() {
+            return vec![path];
+        }
+    }
+    Vec::new()
+}
+
+fn catalog_skills(
+    builtin_roots: &[PathBuf],
+    imported_root: Option<&Path>,
+    disabled: &[String],
+) -> Result<Vec<SkillCatalogEntry>, String> {
+    let disabled: HashSet<&str> = disabled.iter().map(String::as_str).collect();
+    let mut seen = HashSet::new();
+    let mut entries = Vec::new();
+    for (source, root) in builtin_roots
+        .iter()
+        .map(|path| ("builtin", path.as_path()))
+        .chain(imported_root.into_iter().map(|path| ("imported", path)))
+    {
+        if !root.is_dir() {
+            continue;
+        }
+        let mut directories = Vec::new();
+        for entry in fs::read_dir(root)
+            .map_err(|error| format!("无法读取 Skills 目录 {}：{error}", root.display()))?
+        {
+            let entry = entry
+                .map_err(|error| format!("无法读取 Skills 目录项 {}：{error}", root.display()))?;
+            if entry.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
+            if entry
+                .file_type()
+                .map_err(|error| {
+                    format!("无法读取 Skill 类型 {}：{error}", entry.path().display())
+                })?
+                .is_dir()
+            {
+                directories.push(entry.path());
+            }
+        }
+        directories.sort();
+        for directory in directories {
+            let metadata = validate_skill_dir(&directory).map_err(|error| {
+                format!("无法读取 {source} Skill {}：{error}", directory.display())
+            })?;
+            if !seen.insert(metadata.name.clone()) {
+                continue;
+            }
+            entries.push(SkillCatalogEntry {
+                enabled: !disabled.contains(metadata.name.as_str()),
+                name: metadata.name,
+                description: metadata.description,
+                source: source.into(),
+            });
+        }
+    }
+    Ok(entries)
+}
+
+fn validate_skill_dir(source: &Path) -> Result<SkillMetadata, String> {
+    let source_type = fs::symlink_metadata(source)
+        .map_err(|_| "请选择一个包含 SKILL.md 的目录".to_string())?
+        .file_type();
+    if !source_type.is_dir() || source_type.is_symlink() {
+        return Err("请选择 Skill 目录，而不是单个文件或符号链接".into());
+    }
+    let mut skill_file = None;
+    for entry in fs::read_dir(source).map_err(|error| format!("无法读取所选目录：{error}"))?
+    {
+        let entry = entry.map_err(|error| format!("无法读取所选目录项：{error}"))?;
+        if entry.file_name() == std::ffi::OsStr::new("SKILL.md") {
+            skill_file = Some(entry.path());
+            break;
+        }
+    }
+    let skill_file = skill_file.ok_or_else(|| "所选目录根部缺少 SKILL.md".to_string())?;
+    let file_type = fs::symlink_metadata(&skill_file)
+        .map_err(|_| "所选目录根部缺少 SKILL.md".to_string())?
+        .file_type();
+    if !file_type.is_file() || file_type.is_symlink() {
+        return Err("所选目录根部的 SKILL.md 必须是普通文件".into());
+    }
+    let text =
+        fs::read_to_string(&skill_file).map_err(|error| format!("无法读取 SKILL.md：{error}"))?;
+    let SkillMetadata { name, description } = parse_skill_metadata(&text)?;
+    if !name
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_')
+    {
+        return Err("Skill name 只能包含 ASCII 字母、数字、-、_".into());
+    }
+    Ok(SkillMetadata { name, description })
+}
+
+fn validate_open_skill_dir(source: &cap_std::fs::Dir) -> Result<SkillMetadata, String> {
+    let file_type = source
+        .symlink_metadata("SKILL.md")
+        .map_err(|_| "所选目录根部缺少 SKILL.md".to_string())?
+        .file_type();
+    if !file_type.is_file() || file_type.is_symlink() {
+        return Err("所选目录根部的 SKILL.md 必须是普通文件".into());
+    }
+    let mut file = source
+        .open("SKILL.md")
+        .map_err(|error| format!("无法读取 SKILL.md：{error}"))?;
+    let mut text = String::new();
+    file.read_to_string(&mut text)
+        .map_err(|error| format!("无法读取 SKILL.md：{error}"))?;
+    let metadata = parse_skill_metadata(&text)?;
+    if !metadata
+        .name
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_')
+    {
+        return Err("Skill name 只能包含 ASCII 字母、数字、-、_".into());
+    }
+    Ok(metadata)
+}
+
+fn open_bound_dir(path: &Path, label: &str) -> Result<cap_std::fs::Dir, String> {
+    let before = fs::symlink_metadata(path).map_err(|error| format!("无法读取{label}：{error}"))?;
+    if !before.is_dir() || before.file_type().is_symlink() {
+        return Err(format!("{label}必须是普通目录，而不是符号链接"));
+    }
+    let directory = cap_std::fs::Dir::open_ambient_dir(path, cap_std::ambient_authority())
+        .map_err(|error| format!("无法安全打开{label}：{error}"))?;
+    let opened = directory
+        .dir_metadata()
+        .map_err(|error| format!("无法确认{label}：{error}"))?;
+    if !directory_identity_matches(&before, &opened) {
+        return Err(format!("{label}在打开过程中发生变化，请重试"));
+    }
+    Ok(directory)
+}
+
+#[cfg(unix)]
+fn directory_identity_matches(before: &fs::Metadata, opened: &cap_std::fs::Metadata) -> bool {
+    use cap_std::fs::MetadataExt as CapMetadataExt;
+    use std::os::unix::fs::MetadataExt as StdMetadataExt;
+
+    StdMetadataExt::dev(before) == CapMetadataExt::dev(opened)
+        && StdMetadataExt::ino(before) == CapMetadataExt::ino(opened)
+}
+
+#[cfg(windows)]
+fn directory_identity_matches(before: &fs::Metadata, opened: &cap_std::fs::Metadata) -> bool {
+    use cap_std::fs::MetadataExt as CapMetadataExt;
+    use std::os::windows::fs::MetadataExt as StdMetadataExt;
+
+    matches!(
+        (
+            StdMetadataExt::volume_serial_number(before),
+            CapMetadataExt::volume_serial_number(opened),
+            StdMetadataExt::file_index(before),
+            CapMetadataExt::file_index(opened),
+        ),
+        (Some(before_volume), Some(opened_volume), Some(before_index), Some(opened_index))
+            if before_volume == opened_volume && before_index == opened_index
+    )
+}
+
+fn temporary_skill_name(skill_name: &str) -> Result<String, String> {
+    let mut bytes = [0_u8; 16];
+    getrandom::fill(&mut bytes).map_err(|error| format!("无法生成 Skill 临时目录名：{error}"))?;
+    let random = bytes
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Ok(format!(".{skill_name}.{random}.tmp"))
+}
+
+fn parse_skill_metadata(text: &str) -> Result<SkillMetadata, String> {
+    let mut all_lines = text.lines();
+    if all_lines.next().map(str::trim) != Some("---") {
+        return Err("SKILL.md 必须以 YAML frontmatter 开头".into());
+    }
+    let mut frontmatter = Vec::new();
+    let mut closed = false;
+    for line in all_lines {
+        if line.trim() == "---" {
+            closed = true;
+            break;
+        }
+        frontmatter.push(line);
+    }
+    if !closed {
+        return Err("SKILL.md 的 YAML frontmatter 缺少结束标记".into());
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Frontmatter {
+        name: String,
+        description: String,
+    }
+    let parsed: Frontmatter = serde_yaml::from_str(&frontmatter.join("\n"))
+        .map_err(|error| format!("无效的 YAML frontmatter：{error}"))?;
+    let name = parsed.name.trim().to_string();
+    let description = parsed.description.trim().to_string();
+    Ok(SkillMetadata {
+        name: (!name.is_empty())
+            .then_some(name)
+            .ok_or("Skill 缺少 name")?,
+        description: (!description.is_empty())
+            .then_some(description)
+            .ok_or("Skill 缺少 description")?,
+    })
+}
+
+fn import_skill_dir(
+    source: &Path,
+    destination_root: &Path,
+    reserved: &[String],
+) -> Result<String, String> {
+    let source = open_bound_dir(source, "所选 Skill 目录")?;
+    let metadata = validate_open_skill_dir(&source)?;
+    if reserved.iter().any(|name| name == &metadata.name) {
+        return Err(format!("同名 Skill 已存在：{}", metadata.name));
+    }
+    fs::create_dir_all(destination_root).map_err(|error| error.to_string())?;
+    let destination_root = open_bound_dir(destination_root, "Skills 目录")?;
+    if destination_root.symlink_metadata(&metadata.name).is_ok() {
+        return Err(format!("同名 Skill 已存在：{}", metadata.name));
+    }
+    let temporary_name = temporary_skill_name(&metadata.name)?;
+    destination_root
+        .create_dir(&temporary_name)
+        .map_err(|error| format!("无法创建 Skill 临时目录：{error}"))?;
+    let result = (|| {
+        let temporary = destination_root
+            .open_dir(&temporary_name)
+            .map_err(|error| format!("无法打开 Skill 临时目录：{error}"))?;
+        copy_skill_dir_inner(&source, &temporary)?;
+        destination_root
+            .rename(&temporary_name, &destination_root, &metadata.name)
+            .map_err(|error| error.to_string())
+    })();
+    if result.is_err() {
+        let _ = destination_root.remove_dir_all(&temporary_name);
+    }
+    result.map(|_| metadata.name)
+}
+
+#[cfg(test)]
+mod skill_catalog_tests {
+    use super::*;
+
+    fn write_skill(root: &Path, folder: &str, name: &str, description: &str) -> PathBuf {
+        let dir = root.join(folder);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: {description}\n---\n"),
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn catalog_combines_builtin_and_imported_skills_without_a_sidecar() {
+        let dir = crate::testutil::tempdir();
+        let builtin = dir.path().join("builtin");
+        let imported = dir.path().join("imported");
+        write_skill(&builtin, "structure-piece", "structure-piece", "组织文章");
+        write_skill(&imported, "my-skill", "my-skill", "自定义 Skill");
+
+        let skills = catalog_skills(&[builtin], Some(&imported), &["my-skill".into()]).unwrap();
+
+        assert_eq!(skills.len(), 2);
+        assert_eq!(skills[0].source, "builtin");
+        assert!(skills[0].enabled);
+        assert_eq!(skills[1].source, "imported");
+        assert!(!skills[1].enabled);
+    }
+
+    #[test]
+    fn import_requires_a_directory_with_an_exact_skill_filename() {
+        let dir = crate::testutil::tempdir();
+        let source = dir.path().join("source");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("skill.md"), "name: wrong\ndescription: wrong").unwrap();
+        assert!(validate_skill_dir(&source)
+            .unwrap_err()
+            .contains("SKILL.md"));
+        assert!(validate_skill_dir(&source.join("skill.md"))
+            .unwrap_err()
+            .contains("目录"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn import_rejects_symbolic_links_and_leaves_no_destination() {
+        use std::os::unix::fs::symlink;
+        let dir = crate::testutil::tempdir();
+        let source = write_skill(dir.path(), "source", "linked", "含链接");
+        fs::write(dir.path().join("outside.txt"), "secret").unwrap();
+        symlink(dir.path().join("outside.txt"), source.join("linked.txt")).unwrap();
+        let destination_root = dir.path().join("installed");
+
+        let error = import_skill_dir(&source, &destination_root, &[]).unwrap_err();
+
+        assert!(error.contains("符号链接"));
+        assert!(!destination_root.join("linked").exists());
+    }
+
+    #[test]
+    fn metadata_requires_frontmatter_and_decodes_block_descriptions() {
+        let dir = crate::testutil::tempdir();
+        let source = dir.path().join("source");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(
+            source.join("SKILL.md"),
+            "---\nname: folded\ndescription: >\n  first line\n  second line\n---\n# Body\n",
+        )
+        .unwrap();
+        assert_eq!(
+            validate_skill_dir(&source).unwrap().description,
+            "first line second line"
+        );
+        fs::write(
+            source.join("SKILL.md"),
+            "name: not-frontmatter\ndescription: invalid\n",
+        )
+        .unwrap();
+        assert!(validate_skill_dir(&source)
+            .unwrap_err()
+            .contains("frontmatter"));
+    }
+
+    #[test]
+    fn damaged_builtin_catalog_is_reported_instead_of_silently_dropped() {
+        let dir = crate::testutil::tempdir();
+        let builtin = dir.path().join("builtin");
+        fs::create_dir_all(builtin.join("broken")).unwrap();
+        let error = catalog_skills(&[builtin], None, &[]).unwrap_err();
+        assert!(error.contains("SKILL.md"));
+    }
 }
 
 #[tauri::command]

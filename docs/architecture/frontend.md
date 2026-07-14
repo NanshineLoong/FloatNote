@@ -15,10 +15,17 @@ FloatNote 使用 Vite 多页面应用：根目录 HTML 是各 WebView 入口。`
 - `src/assistant/` 管理流式聊天、消息 reducer、渲染、技能和 mention 选择器；不得导入 `src/note/` 内部模块。assistant turn 是严格有序的 block 流，允许过程、文本、权限和错误多次交错；工具状态用稳定 `callId` 更新，不能用“最近一个工具”推断。
 - `src/history/`、`src/popup/`、`src/settings/` 分别是历史、选中文本弹窗和设置窗口的 UI。
 
-设置窗口的 AI 区域由 `src/settings/provider-settings.ts` 管理六个固定提供商档案。
+设置窗口由 `src/settings/main.ts` 装配，`shell.ts` 管理原生标题栏下的侧栏与分类
+切换，`general.ts` 只管理开机启动，`skills.ts` 管理目录清单、启停与导入，
+`shortcuts.ts` 管理录制器、渐进披露和冲突反馈。模块通过 `Config` 与显式保存
+回调协作，不跨模块查询 DOM。AI 提供商仍由 `provider-settings.ts` 管理六个固定档案。
 列表采用单列行内展开，一次只编辑一家；输入先保存在本地草稿，只有字段合法且
 发生变化时才允许显式保存。启用开关与展开状态独立，未保存 API Key 与模型的
 档案不可启用，Base URL 只对 OpenAI、Anthropic 与阿里云百炼显示。
+
+外观仅跟随操作系统。`Config` DTO 不含 `theme` 或 `font_size`，各窗口的
+`initializeAppearance` 也不读取配置或订阅 appearance 事件；编辑器不再注册
+Cmd/Ctrl 加减号的应用级字号调整链路。
 
 `shared/note-logic/` 是前端和 sidecar 共享的 workspace package，只包含 Markdown block、标签模型与调色板等纯逻辑；它不依赖 DOM、Node I/O 或 Tauri API。
 

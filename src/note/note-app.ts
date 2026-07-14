@@ -85,7 +85,6 @@ import {
   snapshotNote,
 } from "./versions";
 import { createVersionPreviewState } from "./version-preview";
-import { applyFontSize, bumpFont } from "./font-size";
 import { attachQuoteCapture } from "./quote-capture";
 import { attachAutomationToasts } from "./automation-toasts";
 import { createProjectMenuRenderer } from "./project-menu-render";
@@ -1272,7 +1271,6 @@ window.addEventListener("resize", () => {
 
 async function init() {
   const config = await getConfig();
-  applyFontSize(config.font_size);
   await bootstrapProjects(config);
 
   const assistant = await invoke<{ open: boolean }>("get_assistant_state");
@@ -1333,7 +1331,6 @@ async function init() {
     isMentionMenuOpen: () => assistantHandle.isMentionMenuOpen(),
     closeMentionMenu: () => assistantHandle.closeMentionMenu(),
     canSplit: () => canSplit(window.innerWidth),
-    bumpFont,
   };
 
   await loadShortcuts();

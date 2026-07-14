@@ -39,6 +39,9 @@ export class KeyRecorder {
   }
 
   private render(): void {
+    this.el.dataset.state = this.recording ? "recording" : this._value ? "saved" : "idle";
+    this.el.setAttribute("aria-busy", String(this.recording));
+    if (!this.el.hasAttribute("aria-invalid")) this.el.setAttribute("aria-invalid", "false");
     if (this.recording) {
       this.el.classList.add("recording");
       this.el.classList.remove("has-value");

@@ -113,15 +113,59 @@ pub async fn apply_shortcuts(
     window_shortcuts: WindowShortcuts,
 ) -> Result<(), String> {
     let _transaction = state.ai_settings_tx.lock().await;
-    crate::shortcuts::apply(&app, &capture, &toggle, &popup)?;
-    let mut candidate = state.config.lock().unwrap().clone();
+    apply_shortcuts_inner(
+        &state,
+        capture,
+        toggle,
+        popup,
+        window_shortcuts,
+        |capture, toggle, popup| crate::shortcuts::apply(&app, capture, toggle, popup),
+    )?;
+    let _ = app.emit("window-shortcuts-changed", ());
+    Ok(())
+}
+
+fn apply_shortcuts_inner(
+    state: &AppState,
+    capture: String,
+    toggle: String,
+    popup: String,
+    window_shortcuts: WindowShortcuts,
+    mut apply_runtime: impl FnMut(&str, &str, &str) -> Result<(), String>,
+) -> Result<(), String> {
+    let old = state.config.lock().unwrap().clone();
+    if let Err(error) = apply_runtime(&capture, &toggle, &popup) {
+        let recovery = apply_runtime(
+            &old.shortcut_capture,
+            &old.shortcut_toggle,
+            &old.shortcut_popup,
+        );
+        return match recovery {
+            Ok(()) => Err(error),
+            Err(recovery_error) => Err(format!(
+                "应用快捷键失败：{error}；恢复原快捷键失败：{recovery_error}"
+            )),
+        };
+    }
+    let mut candidate = old.clone();
     candidate.shortcut_capture = capture;
     candidate.shortcut_toggle = toggle;
     candidate.shortcut_popup = popup;
     candidate.window_shortcuts = window_shortcuts;
-    crate::config::save(&state.config_path, &candidate).map_err(|error| error.to_string())?;
+    if let Err(error) = crate::config::save(&state.config_path, &candidate) {
+        let recovery = apply_runtime(
+            &old.shortcut_capture,
+            &old.shortcut_toggle,
+            &old.shortcut_popup,
+        );
+        return match recovery {
+            Ok(()) => Err(error.to_string()),
+            Err(recovery_error) => Err(format!(
+                "保存快捷键失败：{error}；恢复原快捷键失败：{recovery_error}"
+            )),
+        };
+    }
     *state.config.lock().unwrap() = candidate;
-    let _ = app.emit("window-shortcuts-changed", ());
     Ok(())
 }
 
@@ -158,10 +202,10 @@ pub(crate) fn should_install_selection_monitor(mode: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_valid_auto_popup_mode, save_ai_provider_inner, set_active_ai_provider_inner,
-        should_install_selection_monitor,
+        apply_shortcuts_inner, is_valid_auto_popup_mode, save_ai_provider_inner,
+        set_active_ai_provider_inner, should_install_selection_monitor,
     };
-    use crate::config::{AiProviderConfig, AiProviderId, Config};
+    use crate::config::{AiProviderConfig, AiProviderId, Config, WindowShortcuts};
     use crate::state::{AppState, AuthorizedRoots, LocalSelectionCache};
     use std::collections::HashMap;
     use std::sync::atomic::AtomicU64;
@@ -257,5 +301,33 @@ mod tests {
             crate::config::load(&path).ai_settings.active_provider_id,
             None
         );
+    }
+
+    #[test]
+    fn shortcut_persistence_failure_restores_previous_runtime_bindings() {
+        let dir = crate::testutil::tempdir();
+        let blocker = dir.path().join("blocker");
+        std::fs::write(&blocker, "not a directory").unwrap();
+        let state = state_at(blocker.join("config.json"), Config::default());
+        let previous = state.config.lock().unwrap().clone();
+        let mut applied = Vec::new();
+
+        let error = apply_shortcuts_inner(
+            &state,
+            "Alt+Cmd+X".into(),
+            "Alt+Cmd+Y".into(),
+            "Alt+Cmd+Z".into(),
+            WindowShortcuts::default(),
+            |capture, toggle, popup| {
+                applied.push((capture.to_string(), toggle.to_string(), popup.to_string()));
+                Ok(())
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.contains("No such file") || error.contains("os error"));
+        assert_eq!(applied.len(), 2);
+        assert_eq!(applied[1].0, previous.shortcut_capture);
+        assert_eq!(*state.config.lock().unwrap(), previous);
     }
 }

@@ -128,10 +128,6 @@ const RAW_RESERVED: ReservedEntry[] = [
   { combo: "Mod+C", reason: "与「复制」冲突" },
   { combo: "Mod+V", reason: "与「粘贴」冲突" },
   { combo: "Mod+X", reason: "与「剪切」冲突" },
-  // 应用固定项
-  { combo: "Mod+=", reason: "与「字号放大」冲突" },
-  { combo: "Mod+-", reason: "与「字号缩小」冲突" },
-  { combo: "Mod+0", reason: "与「字号复位」冲突" },
 ];
 
 const RESERVED_MAP = new Map<string, string>(
@@ -183,4 +179,37 @@ export function findAllConflicts(
     if (r) out[id] = r;
   }
   return out;
+}
+
+export type ShortcutFieldId = WindowShortcutId | "capture" | "toggle" | "popup";
+
+export function findShortcutConflicts(
+  all: Record<WindowShortcutId, string>,
+  globals: { capture: string; toggle: string; popup: string },
+): Partial<Record<ShortcutFieldId, ConflictResult>> {
+  const conflicts: Partial<Record<ShortcutFieldId, ConflictResult>> = findAllConflicts(all, globals);
+  const globalLabels = { capture: "划线引用", toggle: "显示 / 隐藏", popup: "唤起划词弹窗" };
+  for (const globalId of ["capture", "toggle", "popup"] as const) {
+    const value = globals[globalId];
+    const reserved = RESERVED_MAP.get(canonicalize(value));
+    if (reserved) {
+      conflicts[globalId] = { kind: "reserved", message: reserved };
+      continue;
+    }
+    for (const windowId of WINDOW_SHORTCUT_IDS) {
+      if (canonicalize(all[windowId]) === canonicalize(value)) {
+        conflicts[globalId] = { kind: "window", message: `与「${WINDOW_SHORTCUT_LABELS[windowId]}」重复` };
+        conflicts[windowId] = {
+          kind: "global",
+          message: `与全局快捷键「${globalLabels[globalId]}」重复（窗口聚焦时会双重触发）`,
+        };
+      }
+    }
+    for (const otherId of ["capture", "toggle", "popup"] as const) {
+      if (otherId !== globalId && canonicalize(globals[otherId]) === canonicalize(value)) {
+        conflicts[globalId] = { kind: "global", message: `与「${globalLabels[otherId]}」重复` };
+      }
+    }
+  }
+  return conflicts;
 }

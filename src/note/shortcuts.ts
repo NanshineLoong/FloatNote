@@ -87,7 +87,6 @@ export interface ShortcutActions {
   isMentionMenuOpen(): boolean;
   closeMentionMenu(): void;
   canSplit(): boolean;
-  bumpFont(delta: number): void; // +1 / -1 / 0 复位
 }
 
 function isFocusInAssistant(): boolean {
@@ -139,23 +138,7 @@ export function installShortcuts(actions: ShortcutActions, bindings: Bindings): 
       }
       return;
     }
-    const mod = e.metaKey || e.ctrlKey;
-    if (!mod) return;
-    if (mod && !e.shiftKey && !e.altKey && e.key === "=") {
-      e.preventDefault();
-      actions.bumpFont(1);
-      return;
-    }
-    if (mod && !e.shiftKey && !e.altKey && e.key === "-") {
-      e.preventDefault();
-      actions.bumpFont(-1);
-      return;
-    }
-    if (mod && !e.shiftKey && !e.altKey && e.key === "0") {
-      e.preventDefault();
-      actions.bumpFont(0);
-      return;
-    }
+    if (!e.metaKey && !e.ctrlKey) return;
     const id = resolveBoundCombo(eventToCombo(e), bindings);
     if (id) {
       e.preventDefault();

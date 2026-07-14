@@ -4,6 +4,16 @@
    Window-specific classes (`.popup-btn`, `.icon-btn`, …) are migrated to these
    incrementally; until then both coexist. */
 
+:root {
+  --settings-shell-surface: var(--color-surface-2);
+  --settings-canvas-surface: var(--color-bg);
+  --settings-card-surface: var(--color-surface);
+  --settings-card-border: var(--color-border);
+  --settings-card-radius: var(--radius-lg);
+  --settings-control-height: 34px;
+  --settings-row-padding: 14px 16px;
+}
+
 /* ── Scrollbar thumb (generalized from `src/note/scrollbar.ts`) ──
    Replaces the note-only `.scroll-thumb` rule previously in `src/styles.css`. */
 .fn-scroll__thumb {
