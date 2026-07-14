@@ -113,6 +113,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     <div class="assistant-card">
       ${newConversationButton.outerHTML}
       <div class="assistant-scroll"></div>
+      <button class="assistant-scroll-bottom" type="button" aria-label="回到底部" title="回到底部" hidden><i class="ph ph-arrow-down"></i></button>
     </div>
     <div class="assistant-dock">
       <button class="assistant-bot" type="button" aria-label="展开输入框">${socratesSvg}</button>
@@ -127,6 +128,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   `;
 
   const scroll = root.querySelector<HTMLElement>(".assistant-scroll")!;
+  const scrollBottomBtn = root.querySelector<HTMLButtonElement>(".assistant-scroll-bottom")!;
   const newBtn = root.querySelector<HTMLButtonElement>(".assistant-new")!;
   const bot = root.querySelector<HTMLButtonElement>(".assistant-bot")!;
   const inputWrap = root.querySelector<HTMLElement>(".assistant-input-wrap")!;
@@ -141,10 +143,30 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   let conversationToken = 0;
   // 消息节点复用表（增量渲染，消灭闪烁）。会话切换时由 reconcile 的 stale 清理自动清空。
   const msgMap = new Map<string, HTMLElement>();
+  const BOTTOM_EPSILON_PX = 4;
+  let followingBottom = true;
+
+  function isAtBottom(): boolean {
+    return scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight <= BOTTOM_EPSILON_PX;
+  }
+
+  function updateBottomFollowing(): void {
+    followingBottom = isAtBottom();
+    scrollBottomBtn.hidden = followingBottom;
+  }
+
+  function resumeBottomFollowing(): void {
+    followingBottom = true;
+    scroll.scrollTop = scroll.scrollHeight;
+    scrollBottomBtn.hidden = true;
+  }
+
+  scroll.addEventListener("scroll", updateBottomFollowing, { passive: true });
+  scrollBottomBtn.addEventListener("click", resumeBottomFollowing);
 
   function rerender() {
     // 定向增量更新：已完成消息/块节点复用，不重放进场动画 → 消灭闪烁。
-    reconcileMessages(scroll, state.messages, msgMap, outputMode);
+    reconcileMessages(scroll, state.messages, msgMap, outputMode, followingBottom);
     // 无消息时不渲染聊天历史容器，避免 floating 态出现空的卡片/气泡（inline 态无副作用）。
     root.classList.toggle("has-messages", scroll.childElementCount > 0);
     for (const action of scroll.querySelectorAll<HTMLButtonElement>(".chat-retry-btn, .chat-edit-btn")) {
@@ -163,6 +185,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     activeConversation = conversation;
     root.dataset.conversationId = conversation?.id ?? "";
     if (!conversation) return;
+    if (clearMessages) resumeBottomFollowing();
     state = clearMessages
       ? { activeConversationId: conversation.id, messages: [] }
       : { ...state, activeConversationId: conversation.id };
@@ -289,6 +312,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   ): Promise<string> {
     const text = payload.userText.trim();
     if (!options.resend) {
+      resumeBottomFollowing();
       dispatch({ type: "user", conversationId: conversation.id, text, references: payload.references });
     }
     dispatch({ type: "pending", conversationId: conversation.id });
@@ -608,6 +632,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       composer.setScope(scope);
       setActiveConversation(null);
       closeHistoryPopover();
+      resumeBottomFollowing();
       state = emptyChat();
       rerender();
       const token = ++scopeToken;

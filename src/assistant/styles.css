@@ -69,6 +69,41 @@
   width: 0;
 }
 
+.assistant-scroll-bottom {
+  position: absolute;
+  right: 14px;
+  bottom: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.assistant-scroll-bottom[hidden] {
+  display: none;
+}
+
+.assistant-scroll-bottom:hover {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  transform: translateY(1px);
+}
+
+.assistant-scroll-bottom:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 .chat-messages {
   display: flex;
   flex-direction: column;
@@ -448,15 +483,38 @@ pre.chat-codeblock code {
 .chat-block-process_group {
   width: 100%;
 }
-.chat-process-group details {
+.chat-process-group {
   max-width: 380px;
   color: var(--color-text-muted);
   font-size: 12.5px;
 }
-.chat-process-group summary {
+.chat-process-group-head {
+  display: inline-flex;
+  align-items: center;
   min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
   cursor: pointer;
   font-weight: 500;
+}
+.chat-process-group-head::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.18s ease;
+}
+.chat-process-group:not(.is-collapsed) .chat-process-group-head::after {
+  transform: rotate(45deg);
+}
+.chat-process-group.is-collapsed .chat-process-group-items {
+  display: none;
 }
 .chat-process-group-items {
   display: grid;
@@ -465,7 +523,7 @@ pre.chat-codeblock code {
   padding-left: 12px;
   border-left: 2px solid var(--color-border);
 }
-.chat-process-group:has(.chat-action-pending, .chat-block-thinking:not(.chat-thinking-done)) summary,
+.chat-process-group:has(.chat-action-pending, .chat-block-thinking:not(.chat-thinking-done)) .chat-process-group-head,
 .chat-action-pending .chat-action-title,
 .chat-block-thinking:not(.chat-thinking-done) .chat-thinking-label {
   color: transparent;
@@ -607,7 +665,7 @@ pre.chat-codeblock code {
 }
 .chat-action-failed .chat-action-header,
 .chat-action-incomplete .chat-action-header,
-.chat-process-group:has(.chat-action-failed, .chat-action-incomplete) > details > summary {
+.chat-process-group:has(.chat-action-failed, .chat-action-incomplete) > .chat-process-group-head {
   color: var(--color-danger);
 }
 .chat-action-outcome {
@@ -717,7 +775,7 @@ pre.chat-codeblock code {
   .chat-action-spinner {
     animation: none !important;
   }
-  .chat-process-group summary,
+  .chat-process-group-head,
   .chat-action-title,
   .chat-thinking-label,
   .chat-compact-progress,

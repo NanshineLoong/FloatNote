@@ -362,12 +362,14 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
             return { ...b, collapsed: !b.collapsed };
           }
           if (b.kind === "process_group") {
+            let groupTouched = false;
             const items = b.items.map((item) => {
               if (item.kind !== "thinking" || item.id !== event.blockId) return item;
               touched = true;
+              groupTouched = true;
               return { ...item, collapsed: !item.collapsed };
             });
-            return touched ? { ...b, items } : b;
+            return groupTouched ? { ...b, items } : b;
           }
           return b;
         });

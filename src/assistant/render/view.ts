@@ -254,18 +254,23 @@ export function renderBlock(block: Block, streaming: boolean): HTMLElement {
       return buildActionCard(block);
     case "process_group": {
       el.classList.add("chat-process-group");
-      const details = document.createElement("details");
-      details.open = !block.collapsed;
-      details.addEventListener("toggle", () => {
-        el.dispatchEvent(new CustomEvent("chat:toggle-process", { bubbles: true, detail: { blockId: block.id, collapsed: !details.open } }));
+      el.classList.toggle("is-collapsed", block.collapsed);
+      const head = document.createElement("button");
+      head.type = "button";
+      head.className = "chat-process-group-head";
+      head.textContent = processGroupSummary(block.items);
+      head.setAttribute("aria-expanded", String(!block.collapsed));
+      head.addEventListener("click", () => {
+        const expanded = head.getAttribute("aria-expanded") === "true";
+        head.dispatchEvent(new CustomEvent("chat:toggle-process", {
+          bubbles: true,
+          detail: { blockId: block.id, collapsed: expanded },
+        }));
       });
-      const summary = document.createElement("summary");
-      summary.textContent = processGroupSummary(block.items);
       const items = document.createElement("div");
       items.className = "chat-process-group-items";
       for (const item of block.items) items.appendChild(renderBlock(item, streaming));
-      details.append(summary, items);
-      el.appendChild(details);
+      el.append(head, items);
       break;
     }
     case "error":

@@ -23,8 +23,9 @@ export function reconcileMessages(
   messages: ChatMessage[],
   map: Map<string, HTMLElement>,
   outputMode: AssistantOutputMode = "detailed",
+  followBottom?: boolean,
 ): void {
-  const stickToBottom = isNearBottom(scroll);
+  const stickToBottom = followBottom ?? isNearBottom(scroll);
   const seen = new Set<string>();
   let cursor: HTMLElement | null = null;
 
@@ -182,10 +183,12 @@ function updateBlockNode(node: HTMLElement, block: Block, streaming: boolean): v
         node.replaceChildren(...Array.from(replacement.childNodes));
         break;
       }
-      const summary = node.querySelector<HTMLElement>("summary");
-      if (summary) summary.textContent = processGroupSummary(block.items);
-      const details = node.querySelector<HTMLDetailsElement>("details");
-      if (details) details.open = !block.collapsed;
+      node.classList.toggle("is-collapsed", block.collapsed);
+      const head = node.querySelector<HTMLButtonElement>(".chat-process-group-head");
+      if (head) {
+        head.textContent = processGroupSummary(block.items);
+        head.setAttribute("aria-expanded", String(!block.collapsed));
+      }
       const items = node.querySelector<HTMLElement>(".chat-process-group-items");
       if (!items) break;
       const existing = new Map<string, HTMLElement>();

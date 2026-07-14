@@ -100,4 +100,57 @@ describe("assistant message actions", () => {
     await Promise.resolve();
     expect(root.querySelector(".chat-process-group")).not.toBeNull();
   });
+
+  it("keeps a process group interactive while streaming and after completion", async () => {
+    const { root, emitAgent } = await mountWithDeps({ getOutputMode: async () => "detailed" });
+    await Promise.resolve();
+    emitAgent({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c1", name: "read_note", label: "读取当前文档", phase: "start" });
+    emitAgent({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c2", name: "list_tags", label: "读取标签", phase: "start" });
+
+    root.querySelector<HTMLButtonElement>(".chat-process-group-head")!.click();
+    expect(root.querySelector<HTMLButtonElement>(".chat-process-group-head")?.getAttribute("aria-expanded")).toBe("true");
+
+    emitAgent({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c2", name: "list_tags", phase: "end" });
+    emitAgent({ type: "done", requestId: "r1", conversationId: "c1" });
+    expect(root.querySelector<HTMLButtonElement>(".chat-process-group-head")?.getAttribute("aria-expanded")).toBe("true");
+
+    root.querySelector<HTMLButtonElement>(".chat-process-group-head")!.click();
+    expect(root.querySelector<HTMLButtonElement>(".chat-process-group-head")?.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("pauses bottom following after an upward scroll and resumes from the jump button", async () => {
+    const { root, emitAgent } = await mountWithDeps();
+    const scroll = root.querySelector<HTMLElement>(".assistant-scroll")!;
+    let scrollHeight = 1000;
+    Object.defineProperties(scroll, {
+      clientHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+    });
+    scroll.scrollTop = 900;
+
+    scroll.scrollTop = 620;
+    scroll.dispatchEvent(new Event("scroll"));
+    const jump = root.querySelector<HTMLButtonElement>(".assistant-scroll-bottom")!;
+    expect(jump).not.toBeNull();
+    expect(jump.hidden).toBe(false);
+
+    scrollHeight = 1200;
+    emitAgent({ type: "delta", requestId: "r1", conversationId: "c1", text: "partial" });
+    expect(scroll.scrollTop).toBe(620);
+
+    jump.click();
+    expect(scroll.scrollTop).toBe(1200);
+    expect(jump.hidden).toBe(true);
+
+    scroll.scrollTop = 800;
+    scroll.dispatchEvent(new Event("scroll"));
+    expect(jump.hidden).toBe(false);
+    scroll.scrollTop = 1100;
+    scroll.dispatchEvent(new Event("scroll"));
+    expect(jump.hidden).toBe(true);
+
+    scrollHeight = 1300;
+    emitAgent({ type: "delta", requestId: "r1", conversationId: "c1", text: " more" });
+    expect(scroll.scrollTop).toBe(1300);
+  });
 });

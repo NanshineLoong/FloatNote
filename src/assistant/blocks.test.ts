@@ -66,6 +66,59 @@ describe("reconcileMessages", () => {
     expect(blocks[1].classList.contains("chat-block-thinking")).toBe(true);
   });
 
+  it("keeps a process group open when streaming updates immediately after its toggle is clicked", () => {
+    const scroll = makeScroll();
+    const map = new Map<string, HTMLElement>();
+    let state = run([
+      { type: "tool", requestId: "r1", callId: "c1", name: "read_note", label: "读取当前文档", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "c2", name: "read_note", label: "读取任务", phase: "start" },
+    ]);
+    reconcileMessages(scroll, state.messages, map);
+
+    const group = scroll.querySelector<HTMLElement>(".chat-block-process_group")!;
+    group.addEventListener("chat:toggle-process", (event) => {
+      const detail = (event as CustomEvent<{ blockId: string; collapsed: boolean }>).detail;
+      state = reduceEvents(state, { type: "process_toggle", ...detail });
+      reconcileMessages(scroll, state.messages, map);
+    });
+    const toggle = group.querySelector<HTMLButtonElement>(".chat-process-group-head")!;
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    toggle.dispatchEvent(click);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(group.querySelector("details")).toBeNull();
+
+    state = reduceEvents(state, {
+      type: "tool", requestId: "r1", callId: "c2", name: "read_note", phase: "end",
+    });
+    reconcileMessages(scroll, state.messages, map);
+    expect(scroll.querySelector<HTMLButtonElement>(".chat-process-group-head")?.getAttribute("aria-expanded")).toBe("true");
+
+    scroll.querySelector<HTMLButtonElement>(".chat-process-group-head")!.click();
+    expect(scroll.querySelector<HTMLButtonElement>(".chat-process-group-head")?.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("keeps an opened process group open when a contained thinking block is toggled", () => {
+    const scroll = makeScroll();
+    const map = new Map<string, HTMLElement>();
+    let state = run([
+      { type: "thinking_start", requestId: "r1", blockId: "t1" },
+      { type: "thinking_delta", requestId: "r1", text: "分析" },
+      { type: "tool", requestId: "r1", callId: "c1", name: "read_note", label: "读取当前文档", phase: "start" },
+      { type: "process_toggle", blockId: "t1", collapsed: false },
+    ]);
+    reconcileMessages(scroll, state.messages, map);
+
+    const group = scroll.querySelector<HTMLElement>(".chat-block-process_group")!;
+    group.addEventListener("chat:toggle-thinking", (event) => {
+      const { blockId } = (event as CustomEvent<{ blockId: string }>).detail;
+      state = reduceEvents(state, { type: "thinking_toggle", blockId });
+      reconcileMessages(scroll, state.messages, map);
+    });
+    group.querySelector<HTMLButtonElement>(".chat-thinking-head")!.click();
+
+    expect(scroll.querySelector<HTMLButtonElement>(".chat-process-group-head")?.getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("switches existing process blocks between compact and detailed projection", () => {
     const scroll = makeScroll();
     const map = new Map<string, HTMLElement>();
