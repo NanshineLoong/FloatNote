@@ -136,6 +136,25 @@ describe("editor selection rendering", () => {
   });
 });
 
+describe("explicit line-break spacing", () => {
+  it("gives an explicit following line a 0.26em gap", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const view = createEditor(host, () => {});
+    try {
+      setDoc(view, "first\nsecond");
+      const secondLine = Array.from(view.dom.querySelectorAll<HTMLElement>(".cm-line"))
+        .find((line) => line.textContent === "second");
+
+      expect(secondLine?.classList.contains("cm-hard-break-line")).toBe(true);
+      expect(getComputedStyle(secondLine!).marginTop).toBe("0.26em");
+    } finally {
+      view.destroy();
+      host.remove();
+    }
+  });
+});
+
 describe("fenced code block is editable text (no block widget)", () => {
   // Cursor parked in the leading paragraph so it doesn't touch any fence
   // CodeMark (which would reveal the fence and skip the hide decoration).
