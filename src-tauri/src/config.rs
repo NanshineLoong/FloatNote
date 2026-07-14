@@ -1,20 +1,118 @@
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
-#[serde(default, rename_all = "camelCase")]
-pub struct AiConnection {
-    pub id: String, pub name: String, pub kind: String, pub provider: String,
-    pub protocol: String, pub api_key: String, pub base_url: Option<String>,
-    pub headers: std::collections::BTreeMap<String, String>,
-    pub models: Vec<AiCustomModel>,
+static SAVE_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum AiProviderId {
+    Openai,
+    Deepseek,
+    Anthropic,
+    Bailian,
+    Kimi,
+    Zhipu,
 }
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+
+impl AiProviderId {
+    pub const ALL: [Self; 6] = [
+        Self::Openai,
+        Self::Deepseek,
+        Self::Anthropic,
+        Self::Bailian,
+        Self::Kimi,
+        Self::Zhipu,
+    ];
+
+    pub fn allows_base_url(self) -> bool {
+        matches!(self, Self::Openai | Self::Anthropic | Self::Bailian)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
 #[serde(default, rename_all = "camelCase")]
-pub struct AiCustomModel { pub id: String, pub name: Option<String>, pub reasoning: bool, pub input: Vec<String>, pub context_window: u32, pub max_tokens: u32, pub thinking_level_map: std::collections::BTreeMap<String, Option<String>> }
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub struct AiProviderConfig {
+    pub api_key: String,
+    pub model: String,
+    pub base_url: Option<String>,
+}
+
+impl AiProviderConfig {
+    pub fn is_configured(&self) -> bool {
+        !self.api_key.trim().is_empty() && !self.model.trim().is_empty()
+    }
+
+    pub fn normalized_for(&self, provider: AiProviderId) -> Result<Self, String> {
+        let api_key = self.api_key.trim().to_string();
+        let model = self.model.trim().to_string();
+        if api_key.is_empty() {
+            return Err("请输入 API Key".into());
+        }
+        if model.is_empty() {
+            return Err("请输入模型 ID".into());
+        }
+        let base_url = if provider.allows_base_url() {
+            self.base_url
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| {
+                    let parsed = tauri::Url::parse(value)
+                        .map_err(|_| "Base URL 必须是 http 或 https 地址".to_string())?;
+                    if !matches!(parsed.scheme(), "http" | "https") {
+                        return Err("Base URL 必须是 http 或 https 地址".to_string());
+                    }
+                    if !parsed.username().is_empty() || parsed.password().is_some() {
+                        return Err("Base URL 不能包含用户名或密码".to_string());
+                    }
+                    Ok(value.trim_end_matches('/').to_string())
+                })
+                .transpose()?
+        } else {
+            None
+        };
+        Ok(Self {
+            api_key,
+            model,
+            base_url,
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
-pub struct AiModelSelection { pub connection_id: String, pub model_id: String, pub thinking_level: String }
+pub struct AiSettings {
+    pub providers: BTreeMap<AiProviderId, AiProviderConfig>,
+    pub active_provider_id: Option<AiProviderId>,
+}
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        Self {
+            providers: AiProviderId::ALL
+                .into_iter()
+                .map(|provider| (provider, AiProviderConfig::default()))
+                .collect(),
+            active_provider_id: None,
+        }
+    }
+}
+
+impl AiSettings {
+    fn normalize_loaded(&mut self) {
+        for provider in AiProviderId::ALL {
+            let profile = self.providers.entry(provider).or_default();
+            if !provider.allows_base_url() {
+                profile.base_url = None;
+            }
+        }
+        self.active_provider_id = self.active_provider_id.filter(|provider| {
+            self.providers
+                .get(provider)
+                .is_some_and(|profile| profile.normalized_for(*provider).is_ok())
+        });
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
@@ -69,16 +167,7 @@ pub struct Config {
     /// 与 `recent_projects` 平行，是文档切换菜单的数据来源。
     pub recent_documents: Vec<String>,
     // ── AI 助手持久化配置 ──
-    /// AI 服务商标识："anthropic" | "openai" | "google" | "custom"，空串表示未配置。
-    pub ai_provider: String,
-    /// 模型名称，如 "claude-sonnet-4-20250514"、"gpt-4o"。
-    pub ai_model: String,
-    /// API 密钥，本地明文存储（桌面应用惯例）。
-    pub ai_api_key: String,
-    /// 自定义 API 地址，仅 provider="custom" 时使用。
-    pub ai_base_url: String,
-    pub ai_connections: Vec<AiConnection>,
-    pub ai_model_selection: Option<AiModelSelection>,
+    pub ai_settings: AiSettings,
     /// Names of installed Skills intentionally excluded from the AI tutor.
     pub disabled_skills: Vec<String>,
 }
@@ -98,25 +187,10 @@ impl Default for Config {
             assistant_open: false,
             recent_projects: Vec::new(),
             recent_documents: Vec::new(),
-            ai_provider: String::new(),
-            ai_model: String::new(),
-            ai_api_key: String::new(),
-            ai_base_url: String::new(),
-            ai_connections: Vec::new(),
-            ai_model_selection: None,
+            ai_settings: AiSettings::default(),
             disabled_skills: Vec::new(),
         }
     }
-}
-
-impl Config {
-    pub fn effective_ai_connections(&self) -> Vec<AiConnection> {
-        if !self.ai_connections.is_empty() { return self.ai_connections.clone(); }
-        if self.ai_provider.is_empty() { return Vec::new(); }
-        let official = self.ai_provider == "openai" || self.ai_provider == "anthropic";
-        vec![AiConnection { id: "migrated-default".into(), name: self.ai_provider.clone(), kind: if official { format!("official-{}", self.ai_provider) } else { "custom".into() }, provider: self.ai_provider.clone(), protocol: if self.ai_provider == "anthropic" { "anthropic-messages".into() } else { "openai-completions".into() }, api_key: self.ai_api_key.clone(), base_url: (!self.ai_base_url.is_empty()).then(|| self.ai_base_url.clone()), headers: Default::default(), models: (!self.ai_model.is_empty()).then(|| AiCustomModel { id: self.ai_model.clone(), name: None, reasoning: false, input: vec!["text".into()], context_window: 128000, max_tokens: 8192, thinking_level_map: Default::default() }).into_iter().collect() }]
-    }
-    pub fn effective_ai_selection(&self) -> AiModelSelection { self.ai_model_selection.clone().unwrap_or(AiModelSelection { connection_id: "migrated-default".into(), model_id: self.ai_model.clone(), thinking_level: "off".into() }) }
 }
 
 pub fn load(path: &Path) -> Config {
@@ -124,6 +198,7 @@ pub fn load(path: &Path) -> Config {
         Ok(contents) => {
             let mut config: Config = serde_json::from_str(&contents).unwrap_or_default();
             config.auto_popup_mode = normalize_auto_popup_mode(&config.auto_popup_mode);
+            config.ai_settings.normalize_loaded();
             config
         }
         Err(_) => Config::default(),
@@ -144,7 +219,57 @@ pub fn save(path: &Path, config: &Config) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(path, serde_json::to_string_pretty(config).unwrap())
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("config.json");
+    let sequence = SAVE_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let temporary = path.with_file_name(format!(
+        ".{file_name}.{}.{sequence}.tmp",
+        std::process::id()
+    ));
+    let result = (|| {
+        use std::io::Write;
+        let mut file = std::fs::File::create(&temporary)?;
+        file.write_all(serde_json::to_string_pretty(config).unwrap().as_bytes())?;
+        file.sync_all()?;
+        replace_file(&temporary, path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(temporary);
+    }
+    result
+}
+
+#[cfg(not(target_os = "windows"))]
+fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    std::fs::rename(source, destination)
+}
+
+#[cfg(target_os = "windows")]
+fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+    };
+    let source: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
+    let destination: Vec<u16> = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    let ok = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if ok == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -162,6 +287,26 @@ mod tests {
         let config: Config = serde_json::from_str(r#"{"font_size":20}"#).unwrap();
         assert_eq!(config.font_size, 20);
         assert_eq!(config.shortcut_capture, "Alt+Cmd+C");
+    }
+
+    #[test]
+    fn load_fills_missing_ai_providers_and_clears_an_invalid_active_provider() {
+        let dir = crate::testutil::tempdir();
+        let path = dir.path().join("config.json");
+        std::fs::write(
+            &path,
+            r#"{"ai_settings":{"providers":{"openai":{"apiKey":"","model":""}},"activeProviderId":"openai"}}"#,
+        )
+        .unwrap();
+
+        let config = load(&path);
+
+        assert_eq!(config.ai_settings.providers.len(), AiProviderId::ALL.len());
+        assert!(config
+            .ai_settings
+            .providers
+            .contains_key(&AiProviderId::Zhipu));
+        assert_eq!(config.ai_settings.active_provider_id, None);
     }
 
     #[test]
@@ -216,11 +361,91 @@ mod tests {
     }
 
     #[test]
-    fn legacy_ai_fields_migrate_to_a_connection() {
-        let config: Config = serde_json::from_str(r#"{"ai_provider":"anthropic","ai_model":"claude-sonnet-4-5","ai_api_key":"k"}"#).unwrap();
-        let connections = config.effective_ai_connections();
-        assert_eq!(connections[0].protocol, "anthropic-messages");
-        assert_eq!(connections[0].provider, "anthropic");
-        assert_eq!(config.effective_ai_selection().model_id, "claude-sonnet-4-5");
+    fn ai_settings_default_to_six_empty_disabled_profiles() {
+        let settings = AiSettings::default();
+        assert_eq!(settings.providers.len(), 6);
+        assert_eq!(settings.active_provider_id, None);
+        for provider in AiProviderId::ALL {
+            assert_eq!(settings.providers[&provider], AiProviderConfig::default());
+        }
+    }
+
+    #[test]
+    fn legacy_ai_fields_are_ignored_instead_of_migrated() {
+        let config: Config = serde_json::from_str(
+            r#"{"ai_provider":"anthropic","ai_model":"claude-sonnet-4-5","ai_api_key":"secret","ai_connections":[{"id":"old"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(config.ai_settings, AiSettings::default());
+    }
+
+    #[test]
+    fn ai_settings_use_camel_case_and_roundtrip() {
+        let mut config = Config::default();
+        config.ai_settings.active_provider_id = Some(AiProviderId::Kimi);
+        config.ai_settings.providers.insert(
+            AiProviderId::Kimi,
+            AiProviderConfig {
+                api_key: "key".into(),
+                model: "kimi-k2.5".into(),
+                base_url: None,
+            },
+        );
+        let value = serde_json::to_value(&config).unwrap();
+        assert_eq!(value["ai_settings"]["activeProviderId"], "kimi");
+        assert_eq!(value["ai_settings"]["providers"]["kimi"]["apiKey"], "key");
+        assert_eq!(serde_json::from_value::<Config>(value).unwrap(), config);
+    }
+
+    #[test]
+    fn only_openai_anthropic_and_bailian_allow_base_urls() {
+        assert!(AiProviderId::Openai.allows_base_url());
+        assert!(AiProviderId::Anthropic.allows_base_url());
+        assert!(AiProviderId::Bailian.allows_base_url());
+        assert!(!AiProviderId::Deepseek.allows_base_url());
+        assert!(!AiProviderId::Kimi.allows_base_url());
+        assert!(!AiProviderId::Zhipu.allows_base_url());
+    }
+
+    #[test]
+    fn provider_config_normalizes_fields_and_rejects_bad_urls() {
+        let normalized = AiProviderConfig {
+            api_key: " key ".into(),
+            model: " model ".into(),
+            base_url: Some(" https://proxy.example/v1/// ".into()),
+        }
+        .normalized_for(AiProviderId::Openai)
+        .unwrap();
+        assert_eq!(normalized.api_key, "key");
+        assert_eq!(normalized.model, "model");
+        assert_eq!(
+            normalized.base_url.as_deref(),
+            Some("https://proxy.example/v1")
+        );
+        assert!(AiProviderConfig {
+            api_key: "key".into(),
+            model: "model".into(),
+            base_url: Some("ftp://proxy.example/v1".into()),
+        }
+        .normalized_for(AiProviderId::Openai)
+        .is_err());
+        assert!(AiProviderConfig {
+            api_key: "key".into(),
+            model: "model".into(),
+            base_url: Some("https://user:password@proxy.example/v1".into()),
+        }
+        .normalized_for(AiProviderId::Openai)
+        .is_err());
+        assert_eq!(
+            AiProviderConfig {
+                api_key: "key".into(),
+                model: "model".into(),
+                base_url: Some("https://ignored.example".into()),
+            }
+            .normalized_for(AiProviderId::Kimi)
+            .unwrap()
+            .base_url,
+            None
+        );
     }
 }

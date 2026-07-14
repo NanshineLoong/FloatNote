@@ -6,20 +6,19 @@
  * writes SidecarToHost lines to stdout.
  */
 
-import type { AiConnection, ThinkingLevel } from "./model-config.js";
+import type { AiProviderId } from "./model.js";
 
 /** Host → sidecar messages. */
 export type HostToSidecar =
   | {
       type: "configure";
-      provider: string;
+      callId: string;
+      provider: AiProviderId;
       model: string;
       apiKey?: string;
       baseUrl?: string;
-      /** PI-native connection; legacy fields remain during configuration migration. */
-      connection?: AiConnection;
-      thinkingLevel?: ThinkingLevel;
     }
+  | { type: "clear_configuration"; callId: string }
   | {
       type: "open_session";
       conversationId: string;
@@ -95,6 +94,7 @@ export interface EditPreview {
 /** Sidecar → host messages. */
 export type SidecarToHost =
   | { type: "ready" }
+  | { type: "configure_result"; callId: string; ok: boolean; error?: string }
   | {
       type: "session_opened";
       conversationId: string;

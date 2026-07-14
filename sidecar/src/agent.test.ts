@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { AgentRunner, buildAgentModel, translateEvent } from "./agent.js";
+import { AgentRunner, translateEvent } from "./agent.js";
 import type { SessionLike } from "./agent.js";
 import { displayMessagesFromSession } from "./runner.js";
 import type { SidecarToHost } from "./protocol.js";
@@ -88,45 +88,6 @@ describe("displayMessagesFromSession", () => {
   });
 });
 
-describe("buildAgentModel", () => {
-  it("builds an OpenAI-compatible custom model when baseUrl is provided", () => {
-    const model = buildAgentModel({
-      provider: "openai",
-      model: "qwen3.7-max",
-      baseUrl: "https://example.aliyuncs.com/compatible-mode/v1/",
-    });
-
-    expect(model).toMatchObject({
-      id: "qwen3.7-max",
-      name: "qwen3.7-max",
-      api: "openai-completions",
-      provider: "openai",
-      baseUrl: "https://example.aliyuncs.com/compatible-mode/v1",
-      reasoning: false,
-      input: ["text"],
-    });
-  });
-
-  it("rejects Anthropic app endpoints for OpenAI-compatible custom models", () => {
-    expect(() =>
-      buildAgentModel({
-        provider: "openai",
-        model: "qwen3.7-max",
-        baseUrl: "https://dashscope.aliyuncs.com/apps/anthropic",
-      }),
-    ).toThrow(/不是 OpenAI 兼容地址/);
-  });
-
-  it("throws a clear error for unknown built-in models without baseUrl", () => {
-    expect(() =>
-      buildAgentModel({
-        provider: "openai",
-        model: "qwen3.7-max",
-      }),
-    ).toThrow(/模型未在 PI 内置列表中找到/);
-  });
-});
-
 /** Fake session that replays a scripted event stream when prompted. */
 function fakeSession(script: (emit: (e: AgentSessionEvent) => void) => Promise<void> | void): {
   session: SessionLike;
@@ -148,6 +109,48 @@ function fakeSession(script: (emit: (e: AgentSessionEvent) => void) => Promise<v
 }
 
 describe("AgentRunner", () => {
+  it("rebuilds existing sessions atomically when the provider changes", async () => {
+    const configs: string[] = [];
+    const disposed: string[] = [];
+    let sequence = 0;
+    const runner = new AgentRunner({
+      send: () => {},
+      createSession: async (cfg) => {
+        const id = `${cfg.provider}-${++sequence}`;
+        configs.push(id);
+        const { session } = fakeSession(() => {});
+        session.dispose = () => disposed.push(id);
+        return session;
+      },
+    });
+    await runner.configure({ provider: "openai", model: "gpt-5", apiKey: "old" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+
+    await runner.configure({ provider: "deepseek", model: "deepseek-chat", apiKey: "new" });
+
+    expect(configs).toEqual(["openai-1", "deepseek-2"]);
+    expect(disposed).toEqual(["openai-1"]);
+  });
+
+  it("keeps existing sessions when a provider reconfiguration fails", async () => {
+    const disposed: string[] = [];
+    const runner = new AgentRunner({
+      send: () => {},
+      createSession: async (cfg) => {
+        if (cfg.provider === "deepseek") throw new Error("invalid credentials");
+        const { session } = fakeSession(() => {});
+        session.dispose = () => disposed.push(cfg.provider);
+        return session;
+      },
+    });
+    await runner.configure({ provider: "openai", model: "gpt-5", apiKey: "old" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+
+    await expect(runner.configure({ provider: "deepseek", model: "deepseek-chat", apiKey: "new" }))
+      .rejects.toThrow("invalid credentials");
+    expect(disposed).toEqual([]);
+  });
+
   it("streams a scripted event sequence to send() as delta… → done", async () => {
     const sent: SidecarToHost[] = [];
     const { session } = fakeSession((emit) => {

@@ -404,6 +404,7 @@ mod tests {
         };
         let state = AppState {
             config: Mutex::new(Config::default()),
+            ai_settings_tx: tokio::sync::Mutex::new(()),
             config_path: PathBuf::new(),
             agent: Mutex::new(None),
             agent_ready: Mutex::new(false),
@@ -416,6 +417,7 @@ mod tests {
             local_selection: crate::state::LocalSelectionCache::default(),
             pending_edits: Mutex::new(HashMap::new()),
             pending_skill_lists: Mutex::new(HashMap::new()),
+            pending_agent_configs: Mutex::new(HashMap::new()),
             authorized_roots: crate::state::AuthorizedRoots::default(),
         };
         assert!(resolve_target(
@@ -445,6 +447,7 @@ mod tests {
         fn make_state(active: Option<crate::agent::ActiveNote>) -> AppState {
             AppState {
                 config: Mutex::new(Config::default()),
+                ai_settings_tx: tokio::sync::Mutex::new(()),
                 config_path: PathBuf::new(),
                 agent: Mutex::new(None),
                 agent_ready: Mutex::new(false),
@@ -457,6 +460,7 @@ mod tests {
                 local_selection: crate::state::LocalSelectionCache::default(),
                 pending_edits: Mutex::new(HashMap::new()),
                 pending_skill_lists: Mutex::new(HashMap::new()),
+                pending_agent_configs: Mutex::new(HashMap::new()),
                 authorized_roots: crate::state::AuthorizedRoots::default(),
             }
         }

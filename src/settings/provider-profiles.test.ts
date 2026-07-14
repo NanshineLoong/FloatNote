@@ -1,34 +1,63 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_PROVIDER,
-  getProviderProfile,
-  normalizeProvider,
+  createEmptyAiSettings,
+  isProviderConfigured,
+  normalizeProviderDraft,
   PROVIDER_PROFILES,
+  validateProviderDraft,
 } from "./provider-profiles";
 
 describe("AI provider profiles", () => {
-  it("offers the curated providers and no Google profile", () => {
-    expect(PROVIDER_PROFILES.map((profile) => profile.id)).toEqual([
-      "anthropic",
-      "openai",
-      "deepseek",
-      "dashscope",
-      "minimax",
-      "moonshotai",
-      "custom",
+  it("offers exactly the six fixed providers in product order", () => {
+    expect(PROVIDER_PROFILES.map(({ id, label }) => ({ id, label }))).toEqual([
+      { id: "openai", label: "OpenAI API" },
+      { id: "deepseek", label: "DeepSeek API" },
+      { id: "anthropic", label: "Anthropic API" },
+      { id: "bailian", label: "阿里云百炼 API" },
+      { id: "kimi", label: "Kimi API" },
+      { id: "zhipu", label: "智谱 API" },
     ]);
   });
 
-  it("maps DashScope to Pi's OpenAI-compatible configuration", () => {
-    const profile = getProviderProfile("dashscope");
-    expect(profile.piProvider).toBe("openai");
-    expect(profile.baseUrl).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1");
-    expect(profile.models.length).toBeGreaterThan(0);
+  it("starts every model empty with AI disabled", () => {
+    const settings = createEmptyAiSettings();
+    expect(settings.activeProviderId).toBeNull();
+    expect(Object.values(settings.providers)).toEqual(
+      Array.from({ length: 6 }, () => ({ apiKey: "", model: "" })),
+    );
   });
 
-  it("migrates invalid legacy providers to the default", () => {
-    expect(normalizeProvider("")).toBe(DEFAULT_PROVIDER);
-    expect(normalizeProvider("google")).toBe(DEFAULT_PROVIDER);
-    expect(normalizeProvider("custom")).toBe("custom");
+  it("only exposes Base URL for OpenAI, Anthropic, and Bailian", () => {
+    expect(PROVIDER_PROFILES.filter((profile) => profile.allowsBaseUrl).map((profile) => profile.id))
+      .toEqual(["openai", "anthropic", "bailian"]);
+  });
+
+  it("requires a trimmed API key and model", () => {
+    expect(validateProviderDraft("openai", { apiKey: " ", model: " " })).toEqual({
+      apiKey: "请输入 API Key",
+      model: "请输入模型 ID",
+    });
+    expect(isProviderConfigured({ apiKey: " key ", model: " model " })).toBe(true);
+  });
+
+  it("accepts only HTTP URLs and removes trailing slashes while preserving paths", () => {
+    expect(validateProviderDraft("openai", {
+      apiKey: "key",
+      model: "model",
+      baseUrl: "ftp://proxy.example/v1",
+    })).toEqual({ baseUrl: "Base URL 必须是 http 或 https 地址" });
+    expect(normalizeProviderDraft("openai", {
+      apiKey: " key ",
+      model: " model ",
+      baseUrl: " https://proxy.example/v1/// ",
+    })).toEqual({ apiKey: "key", model: "model", baseUrl: "https://proxy.example/v1" });
+  });
+
+  it("drops Base URL for providers that use a fixed official endpoint", () => {
+    expect(normalizeProviderDraft("kimi", {
+      apiKey: "key",
+      model: "model",
+      baseUrl: "https://ignored.example",
+    })).toEqual({ apiKey: "key", model: "model" });
   });
 });

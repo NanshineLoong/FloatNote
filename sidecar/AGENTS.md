@@ -8,9 +8,9 @@ Entry: `src/main.ts`.
 ## Module map
 
 - `main.ts` — stdio loop: decodes `HostToSidecar`, dispatches to `AgentRunner`,
-  encodes `SidecarToHost` replies.
+  encodes `SidecarToHost` replies, including correlated configure results.
 - `agent.ts` — compatibility barrel. `runner.ts` owns session lifecycle,
-  `model.ts` owns provider setup, and `event-translate.ts` owns Pi→protocol
+  `model.ts` owns fixed-provider resolution and automatic thinking, and `event-translate.ts` owns Pi→protocol
   translation.
 - `protocol.ts` — `HostToSidecar`/`SidecarToHost` union types + line
   codec (`encodeLine`/`createLineDecoder`). `title` variant is declared but

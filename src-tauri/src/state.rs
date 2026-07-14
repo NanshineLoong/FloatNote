@@ -64,6 +64,8 @@ impl AuthorizedRoots {
 
 pub struct AppState {
     pub config: Mutex<Config>,
+    /// Serializes provider snapshot → sidecar → disk → memory transactions.
+    pub ai_settings_tx: tokio::sync::Mutex<()>,
     pub config_path: PathBuf,
     /// 活的 sidecar 句柄；None 表示尚未起或已断开。
     pub agent: Mutex<Option<AgentHandle>>,
@@ -90,6 +92,9 @@ pub struct AppState {
     /// reader 线程收到 `SkillsList` 时取出 sender 解除等待。
     pub pending_skill_lists:
         Mutex<HashMap<String, tokio::sync::oneshot::Sender<Vec<SkillSummary>>>>,
+    /// Correlated configure replies used by transactional provider changes.
+    pub pending_agent_configs:
+        Mutex<HashMap<String, tokio::sync::oneshot::Sender<Result<(), String>>>>,
     /// Roots authorised by opening/watching a project in this app instance.
     pub authorized_roots: AuthorizedRoots,
 }

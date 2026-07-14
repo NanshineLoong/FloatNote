@@ -16,7 +16,7 @@ import { createDefaultWebTools } from "./web-tools.js";
 import { TUTOR_SYSTEM_PROMPT } from "./tutor-prompt.js";
 import { listSkills as listSkillsState, readSkillBody, loadSkillPaths, formatSkillsForSystemPrompt } from "./skills.js";
 import type { ChatDisplayMessage, EditPreview, HostToSidecar, NoteTarget, PromptRef, SidecarToHost } from "./protocol.js";
-import { buildAgentModel, type AgentConfig } from "./model.js";
+import { buildAgentModel, resolveAgentConfig, type AgentConfig } from "./model.js";
 import { translateEvent } from "./event-translate.js";
 import { composePromptText } from "./prompt-compose.js";
 
@@ -73,6 +73,7 @@ export class AgentRunner {
   private readonly factory: SessionFactory;
   private cfg?: AgentConfig;
   private readonly sessions = new Map<string, SessionLike>();
+  private readonly sessionManagers = new Map<string, PiSessionManager>();
   private readonly activeConversations = new Map<string, string>();
   private writeSeq = 0;
   private textSeq = 0;
@@ -87,7 +88,34 @@ export class AgentRunner {
   }
 
   async configure(cfg: AgentConfig): Promise<void> {
-    this.cfg = cfg;
+    if (this.activeConversations.size > 0) {
+      throw new Error("请等待当前回复完成后再切换 AI 提供商");
+    }
+    const resolved = resolveAgentConfig(cfg);
+    const replacements = new Map<string, SessionLike>();
+    try {
+      for (const [conversationId, sessionManager] of this.sessionManagers) {
+        replacements.set(conversationId, await this.createConfiguredSession(resolved, conversationId, sessionManager));
+      }
+    } catch (error) {
+      for (const session of replacements.values()) session.dispose?.();
+      throw error;
+    }
+    for (const [conversationId, replacement] of replacements) {
+      this.sessions.get(conversationId)?.dispose?.();
+      this.sessions.set(conversationId, replacement);
+    }
+    this.cfg = resolved;
+  }
+
+  clearConfiguration(): void {
+    if (this.activeConversations.size > 0) {
+      throw new Error("请等待当前回复完成后再关闭 AI 提供商");
+    }
+    for (const session of this.sessions.values()) session.dispose?.();
+    this.sessions.clear();
+    this.sessionManagers.clear();
+    this.cfg = undefined;
   }
 
   /** Deliver skill directories from the host; loads them into memory once. */
@@ -185,16 +213,9 @@ export class AgentRunner {
     if (!this.cfg) {
       throw new Error("agent not configured");
     }
+    const session = await this.createConfiguredSession(this.cfg, conversationId, sessionManager);
     this.sessions.get(conversationId)?.dispose?.();
-    const noteTools = createNoteTools({
-      getNoteText: (target) => this.getNoteText(conversationId, target),
-      listNotes: () => this.listNotes(conversationId),
-      requestCreateNote: (args) => this.requestCreateNote(conversationId, args),
-      requestWrite: (args) => this.requestWrite(conversationId, args),
-      readSkillBody,
-    });
-    const tools = [...noteTools, ...createDefaultWebTools()];
-    const session = await this.factory(this.cfg, tools, sessionManager);
+    this.sessionManagers.set(conversationId, sessionManager);
     this.sessions.set(conversationId, session);
     const sessionFile = session.sessionFile ?? session.sessionManager?.getSessionFile() ?? sessionManager.getSessionFile();
     if (!sessionFile) {
@@ -206,6 +227,22 @@ export class AgentRunner {
       sessionFile,
       messages: displayMessagesFromSession(session),
     });
+  }
+
+  private async createConfiguredSession(
+    cfg: AgentConfig,
+    conversationId: string,
+    sessionManager: PiSessionManager,
+  ): Promise<SessionLike> {
+    const noteTools = createNoteTools({
+      getNoteText: (target) => this.getNoteText(conversationId, target),
+      listNotes: () => this.listNotes(conversationId),
+      requestCreateNote: (args) => this.requestCreateNote(conversationId, args),
+      requestWrite: (args) => this.requestWrite(conversationId, args),
+      readSkillBody,
+    });
+    const tools = [...noteTools, ...createDefaultWebTools()];
+    return this.factory(cfg, tools, sessionManager);
   }
 
   private async generateTitle(conversationId: string, userText: string): Promise<void> {
@@ -302,7 +339,7 @@ export class AgentRunner {
 const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager) => {
   const authStorage = AuthStorage.inMemory();
   if (cfg.apiKey) {
-    authStorage.setRuntimeApiKey(cfg.provider, cfg.apiKey);
+    authStorage.setRuntimeApiKey(buildAgentModel(cfg).provider, cfg.apiKey);
   }
   const modelRegistry = ModelRegistry.create(authStorage);
   const cwd = sessionManager.getCwd();

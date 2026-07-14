@@ -97,6 +97,36 @@ describe("skills protocol", () => {
   });
 });
 
+describe("configure protocol", () => {
+  it("correlates a candidate config with its result", () => {
+    const req: HostToSidecar = {
+      type: "configure",
+      callId: "cfg1",
+      provider: "kimi",
+      model: "kimi-k2.5",
+      apiKey: "secret",
+    };
+    const result: SidecarToHost = { type: "configure_result", callId: "cfg1", ok: true };
+    expect(JSON.parse(encodeLine(req))).toEqual(req);
+    expect(JSON.parse(encodeLine(result))).toEqual(result);
+  });
+
+  it("correlates a clear-configuration request", () => {
+    const req: HostToSidecar = { type: "clear_configuration", callId: "cfg-clear" };
+    expect(JSON.parse(encodeLine(req))).toEqual(req);
+  });
+
+  it("returns a provider-scoped error without echoing the key", () => {
+    const result: SidecarToHost = {
+      type: "configure_result",
+      callId: "cfg2",
+      ok: false,
+      error: "Kimi API / future-model 配置失败，请检查模型 ID",
+    };
+    expect(encodeLine(result)).not.toContain("secret");
+  });
+});
+
 describe("createLineDecoder", () => {
   it("decodes a complete line in one chunk", () => {
     const decode = createLineDecoder();

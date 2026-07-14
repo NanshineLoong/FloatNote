@@ -1,31 +1,88 @@
 use crate::agent::{ActiveNote, HostToSidecar, NoteUpdated, PromptRef, PromptSkill, SkillSummary};
-use crate::{config::AiConnection, state::AppState};
-use std::{fs, path::{Path, PathBuf}, sync::atomic::Ordering};
+use crate::{
+    config::{AiProviderConfig, AiProviderId},
+    state::AppState,
+};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::atomic::Ordering,
+};
 use tauri::{Emitter, Manager, State};
 
-/// Configure the sidecar provider/model connection.
-#[tauri::command]
-pub fn agent_configure(
-    state: State<AppState>,
-    provider: String,
-    model: String,
-    api_key: Option<String>,
-    base_url: Option<String>,
-    connection: Option<AiConnection>,
-    thinking_level: Option<String>,
+pub(crate) async fn configure_agent(
+    state: &AppState,
+    provider: AiProviderId,
+    config: &AiProviderConfig,
 ) -> Result<(), String> {
-    let mut guard = state.agent.lock().unwrap();
-    let agent = guard.as_mut().ok_or("助手未连接")?;
-    agent
-        .send(&HostToSidecar::Configure {
-            provider,
-            model,
-            api_key,
-            base_url,
-            connection,
-            thinking_level,
-        })
-        .map_err(|error| error.to_string())
+    let seq = state.agent_seq.fetch_add(1, Ordering::Relaxed) + 1;
+    let call_id = format!("cfg{seq}");
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    state
+        .pending_agent_configs
+        .lock()
+        .unwrap()
+        .insert(call_id.clone(), tx);
+    let send_result = {
+        let mut guard = state.agent.lock().unwrap();
+        match guard.as_mut() {
+            Some(agent) => agent.send(&HostToSidecar::Configure {
+                call_id: call_id.clone(),
+                provider,
+                model: config.model.clone(),
+                api_key: Some(config.api_key.clone()),
+                base_url: config.base_url.clone(),
+            }),
+            None => {
+                state.pending_agent_configs.lock().unwrap().remove(&call_id);
+                return Err("助手未连接".into());
+            }
+        }
+    };
+    if let Err(error) = send_result {
+        state.pending_agent_configs.lock().unwrap().remove(&call_id);
+        return Err(error.to_string());
+    }
+    match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(_)) => Err("AI 提供商配置响应已丢弃".into()),
+        Err(_) => {
+            state.pending_agent_configs.lock().unwrap().remove(&call_id);
+            Err("AI 提供商配置超时，请重试".into())
+        }
+    }
+}
+
+pub(crate) async fn clear_agent_configuration(state: &AppState) -> Result<(), String> {
+    let seq = state.agent_seq.fetch_add(1, Ordering::Relaxed) + 1;
+    let call_id = format!("cfg{seq}");
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    state
+        .pending_agent_configs
+        .lock()
+        .unwrap()
+        .insert(call_id.clone(), tx);
+    let send_result = state
+        .agent
+        .lock()
+        .unwrap()
+        .as_mut()
+        .ok_or("助手未连接")?
+        .send(&HostToSidecar::ClearConfiguration {
+            call_id: call_id.clone(),
+        });
+    if let Err(error) = send_result {
+        state.pending_agent_configs.lock().unwrap().remove(&call_id);
+        return Err(error.to_string());
+    }
+    match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(_)) => Err("AI 提供商清理响应已丢弃".into()),
+        Err(_) => {
+            state.pending_agent_configs.lock().unwrap().remove(&call_id);
+            Err("AI 提供商清理超时，请重试".into())
+        }
+    }
 }
 
 #[tauri::command]
@@ -36,6 +93,16 @@ pub fn agent_send(
     references: Option<Vec<PromptRef>>,
     skill: Option<PromptSkill>,
 ) -> Result<String, String> {
+    if state
+        .config
+        .lock()
+        .unwrap()
+        .ai_settings
+        .active_provider_id
+        .is_none()
+    {
+        return Err("尚未启用 AI 提供商，请先前往设置完成配置并启用。".into());
+    }
     let seq = state.agent_seq.fetch_add(1, Ordering::Relaxed) + 1;
     let request_id = format!("r{seq}");
     let mut guard = state.agent.lock().unwrap();
@@ -101,13 +168,14 @@ pub fn get_assistant_state(state: State<AppState>) -> AssistantState {
 }
 
 #[tauri::command]
-pub fn toggle_assistant(state: State<AppState>) -> Result<AssistantState, String> {
-    let mut config = state.config.lock().unwrap();
-    config.assistant_open = !config.assistant_open;
-    crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
-    Ok(AssistantState {
-        open: config.assistant_open,
-    })
+pub async fn toggle_assistant(state: State<'_, AppState>) -> Result<AssistantState, String> {
+    let _transaction = state.ai_settings_tx.lock().await;
+    let mut candidate = state.config.lock().unwrap().clone();
+    candidate.assistant_open = !candidate.assistant_open;
+    crate::config::save(&state.config_path, &candidate).map_err(|error| error.to_string())?;
+    let open = candidate.assistant_open;
+    *state.config.lock().unwrap() = candidate;
+    Ok(AssistantState { open })
 }
 
 #[derive(serde::Serialize)]
@@ -190,23 +258,51 @@ pub fn agent_reload_skills(app: tauri::AppHandle, state: State<AppState>) -> Res
     let disabled_skill_names = state.config.lock().unwrap().disabled_skills.clone();
     let mut guard = state.agent.lock().unwrap();
     let agent = guard.as_mut().ok_or("助手未连接")?;
-    agent.send(&HostToSidecar::SetSkillPaths { skill_paths: paths, disabled_skill_names }).map_err(|e| e.to_string())
+    agent
+        .send(&HostToSidecar::SetSkillPaths {
+            skill_paths: paths,
+            disabled_skill_names,
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn agent_import_skill(app: tauri::AppHandle, source_path: String) -> Result<(), String> {
     let source = PathBuf::from(source_path);
-    let skill_file = if source.is_dir() { source.join("SKILL.md") } else { source.clone() };
-    if skill_file.file_name().and_then(|n| n.to_str()) != Some("SKILL.md") || !skill_file.is_file() {
+    let skill_file = if source.is_dir() {
+        source.join("SKILL.md")
+    } else {
+        source.clone()
+    };
+    if skill_file.file_name().and_then(|n| n.to_str()) != Some("SKILL.md") || !skill_file.is_file()
+    {
         return Err("请选择包含 SKILL.md 的目录或 SKILL.md 文件".into());
     }
     let text = fs::read_to_string(&skill_file).map_err(|e| e.to_string())?;
-    let name = text.lines().find_map(|line| line.strip_prefix("name:").map(str::trim)).filter(|n| !n.is_empty()).ok_or("Skill 缺少 name")?;
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') { return Err("Skill name 只能包含字母、数字、-、_".into()); }
-    if !text.lines().any(|line| line.starts_with("description:") && !line[12..].trim().is_empty()) { return Err("Skill 缺少 description".into()); }
-    let root = crate::paths::floatnote_home().ok_or("无法确定应用数据目录")?.join("skills");
+    let name = text
+        .lines()
+        .find_map(|line| line.strip_prefix("name:").map(str::trim))
+        .filter(|n| !n.is_empty())
+        .ok_or("Skill 缺少 name")?;
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err("Skill name 只能包含字母、数字、-、_".into());
+    }
+    if !text
+        .lines()
+        .any(|line| line.starts_with("description:") && !line[12..].trim().is_empty())
+    {
+        return Err("Skill 缺少 description".into());
+    }
+    let root = crate::paths::floatnote_home()
+        .ok_or("无法确定应用数据目录")?
+        .join("skills");
     let destination = root.join(name);
-    if destination.exists() { return Err("同名 Skill 已存在".into()); }
+    if destination.exists() {
+        return Err("同名 Skill 已存在".into());
+    }
     fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     copy_skill_dir(skill_file.parent().unwrap_or(Path::new(".")), &destination)?;
     let app_for_state = app.clone();
@@ -219,7 +315,11 @@ fn copy_skill_dir(from: &Path, to: &Path) -> Result<(), String> {
     for entry in fs::read_dir(from).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let target = to.join(entry.file_name());
-        if entry.file_type().map_err(|e| e.to_string())?.is_dir() { copy_skill_dir(&entry.path(), &target)?; } else { fs::copy(entry.path(), target).map_err(|e| e.to_string())?; }
+        if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+            copy_skill_dir(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), target).map_err(|e| e.to_string())?;
+        }
     }
     Ok(())
 }

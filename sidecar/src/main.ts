@@ -1,4 +1,5 @@
 import { AgentRunner, type AgentConfig } from "./agent.js";
+import { sanitizeAgentError } from "./model.js";
 import { createLineDecoder, encodeLine, type HostToSidecar, type SidecarToHost } from "./protocol.js";
 
 /** Common env var name for a provider's API key. */
@@ -21,8 +22,12 @@ function envApiKey(provider: string): string | undefined {
 function envConfig(): AgentConfig | undefined {
   const provider = process.env.PI_PROVIDER;
   const model = process.env.PI_MODEL;
-  if (!provider || !model) return undefined;
+  if (!provider || !model || !isProviderId(provider)) return undefined;
   return { provider, model, apiKey: envApiKey(provider) };
+}
+
+function isProviderId(provider: string): provider is AgentConfig["provider"] {
+  return ["openai", "deepseek", "anthropic", "bailian", "kimi", "zhipu"].includes(provider);
 }
 
 async function main(): Promise<void> {
@@ -30,11 +35,34 @@ async function main(): Promise<void> {
     process.stdout.write(encodeLine(msg));
   };
   const runner = new AgentRunner({ send });
+  let configuredSecrets: string[] = [];
+  const safeError = (error: unknown, extraSecrets: string[] = []) =>
+    sanitizeAgentError(error, [...configuredSecrets, ...extraSecrets]);
 
   const handle = async (msg: HostToSidecar): Promise<void> => {
     switch (msg.type) {
       case "configure":
-        await runner.configure({ provider: msg.provider, model: msg.model, apiKey: msg.apiKey, baseUrl: msg.baseUrl, connection: msg.connection, thinkingLevel: msg.thinkingLevel });
+        try {
+          await runner.configure({ provider: msg.provider, model: msg.model, apiKey: msg.apiKey, baseUrl: msg.baseUrl });
+          configuredSecrets = msg.apiKey ? [msg.apiKey] : [];
+          send({ type: "configure_result", callId: msg.callId, ok: true });
+        } catch (err) {
+          send({
+            type: "configure_result",
+            callId: msg.callId,
+            ok: false,
+            error: `${providerLabel(msg.provider)} / ${msg.model} 配置失败：${safeError(err, msg.apiKey ? [msg.apiKey] : [])}`,
+          });
+        }
+        break;
+      case "clear_configuration":
+        try {
+          runner.clearConfiguration();
+          configuredSecrets = [];
+          send({ type: "configure_result", callId: msg.callId, ok: true });
+        } catch (err) {
+          send({ type: "configure_result", callId: msg.callId, ok: false, error: safeError(err) });
+        }
         break;
       case "new_session":
         await runner.newSession(msg);
@@ -46,7 +74,7 @@ async function main(): Promise<void> {
         try {
           await runner.prompt(msg);
         } catch (err) {
-          send({ type: "error", requestId: msg.requestId, conversationId: msg.conversationId, message: errorMessage(err) });
+          send({ type: "error", requestId: msg.requestId, conversationId: msg.conversationId, message: safeError(err) });
           send({ type: "done", requestId: msg.requestId, conversationId: msg.conversationId });
         }
         break;
@@ -81,14 +109,14 @@ async function main(): Promise<void> {
     try {
       messages = decode(chunk);
     } catch (err) {
-      send({ type: "error", requestId: null, message: `bad protocol line: ${errorMessage(err)}` });
+      send({ type: "error", requestId: null, message: `bad protocol line: ${safeError(err)}` });
       return;
     }
     for (const msg of messages) {
       void handle(msg).catch((err) => {
         const requestId = "requestId" in msg ? (msg.requestId ?? null) : null;
         const conversationId = "conversationId" in msg ? msg.conversationId : undefined;
-        send({ type: "error", requestId, conversationId, message: errorMessage(err) });
+        send({ type: "error", requestId, conversationId, message: safeError(err) });
       });
     }
   });
@@ -98,7 +126,7 @@ async function main(): Promise<void> {
     try {
       await runner.configure(initial);
     } catch (err) {
-      send({ type: "error", requestId: null, message: errorMessage(err) });
+      send({ type: "error", requestId: null, message: safeError(err) });
     }
   }
 
@@ -108,6 +136,18 @@ async function main(): Promise<void> {
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
+
+function providerLabel(provider: AgentConfig["provider"]): string {
+  return ({
+    openai: "OpenAI API",
+    deepseek: "DeepSeek API",
+    anthropic: "Anthropic API",
+    bailian: "阿里云百炼 API",
+    kimi: "Kimi API",
+    zhipu: "智谱 API",
+  })[provider];
+}
+
 
 main().catch((err) => {
   process.stdout.write(encodeLine({ type: "error", requestId: null, message: errorMessage(err) }));

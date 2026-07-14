@@ -22,14 +22,24 @@ pub fn get_config(state: State<AppState>) -> Config {
 }
 
 #[tauri::command]
-pub fn set_config(app: tauri::AppHandle, state: State<AppState>, new_config: Config) -> Result<(), String> {
-    let mut config = state.config.lock().unwrap();
-    *config = new_config;
-    crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
-    let _ = app.emit("appearance-changed", serde_json::json!({
-        "theme": config.theme.clone(),
-        "fontSize": config.font_size,
-    }));
+pub async fn set_config(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    new_config: Config,
+) -> Result<(), String> {
+    let _transaction = state.ai_settings_tx.lock().await;
+    let current_ai_settings = state.config.lock().unwrap().ai_settings.clone();
+    let mut candidate = new_config;
+    candidate.ai_settings = current_ai_settings;
+    crate::config::save(&state.config_path, &candidate).map_err(|error| error.to_string())?;
+    *state.config.lock().unwrap() = candidate.clone();
+    let _ = app.emit(
+        "appearance-changed",
+        serde_json::json!({
+            "theme": candidate.theme.clone(),
+            "fontSize": candidate.font_size,
+        }),
+    );
     Ok(())
 }
 
@@ -133,8 +143,8 @@ pub fn resolve_projects(paths: Vec<String>) -> Vec<project::ProjectEntry> {
 }
 
 #[tauri::command]
-pub fn create_project(
-    state: State<AppState>,
+pub async fn create_project(
+    state: State<'_, AppState>,
     root: String,
     name: String,
 ) -> Result<project::ProjectEntry, String> {
@@ -146,10 +156,13 @@ pub fn create_project(
     // 隐式自动记录：项目新建时，将其所在目录记为工作目录。这是工作目录的唯一来源
     // ——没有设置入口，用户也不感知。失败不阻塞项目创建本身。
     {
-        let mut config = state.config.lock().unwrap();
-        config.working_dir = Some(root.clone());
-        if let Err(error) = crate::config::save(&state.config_path, &config) {
+        let _transaction = state.ai_settings_tx.lock().await;
+        let mut candidate = state.config.lock().unwrap().clone();
+        candidate.working_dir = Some(root.clone());
+        if let Err(error) = crate::config::save(&state.config_path, &candidate) {
             eprintln!("warn: failed to persist working_dir: {error}");
+        } else {
+            *state.config.lock().unwrap() = candidate;
         }
     }
     Ok(entry)
@@ -162,8 +175,8 @@ pub fn create_project(
 /// 当前目录新建" and `list_projects` stay consistent — a failed working_dir
 /// write does not block opening (Inbox is already good), only logs a warning.
 #[tauri::command]
-pub fn open_existing_project(
-    state: State<AppState>,
+pub async fn open_existing_project(
+    state: State<'_, AppState>,
     dir: String,
 ) -> Result<project::ProjectEntry, String> {
     let dir_path = std::path::Path::new(&dir);
@@ -172,10 +185,13 @@ pub fn open_existing_project(
     if let Some(parent) = dir_path.parent() {
         let parent_str = parent.to_string_lossy().to_string();
         if !parent_str.is_empty() {
-            let mut config = state.config.lock().unwrap();
-            config.working_dir = Some(parent_str);
-            if let Err(error) = crate::config::save(&state.config_path, &config) {
+            let _transaction = state.ai_settings_tx.lock().await;
+            let mut candidate = state.config.lock().unwrap().clone();
+            candidate.working_dir = Some(parent_str);
+            if let Err(error) = crate::config::save(&state.config_path, &candidate) {
                 eprintln!("warn: failed to persist working_dir: {error}");
+            } else {
+                *state.config.lock().unwrap() = candidate;
             }
         }
     }

@@ -1,29 +1,89 @@
-export interface ProviderProfile {
-  id: string;
-  label: string;
-  piProvider: string;
-  models: string[];
+export type AiProviderId =
+  | "openai"
+  | "deepseek"
+  | "anthropic"
+  | "bailian"
+  | "kimi"
+  | "zhipu";
+
+export interface AiProviderConfig {
+  apiKey: string;
+  model: string;
   baseUrl?: string;
-  allowsCustomModel: boolean;
 }
 
-export const DEFAULT_PROVIDER = "anthropic";
+export interface AiSettings {
+  providers: Record<AiProviderId, AiProviderConfig>;
+  activeProviderId: AiProviderId | null;
+}
 
-export const PROVIDER_PROFILES: ProviderProfile[] = [
-  { id: "anthropic", label: "Anthropic", piProvider: "anthropic", models: ["claude-sonnet-4-5", "claude-opus-4-5", "claude-haiku-4-5"], allowsCustomModel: true },
-  { id: "openai", label: "OpenAI", piProvider: "openai", models: ["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4o"], allowsCustomModel: true },
-  { id: "deepseek", label: "DeepSeek", piProvider: "deepseek", models: ["deepseek-v4-pro", "deepseek-v4-flash"], allowsCustomModel: true },
-  { id: "dashscope", label: "阿里云百炼（Qwen）", piProvider: "openai", models: ["qwen3-max", "qwen3.5-plus", "qwen3-coder-plus"], baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", allowsCustomModel: true },
-  { id: "minimax", label: "MiniMax", piProvider: "minimax", models: ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"], allowsCustomModel: true },
-  { id: "moonshotai", label: "Moonshot / Kimi", piProvider: "moonshotai", models: ["kimi-k2.7-code", "kimi-k2.6", "kimi-k2-thinking"], allowsCustomModel: true },
-  { id: "custom", label: "自定义兼容服务", piProvider: "openai", models: [], allowsCustomModel: true },
+export interface ProviderProfile {
+  id: AiProviderId;
+  label: string;
+  mark: string;
+  allowsBaseUrl: boolean;
+}
+
+export type ProviderDraftErrors = Partial<Record<keyof AiProviderConfig, string>>;
+
+export const PROVIDER_PROFILES: readonly ProviderProfile[] = [
+  { id: "openai", label: "OpenAI API", mark: "AI", allowsBaseUrl: true },
+  { id: "deepseek", label: "DeepSeek API", mark: "DS", allowsBaseUrl: false },
+  { id: "anthropic", label: "Anthropic API", mark: "AN", allowsBaseUrl: true },
+  { id: "bailian", label: "阿里云百炼 API", mark: "百", allowsBaseUrl: true },
+  { id: "kimi", label: "Kimi API", mark: "K", allowsBaseUrl: false },
+  { id: "zhipu", label: "智谱 API", mark: "智", allowsBaseUrl: false },
 ];
 
-export function getProviderProfile(id: string): ProviderProfile {
-  return PROVIDER_PROFILES.find((profile) => profile.id === id)
-    ?? PROVIDER_PROFILES[0];
+export function getProviderProfile(id: AiProviderId): ProviderProfile {
+  return PROVIDER_PROFILES.find((profile) => profile.id === id)!;
 }
 
-export function normalizeProvider(id: string): string {
-  return PROVIDER_PROFILES.some((profile) => profile.id === id) ? id : DEFAULT_PROVIDER;
+export function createEmptyAiSettings(): AiSettings {
+  return {
+    providers: Object.fromEntries(
+      PROVIDER_PROFILES.map(({ id }) => [id, { apiKey: "", model: "" }]),
+    ) as Record<AiProviderId, AiProviderConfig>,
+    activeProviderId: null,
+  };
+}
+
+export function isProviderConfigured(config: AiProviderConfig): boolean {
+  return config.apiKey.trim().length > 0 && config.model.trim().length > 0;
+}
+
+export function validateProviderDraft(
+  providerId: AiProviderId,
+  draft: AiProviderConfig,
+): ProviderDraftErrors {
+  const errors: ProviderDraftErrors = {};
+  if (!draft.apiKey.trim()) errors.apiKey = "请输入 API Key";
+  if (!draft.model.trim()) errors.model = "请输入模型 ID";
+  const baseUrl = draft.baseUrl?.trim();
+  if (getProviderProfile(providerId).allowsBaseUrl && baseUrl) {
+    try {
+      const url = new URL(baseUrl);
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        errors.baseUrl = "Base URL 必须是 http 或 https 地址";
+      }
+    } catch {
+      errors.baseUrl = "Base URL 必须是 http 或 https 地址";
+    }
+  }
+  return errors;
+}
+
+export function normalizeProviderDraft(
+  providerId: AiProviderId,
+  draft: AiProviderConfig,
+): AiProviderConfig {
+  const normalized: AiProviderConfig = {
+    apiKey: draft.apiKey.trim(),
+    model: draft.model.trim(),
+  };
+  if (getProviderProfile(providerId).allowsBaseUrl) {
+    const baseUrl = draft.baseUrl?.trim().replace(/\/+$/, "");
+    if (baseUrl) normalized.baseUrl = baseUrl;
+  }
+  return normalized;
 }

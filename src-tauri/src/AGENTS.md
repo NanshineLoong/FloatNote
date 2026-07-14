@@ -35,6 +35,12 @@ entry that calls `floatnote::run()`.
   and config load/save.
 - `testutil.rs` — `#[cfg(test)]` shared `TempDir`/`tempdir()` for tests.
 
+AI settings are one fixed `AiSettings` aggregate in `config.rs`: six provider
+profiles plus an optional active ID. Provider save/activation belongs in
+`commands/settings.rs`; runtime changes must use the correlated sidecar
+configure result before persistence and must not reintroduce legacy connection
+migration.
+
 ## Conventions
 
 - `rustfmt`, snake_case, `serde`-serializable command payloads.

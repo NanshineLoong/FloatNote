@@ -24,6 +24,23 @@ sidecar 将流式对话事件输出到 JSONL；Rust 解析并广播为 `agent://
 
 `list_notes` 由 sidecar 请求 Rust 根据当前 active project 动态枚举；具体文件名不注入 system prompt。`create_note` 使用独立 JSONL 请求，但复用同一 permission queue：确认后 Rust 再次校验 piece 文件名与同名冲突，随后原子创建。网络研究由 sidecar 的 `web_search` / `web_fetch` 直接完成，只读过程通过普通 tool start/end 卡展示，不进入本地写权限流程。
 
+## AI 提供商保存与切换
+
+```text
+设置页草稿 → save_ai_provider / set_active_ai_provider
+            → Rust 获取全局 Config 写事务锁，校验并构造候选配置
+            → configure(callId) → sidecar 构建候选 PI model
+            ← configure_result(callId, ok/error)
+            → 成功后以临时文件替换方式持久化 ai_settings 并更新内存状态
+```
+
+保存非当前档案不触碰 sidecar。保存当前档案或启用另一家时，sidecar 接受候选后
+Rust 才持久化，因此失败不会关闭或覆盖原提供商；sidecar 会先为已打开对话重建
+候选会话并整体提交。持久化失败时 Rust 重新下发旧 profile；若此前没有 active
+profile，则通过 `clear_configuration` 恢复未配置运行态。关闭当前提供商只持久化
+`activeProviderId: null`，随后 `agent_send` 在
+host 边界返回“尚未启用 AI 提供商”，不会把 prompt 交给残留运行会话。
+
 ## 全局划词弹窗
 
 ```text

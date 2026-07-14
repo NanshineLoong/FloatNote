@@ -1,6 +1,102 @@
-use crate::config::WindowShortcuts;
+use crate::config::{AiProviderConfig, AiProviderId, WindowShortcuts};
 use crate::state::AppState;
 use tauri::{Emitter, State};
+
+#[tauri::command]
+pub async fn save_ai_provider(
+    state: State<'_, AppState>,
+    provider_id: AiProviderId,
+    provider_config: AiProviderConfig,
+) -> Result<(), String> {
+    save_ai_provider_inner(&state, provider_id, provider_config).await
+}
+
+async fn save_ai_provider_inner(
+    state: &AppState,
+    provider_id: AiProviderId,
+    provider_config: AiProviderConfig,
+) -> Result<(), String> {
+    let _transaction = state.ai_settings_tx.lock().await;
+    let normalized = provider_config.normalized_for(provider_id)?;
+    let old = state.config.lock().unwrap().clone();
+    let mut candidate = old.clone();
+    candidate
+        .ai_settings
+        .providers
+        .insert(provider_id, normalized.clone());
+    let updates_runtime = old.ai_settings.active_provider_id == Some(provider_id);
+    if updates_runtime {
+        super::agent::configure_agent(&state, provider_id, &normalized).await?;
+    }
+    if let Err(error) = crate::config::save(&state.config_path, &candidate) {
+        let recovery = if updates_runtime {
+            if let Some(previous) = old.ai_settings.providers.get(&provider_id) {
+                super::agent::configure_agent(&state, provider_id, previous).await
+            } else {
+                super::agent::clear_agent_configuration(&state).await
+            }
+        } else {
+            Ok(())
+        };
+        return match recovery {
+            Ok(()) => Err(error.to_string()),
+            Err(recovery_error) => Err(format!(
+                "保存失败：{error}；运行配置恢复失败：{recovery_error}"
+            )),
+        };
+    }
+    *state.config.lock().unwrap() = candidate;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_active_ai_provider(
+    state: State<'_, AppState>,
+    provider_id: Option<AiProviderId>,
+) -> Result<(), String> {
+    set_active_ai_provider_inner(&state, provider_id).await
+}
+
+async fn set_active_ai_provider_inner(
+    state: &AppState,
+    provider_id: Option<AiProviderId>,
+) -> Result<(), String> {
+    let _transaction = state.ai_settings_tx.lock().await;
+    let old = state.config.lock().unwrap().clone();
+    if old.ai_settings.active_provider_id == provider_id {
+        return Ok(());
+    }
+    let mut candidate = old.clone();
+    if let Some(provider) = provider_id {
+        let profile = old
+            .ai_settings
+            .providers
+            .get(&provider)
+            .ok_or("未知的 AI 提供商")?
+            .normalized_for(provider)?;
+        super::agent::configure_agent(&state, provider, &profile).await?;
+    }
+    candidate.ai_settings.active_provider_id = provider_id;
+    if let Err(error) = crate::config::save(&state.config_path, &candidate) {
+        let recovery = if let Some(previous_provider) = old.ai_settings.active_provider_id {
+            if let Some(previous) = old.ai_settings.providers.get(&previous_provider) {
+                super::agent::configure_agent(&state, previous_provider, previous).await
+            } else {
+                super::agent::clear_agent_configuration(&state).await
+            }
+        } else {
+            super::agent::clear_agent_configuration(&state).await
+        };
+        return match recovery {
+            Ok(()) => Err(error.to_string()),
+            Err(recovery_error) => Err(format!(
+                "保存失败：{error}；运行配置恢复失败：{recovery_error}"
+            )),
+        };
+    }
+    *state.config.lock().unwrap() = candidate;
+    Ok(())
+}
 
 #[tauri::command]
 pub fn get_window_shortcuts(state: State<AppState>) -> WindowShortcuts {
@@ -8,41 +104,41 @@ pub fn get_window_shortcuts(state: State<AppState>) -> WindowShortcuts {
 }
 
 #[tauri::command]
-pub fn apply_shortcuts(
+pub async fn apply_shortcuts(
     app: tauri::AppHandle,
-    state: State<AppState>,
+    state: State<'_, AppState>,
     capture: String,
     toggle: String,
     popup: String,
     window_shortcuts: WindowShortcuts,
 ) -> Result<(), String> {
+    let _transaction = state.ai_settings_tx.lock().await;
     crate::shortcuts::apply(&app, &capture, &toggle, &popup)?;
-    {
-        let mut config = state.config.lock().unwrap();
-        config.shortcut_capture = capture;
-        config.shortcut_toggle = toggle;
-        config.shortcut_popup = popup;
-        config.window_shortcuts = window_shortcuts;
-        crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
-    }
+    let mut candidate = state.config.lock().unwrap().clone();
+    candidate.shortcut_capture = capture;
+    candidate.shortcut_toggle = toggle;
+    candidate.shortcut_popup = popup;
+    candidate.window_shortcuts = window_shortcuts;
+    crate::config::save(&state.config_path, &candidate).map_err(|error| error.to_string())?;
+    *state.config.lock().unwrap() = candidate;
     let _ = app.emit("window-shortcuts-changed", ());
     Ok(())
 }
 
 #[tauri::command]
-pub fn set_auto_popup_mode(
+pub async fn set_auto_popup_mode(
     mode: String,
-    state: State<AppState>,
+    state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
     if !is_valid_auto_popup_mode(&mode) {
         return Err(format!("无效的 auto_popup_mode: {mode}"));
     }
-    {
-        let mut config = state.config.lock().unwrap();
-        config.auto_popup_mode = mode.clone();
-        crate::config::save(&state.config_path, &config).map_err(|error| error.to_string())?;
-    }
+    let _transaction = state.ai_settings_tx.lock().await;
+    let mut candidate = state.config.lock().unwrap().clone();
+    candidate.auto_popup_mode = mode.clone();
+    crate::config::save(&state.config_path, &candidate).map_err(|error| error.to_string())?;
+    *state.config.lock().unwrap() = candidate;
     if should_install_selection_monitor(&mode) {
         crate::selection_monitor::install(app);
     } else {
@@ -61,7 +157,36 @@ pub(crate) fn should_install_selection_monitor(mode: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_valid_auto_popup_mode, should_install_selection_monitor};
+    use super::{
+        is_valid_auto_popup_mode, save_ai_provider_inner, set_active_ai_provider_inner,
+        should_install_selection_monitor,
+    };
+    use crate::config::{AiProviderConfig, AiProviderId, Config};
+    use crate::state::{AppState, AuthorizedRoots, LocalSelectionCache};
+    use std::collections::HashMap;
+    use std::sync::atomic::AtomicU64;
+    use std::sync::Mutex;
+
+    fn state_at(config_path: std::path::PathBuf, config: Config) -> AppState {
+        AppState {
+            config: Mutex::new(config),
+            ai_settings_tx: tokio::sync::Mutex::new(()),
+            config_path,
+            agent: Mutex::new(None),
+            agent_ready: Mutex::new(false),
+            agent_spawn_error: Mutex::new(None),
+            active_note: Mutex::new(None),
+            agent_seq: AtomicU64::new(0),
+            watcher: Mutex::new(None),
+            write_suppress: crate::watcher::new_suppress_list(),
+            popup_cache: crate::popup::PopupCache::default(),
+            local_selection: LocalSelectionCache::default(),
+            pending_edits: Mutex::new(HashMap::new()),
+            pending_skill_lists: Mutex::new(HashMap::new()),
+            pending_agent_configs: Mutex::new(HashMap::new()),
+            authorized_roots: AuthorizedRoots::default(),
+        }
+    }
 
     #[test]
     fn auto_popup_mode_is_an_explicit_allowlist() {
@@ -75,5 +200,62 @@ mod tests {
         assert!(should_install_selection_monitor("auto"));
         assert!(!should_install_selection_monitor("shortcut"));
         assert!(!should_install_selection_monitor("off"));
+    }
+
+    #[test]
+    fn inactive_provider_save_commits_to_memory_and_disk_without_sidecar() {
+        let dir = crate::testutil::tempdir();
+        let path = dir.path().join("config.json");
+        let state = state_at(path.clone(), Config::default());
+        tauri::async_runtime::block_on(save_ai_provider_inner(
+            &state,
+            AiProviderId::Kimi,
+            AiProviderConfig {
+                api_key: " key ".into(),
+                model: " kimi-k2.5 ".into(),
+                base_url: Some("https://ignored.example".into()),
+            },
+        ))
+        .unwrap();
+
+        let memory = state.config.lock().unwrap().clone();
+        let disk = crate::config::load(&path);
+        assert_eq!(memory, disk);
+        assert_eq!(
+            memory.ai_settings.providers[&AiProviderId::Kimi].api_key,
+            "key"
+        );
+        assert_eq!(
+            memory.ai_settings.providers[&AiProviderId::Kimi].base_url,
+            None
+        );
+    }
+
+    #[test]
+    fn deactivation_commits_without_contacting_the_sidecar() {
+        let dir = crate::testutil::tempdir();
+        let path = dir.path().join("config.json");
+        let mut config = Config::default();
+        config.ai_settings.providers.insert(
+            AiProviderId::Openai,
+            AiProviderConfig {
+                api_key: "key".into(),
+                model: "gpt-5".into(),
+                base_url: None,
+            },
+        );
+        config.ai_settings.active_provider_id = Some(AiProviderId::Openai);
+        let state = state_at(path.clone(), config);
+
+        tauri::async_runtime::block_on(set_active_ai_provider_inner(&state, None)).unwrap();
+
+        assert_eq!(
+            state.config.lock().unwrap().ai_settings.active_provider_id,
+            None
+        );
+        assert_eq!(
+            crate::config::load(&path).ai_settings.active_provider_id,
+            None
+        );
     }
 }

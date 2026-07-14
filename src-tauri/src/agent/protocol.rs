@@ -3,8 +3,8 @@
 //! 所有类型经 `serde` 序列化为 camelCase JSON，字段命名与 sidecar 的
 //! `protocol.ts` 对齐。纯数据类型，不含进程/IO 逻辑。
 
+use crate::config::AiProviderId;
 use serde::{Deserialize, Serialize};
-use crate::config::AiConnection;
 
 /// Host → sidecar 消息。JSON 字段为 camelCase，与 Sprint 2 的 protocol.ts 对齐。
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
@@ -15,16 +15,16 @@ use crate::config::AiConnection;
 )]
 pub enum HostToSidecar {
     Configure {
-        provider: String,
+        call_id: String,
+        provider: AiProviderId,
         model: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         api_key: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         base_url: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        connection: Option<AiConnection>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        thinking_level: Option<String>,
+    },
+    ClearConfiguration {
+        call_id: String,
     },
     OpenSession {
         conversation_id: String,
@@ -99,6 +99,12 @@ pub enum HostToSidecar {
 )]
 pub enum SidecarToHost {
     Ready,
+    ConfigureResult {
+        call_id: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     SessionOpened {
         conversation_id: String,
         session_file: String,
@@ -361,7 +367,10 @@ mod tests {
         };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains("\"references\""), "{json}");
-        assert!(json.contains("\"skill\":{\"name\":\"summarize\"}"), "{json}");
+        assert!(
+            json.contains("\"skill\":{\"name\":\"summarize\"}"),
+            "{json}"
+        );
         assert!(json.contains("\"noteKind\":\"piece\""), "{json}");
         let back: HostToSidecar = serde_json::from_str(&json).unwrap();
         assert_eq!(back, msg);
@@ -394,12 +403,11 @@ mod tests {
     #[test]
     fn configure_omits_absent_api_key() {
         let msg = HostToSidecar::Configure {
-            provider: "anthropic".into(),
+            call_id: "cfg1".into(),
+            provider: crate::config::AiProviderId::Anthropic,
             model: "claude".into(),
             api_key: None,
             base_url: None,
-            connection: None,
-            thinking_level: None,
         };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(
@@ -409,6 +417,33 @@ mod tests {
         assert!(
             !json.contains("baseUrl"),
             "absent base url should be skipped: {json}"
+        );
+        assert!(json.contains("\"callId\":\"cfg1\""), "{json}");
+    }
+
+    #[test]
+    fn parses_configure_result_line() {
+        let line = r#"{"type":"configure_result","callId":"cfg1","ok":false,"error":"模型无效"}"#;
+        let msg: SidecarToHost = serde_json::from_str(line).unwrap();
+        assert_eq!(
+            msg,
+            SidecarToHost::ConfigureResult {
+                call_id: "cfg1".into(),
+                ok: false,
+                error: Some("模型无效".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn serializes_clear_configuration_with_call_id() {
+        let value = serde_json::to_value(HostToSidecar::ClearConfiguration {
+            call_id: "cfg2".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"type":"clear_configuration","callId":"cfg2"})
         );
     }
 

@@ -21,3 +21,12 @@
 执行按钮。自动与快捷键模式共用 AX-first 捕获；FloatNote 自身 AX 失败时
 读取 CodeMirror 快照，外部应用才允许定向 `Cmd+C` 兜底。自动失败静默，
 专用快捷键允许显示短暂的空结果反馈。
+
+AI 配置以 `Config.ai_settings` 持久化：六个固定 provider profile 加一个可空的
+`active_provider_id`，不再读取旧的单 provider 或通用 connection 字段。
+`save_ai_provider` 保存未启用档案时直接落盘；保存当前档案或
+`set_active_ai_provider` 切换提供商时，先等待 sidecar 的关联配置结果，再写入
+配置文件。所有 `Config` 写入（provider、通用设置、快捷键、窗口状态和工作目录）
+共用异步事务锁，配置文件先写同目录临时文件
+再替换；配置或持久化失败会保留原 active profile，并确认恢复旧运行配置；
+关闭最后一家只把 active ID 设为空，不向 sidecar 发送 configure。

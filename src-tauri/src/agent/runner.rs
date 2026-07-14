@@ -212,30 +212,34 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
                     let mut guard = state.agent.lock().unwrap();
                     if let Some(agent) = guard.as_mut() {
                         if !skill_paths.is_empty() {
-                            let disabled_skill_names = state.config.lock().unwrap().disabled_skills.clone();
-                            let _ = agent.send(&HostToSidecar::SetSkillPaths { skill_paths, disabled_skill_names });
+                            let disabled_skill_names =
+                                state.config.lock().unwrap().disabled_skills.clone();
+                            let _ = agent.send(&HostToSidecar::SetSkillPaths {
+                                skill_paths,
+                                disabled_skill_names,
+                            });
                         }
                     }
                 }
                 // 从持久化配置自动恢复 AI 助手。
                 let config = state.config.lock().unwrap().clone();
-                let connections = config.effective_ai_connections();
-                let selection = config.effective_ai_selection();
-                if let Some(connection) = connections.into_iter().find(|item| item.id == selection.connection_id) {
-                    let mut guard = state.agent.lock().unwrap();
-                    if let Some(agent) = guard.as_mut() {
-                        let _ = agent.send(&HostToSidecar::Configure {
-                            provider: connection.provider.clone(),
-                            model: selection.model_id,
-                            api_key: if connection.api_key.is_empty() {
-                                None
-                            } else {
-                                Some(connection.api_key.clone())
-                            },
-                            base_url: connection.base_url.clone(),
-                            connection: Some(connection),
-                            thinking_level: Some(selection.thinking_level),
-                        });
+                if let Some(provider) = config.ai_settings.active_provider_id {
+                    if let Some(profile) = config
+                        .ai_settings
+                        .providers
+                        .get(&provider)
+                        .filter(|profile| profile.is_configured())
+                    {
+                        let mut guard = state.agent.lock().unwrap();
+                        if let Some(agent) = guard.as_mut() {
+                            let _ = agent.send(&HostToSidecar::Configure {
+                                call_id: "startup-config".into(),
+                                provider,
+                                model: profile.model.clone(),
+                                api_key: Some(profile.api_key.clone()),
+                                base_url: profile.base_url.clone(),
+                            });
+                        }
                     }
                 }
             }
@@ -249,7 +253,11 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             if let Ok(store) = crate::chat_history::ChatHistoryStore::default_for_user() {
                 let model = app
                     .try_state::<AppState>()
-                    .map(|state| state.config.lock().unwrap().ai_model.clone())
+                    .and_then(|state| {
+                        let config = state.config.lock().unwrap();
+                        let provider = config.ai_settings.active_provider_id?;
+                        Some(config.ai_settings.providers.get(&provider)?.model.clone())
+                    })
                     .unwrap_or_default();
                 let saved_messages = messages
                     .iter()
@@ -338,6 +346,18 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             content,
             preview,
         ),
+        SidecarToHost::ConfigureResult { call_id, ok, error } => {
+            if let Some(state) = app.try_state::<AppState>() {
+                if let Some(sender) = state.pending_agent_configs.lock().unwrap().remove(&call_id) {
+                    let result = if ok {
+                        Ok(())
+                    } else {
+                        Err(error.unwrap_or_else(|| "AI 提供商配置失败".into()))
+                    };
+                    let _ = sender.send(result);
+                }
+            }
+        }
         SidecarToHost::SkillsList { call_id, skills } => {
             // 同步一次性请求-响应：取出 host 侧 oneshot sender 解除等待。
             if let Some(state) = app.try_state::<AppState>() {

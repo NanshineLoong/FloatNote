@@ -100,6 +100,7 @@ pub fn run() {
                 };
             app.manage(AppState {
                 config: Mutex::new(config),
+                ai_settings_tx: tokio::sync::Mutex::new(()),
                 config_path: path,
                 agent: Mutex::new(None),
                 agent_ready: Mutex::new(false),
@@ -112,6 +113,7 @@ pub fn run() {
                 local_selection: crate::state::LocalSelectionCache::default(),
                 pending_edits: Mutex::new(std::collections::HashMap::new()),
                 pending_skill_lists: Mutex::new(std::collections::HashMap::new()),
+                pending_agent_configs: Mutex::new(std::collections::HashMap::new()),
                 authorized_roots: state::AuthorizedRoots::default(),
             });
 
@@ -209,7 +211,8 @@ pub fn run() {
             commands::chat_clear_before_entries,
             commands::watch_dir,
             commands::unwatch_dir,
-            commands::agent_configure,
+            commands::save_ai_provider,
+            commands::set_active_ai_provider,
             commands::agent_send,
             commands::agent_new_session,
             commands::agent_open_session,
