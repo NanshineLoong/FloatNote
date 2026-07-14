@@ -3,7 +3,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { Autolink, Strikethrough, Table, TaskList } from "@lezer/markdown";
 import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import { Compartment, EditorState, Transaction, type Extension } from "@codemirror/state";
-import { drawSelection, EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { livePreview, setNoteDir } from "./preview";
 import { listFold } from "./list-fold";
@@ -13,6 +13,7 @@ import { tableKeymap } from "./table-keymap";
 import { htmlPasteHandler, imagePasteHandler } from "./paste";
 import { imageDropHandler } from "./image-drop";
 import { markdownInputKeymap } from "./markdown-keymap";
+import { preciseSelectionRendering } from "./selection-render";
 
 const highlight = HighlightStyle.define([
   { tag: tags.heading, fontWeight: "600" },
@@ -113,35 +114,6 @@ const baseContent = {
 
 const readOnlyCompartments = new WeakMap<EditorView, Compartment>();
 
-/** CodeMirror deliberately draws a selection through the full width of an
- * empty line. Keep the range itself unchanged, but label that paint fragment
- * so CSS can render a small line-start cue instead. */
-const compactBlankLineSelection = ViewPlugin.fromClass(class {
-  update(update: ViewUpdate): void {
-    if (!update.selectionSet && !update.docChanged && !update.viewportChanged) return;
-    update.view.requestMeasure({
-      read: (view) => {
-        const blankTops = new Set<number>();
-        for (const range of view.state.selection.ranges) {
-          if (range.empty) continue;
-          const first = view.state.doc.lineAt(range.from).number;
-          const last = view.state.doc.lineAt(range.to).number;
-          for (let lineNo = first; lineNo <= last; lineNo++) {
-            const line = view.state.doc.line(lineNo);
-            if (line.length === 0) blankTops.add(Math.round(view.lineBlockAt(line.from).top));
-          }
-        }
-        return blankTops;
-      },
-      write: (blankTops, view) => {
-        view.dom.querySelectorAll<HTMLElement>(".cm-selectionBackground").forEach((el) => {
-          el.classList.toggle("cm-selection-blank", blankTops.has(Math.round(Number.parseFloat(el.style.top))));
-        });
-      },
-    });
-  }
-});
-
 /**
  * `grow` 让编辑器长到内容高度、关掉自身的内部滚动（`.cm-scroller` overflow:visible）——
  * 这样标题块与正文能落在同一个外层滚动容器里一起滚（写作栏的 Notion 式手感）。
@@ -165,10 +137,7 @@ function buildTheme(grow: boolean) {
     ".cm-cursor, .cm-dropCursor": {
       transition: "none",
     },
-    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground": {
-      backgroundColor: "rgba(37, 99, 235, 0.22)",
-    },
-    ".cm-content ::selection": { backgroundColor: "rgba(37, 99, 235, 0.22)" },
+    ".cm-content ::selection": { backgroundColor: "var(--color-selected)" },
     ".cm-scroller": grow ? { overflow: "visible", minHeight: "100%" } : {},
     "&.cm-focused": { outline: "none" },
   });
@@ -187,8 +156,7 @@ export function createEditor(
     extensions: [
       history(),
       readOnlyCompartment.of(EditorState.readOnly.of(false)),
-      drawSelection({ cursorBlinkRate: 1200 }),
-      compactBlankLineSelection,
+      preciseSelectionRendering,
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ extensions: [Autolink, Table, Strikethrough, TaskList], codeLanguages }),
       syntaxHighlighting(highlight),

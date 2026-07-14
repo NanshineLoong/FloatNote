@@ -1547,10 +1547,14 @@ body {
   outline-offset: 1px;
   border-radius: 50%;
 }
-.cm-selectionBackground.cm-selection-blank {
+.cm-selected-line-break {
+  display: inline-block;
   width: 0.45em;
-  min-width: 0.45em;
+  height: 1.2em;
+  vertical-align: -0.15em;
+  background: var(--color-selected);
   border-radius: 2px;
+  pointer-events: none;
 }
 
 .tag-bar {
