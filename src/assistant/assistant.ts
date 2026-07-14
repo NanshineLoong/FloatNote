@@ -17,7 +17,7 @@ import {
   isChatStreaming,
   reduceEvents,
 } from "./render";
-import { reconcileMessages } from "./blocks";
+import { beginUserMessageEdit, reconcileMessages } from "./blocks";
 import { createButton } from "../shared/ui/button";
 import { showToast } from "../shared/toast";
 
@@ -30,6 +30,8 @@ import { showToast } from "../shared/toast";
 export interface AssistantDeps {
   /** 发送一条用户消息给 tutor，返回 requestId（用于取消）。 */
   send: (payload: PromptPayload, conversationId: string) => Promise<string>;
+  /** Rewind the persistent session before a user turn, so the next send forms a new branch. */
+  rewind: (conversationId: string, userEntryId: string) => Promise<void>;
   createConversation: (scope: ChatScope) => Promise<ChatConversation>;
   openConversation: (conversation: ChatConversation) => Promise<ChatConversation | null | void>;
   listConversations: (scope: ChatScope) => Promise<ChatConversation[]>;
@@ -141,6 +143,10 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     reconcileMessages(scroll, state.messages, msgMap);
     // 无消息时不渲染聊天历史容器，避免 floating 态出现空的卡片/气泡（inline 态无副作用）。
     root.classList.toggle("has-messages", state.messages.length > 0);
+    for (const action of scroll.querySelectorAll<HTMLButtonElement>(".chat-retry-btn, .chat-edit-btn")) {
+      action.disabled = isChatStreaming(state);
+    }
+    updateSendMode();
   }
 
   function dispatch(event: ChatEvent) {
@@ -197,6 +203,12 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   bot.addEventListener("click", () => setInputOpen(!inputOpen));
 
   function updateSendMode() {
+    if (isChatStreaming(state)) {
+      sendBtn.setAttribute("aria-label", "停止生成");
+      sendBtn.title = "停止生成";
+      sendBtn.innerHTML = `<i class="ph ph-stop"></i>`;
+      return;
+    }
     const payload = composePromptPayload(composer.getDoc());
     const hasContent = payload.userText.trim().length > 0 || payload.references.length > 0;
     const isSend = hasContent || composer.isLarge();
@@ -248,9 +260,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       conversation = await updateConversationTitle(conversation, text);
       if (!isCurrentSubmission(conversation.id)) return false;
       state = { ...state, activeConversationId: conversation.id };
-      dispatch({ type: "user", conversationId: conversation.id, text, references: payload.references });
-      dispatch({ type: "pending", conversationId: conversation.id });
-      const requestId = await deps.send({ ...payload, userText: text }, conversation.id);
+      const requestId = await sendTurn(conversation, payload);
       if (!isCurrentSubmission(conversation.id)) return false;
       activeRequestId = requestId;
       return true;
@@ -265,6 +275,46 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       });
       showToast("发送失败，输入内容已保留");
       return false;
+    }
+  }
+
+  async function sendTurn(
+    conversation: ChatConversation,
+    payload: PromptPayload,
+    options: { resend?: boolean } = {},
+  ): Promise<string> {
+    const text = payload.userText.trim();
+    if (!options.resend) {
+      dispatch({ type: "user", conversationId: conversation.id, text, references: payload.references });
+    }
+    dispatch({ type: "pending", conversationId: conversation.id });
+    const requestId = await deps.send({ ...payload, userText: text }, conversation.id);
+    return requestId;
+  }
+
+  async function resendUserMessage(messageId: string, text: string, references: PromptPayload["references"]): Promise<void> {
+    if (!activeConversation || isChatStreaming(state)) return;
+    try {
+      const messageIndex = state.messages.findIndex(
+        (entry) => entry.role === "user" && entry.id === messageId,
+      );
+      if (messageIndex < 0) return;
+      const target = state.messages[messageIndex];
+      if (target.role !== "user" || !target.sessionEntryId) {
+        throw new Error("该回合尚未同步到对话历史，请稍候再试");
+      }
+      const conversation = await updateConversationTitle(activeConversation, text.trim());
+      await deps.rewind(conversation.id, target.sessionEntryId);
+      dispatch({ type: "user_rewind", messageId, text: text.trim() });
+      activeRequestId = await sendTurn(
+        conversation,
+        { userText: text, references },
+        { resend: true },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      dispatch({ type: "error", requestId: null, conversationId: activeConversation?.id, message });
+      showToast("发送失败，消息内容已保留");
     }
   }
 
@@ -366,7 +416,13 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       updateExpandState();
     },
   });
-  sendBtn.addEventListener("click", () => composer.submit());
+  sendBtn.addEventListener("click", () => {
+    if (isChatStreaming(state)) {
+      if (activeRequestId) deps.cancel?.(activeRequestId);
+      return;
+    }
+    composer.submit();
+  });
   expandBtn.addEventListener("click", () => {
     if (composer.isLarge()) composer.collapseLarge();
     else composer.expandLarge();
@@ -431,29 +487,24 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     dispatch({ type: "thinking_toggle", blockId: detail.blockId });
   });
 
-  scroll.addEventListener("chat:retry", (e) => {
-    const { blockId } = (e as CustomEvent).detail as { blockId: string };
-    const messageIndex = state.messages.findIndex(
-      (message) => message.role === "assistant" && message.blocks.some((block) => block.id === blockId),
-    );
-    if (messageIndex < 0 || !activeConversation || isChatStreaming(state)) return;
-    for (let i = messageIndex - 1; i >= 0; i--) {
-      const message = state.messages[i];
-      if (message.role !== "user") continue;
-      dispatch({ type: "pending", conversationId: activeConversation.id });
-      // 历史消息仅保存展示文本；旧会话与纯文本消息重试时保持向后兼容。
-      void deps.send({ userText: message.text, references: [] }, activeConversation.id).then((requestId) => {
-        activeRequestId = requestId;
-      }).catch((err) => {
-        dispatch({
-          type: "error",
-          requestId: null,
-          conversationId: activeConversation?.id,
-          message: err instanceof Error ? err.message : String(err),
-        });
-      });
-      break;
-    }
+  scroll.addEventListener("chat:user-retry", (e) => {
+    const { messageId } = (e as CustomEvent<{ messageId: string }>).detail;
+    const message = state.messages.find((entry) => entry.role === "user" && entry.id === messageId);
+    if (message?.role === "user") void resendUserMessage(message.id, message.text, message.references ?? []);
+  });
+
+  scroll.addEventListener("chat:user-edit", (e) => {
+    if (isChatStreaming(state)) return;
+    const { messageId } = (e as CustomEvent<{ messageId: string }>).detail;
+    const message = state.messages.find((entry) => entry.role === "user" && entry.id === messageId);
+    const node = msgMap.get(messageId);
+    if (message?.role === "user" && node) beginUserMessageEdit(node, message.id, message.text);
+  });
+
+  scroll.addEventListener("chat:user-edit-send", (e) => {
+    const { messageId, text } = (e as CustomEvent<{ messageId: string; text: string }>).detail;
+    const message = state.messages.find((entry) => entry.role === "user" && entry.id === messageId);
+    if (message?.role === "user") void resendUserMessage(messageId, text, message.references ?? []);
   });
 
   // permission://request：优先填充流内 action 卡；若无匹配卡（非流式即时请求），
@@ -486,7 +537,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   });
 
   Promise.resolve(deps.subscribe((event) => {
-    if (event.type === "session_opened") {
+    if (event.type === "session_opened" || event.type === "session_synced") {
       state = reduceEvents(state, event);
       rerender();
       return;

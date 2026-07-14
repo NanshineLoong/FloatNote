@@ -50,18 +50,30 @@ function ensureMessageActions(textEl: HTMLElement, align: "left" | "right" = "le
   return actions;
 }
 
-function attachRetryButton(textEl: HTMLElement, blockId: string, disabled: boolean): void {
+function attachUserAction(
+  textEl: HTMLElement,
+  className: string,
+  label: string,
+  icon: string,
+  messageId: string,
+): void {
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "chat-message-action chat-retry-btn";
-  btn.setAttribute("aria-label", "重试");
-  btn.title = "重试";
-  btn.disabled = disabled;
-  btn.append(createIcon({ phosphor: "ph ph-arrow-clockwise", size: 14 }));
+  btn.className = `chat-message-action ${className}`;
+  btn.setAttribute("aria-label", label);
+  btn.title = label;
+  btn.append(createIcon({ phosphor: icon, size: 14 }));
   btn.addEventListener("click", () => {
-    textEl.dispatchEvent(new CustomEvent("chat:retry", { bubbles: true, detail: { blockId } }));
+    if (className === "chat-edit-btn") {
+      const text = textEl.querySelector(".chat-user-message-text")?.textContent ?? "";
+      startUserMessageEdit(textEl, messageId, text);
+    }
+    textEl.dispatchEvent(new CustomEvent(
+      className === "chat-retry-btn" ? "chat:user-retry" : "chat:user-edit",
+      { bubbles: true, detail: { messageId } },
+    ));
   });
-  ensureMessageActions(textEl).appendChild(btn);
+  ensureMessageActions(textEl, "right").appendChild(btn);
 }
 
 /** 复制文本：优先 navigator.clipboard，降级 execCommand 临时 textarea。 */
@@ -138,7 +150,8 @@ export function renderMessage(message: ChatMessage): HTMLElement {
       body.appendChild(text);
     }
     el.appendChild(body);
-    attachCopyButton(el, message.text, "right");
+    attachUserAction(el, "chat-retry-btn", "重试", "ph ph-arrow-clockwise", message.id);
+    attachUserAction(el, "chat-edit-btn", "编辑", "ph ph-pencil-simple", message.id);
     return el;
   }
   // assistant：纵向平级块容器。
@@ -176,8 +189,7 @@ export function renderBlock(block: Block, streaming: boolean): HTMLElement {
       decorateCodeBlocks(content);
       el.appendChild(content);
       if (streaming) el.classList.add("chat-streaming");
-      attachCopyButton(el, block.text);
-      attachRetryButton(el, block.id, streaming);
+      if (!streaming) attachCopyButton(el, block.text);
       break;
     }
     case "thinking":
@@ -223,4 +235,45 @@ export function renderBlock(block: Block, streaming: boolean): HTMLElement {
       break;
   }
   return el;
+}
+
+/** 在用户消息节点内打开临时编辑器；发送失败时由调用方保留该编辑器。 */
+export function startUserMessageEdit(messageEl: HTMLElement, messageId: string, initialText: string): void {
+  const body = messageEl.querySelector<HTMLElement>(":scope > .chat-msg-text");
+  if (!body || messageEl.querySelector(".chat-user-edit-shell")) return;
+  messageEl.classList.add("is-editing");
+  const messageActions = messageEl.querySelector<HTMLElement>(":scope > .chat-message-actions");
+  messageActions?.remove();
+
+  const shell = document.createElement("div");
+  shell.className = "chat-user-edit-shell";
+  const input = document.createElement("textarea");
+  input.className = "chat-user-edit-input";
+  input.value = initialText;
+  input.setAttribute("aria-label", "编辑消息");
+  const actions = document.createElement("div");
+  actions.className = "chat-user-edit-actions";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "chat-user-edit-cancel";
+  cancel.textContent = "取消";
+  const send = document.createElement("button");
+  send.type = "button";
+  send.className = "chat-user-edit-send";
+  send.textContent = "发送";
+  cancel.addEventListener("click", () => {
+    shell.replaceWith(body);
+    messageEl.classList.remove("is-editing");
+    if (messageActions) messageEl.appendChild(messageActions);
+    messageEl.dispatchEvent(new CustomEvent("chat:user-edit-cancel", { bubbles: true, detail: { messageId } }));
+  });
+  send.addEventListener("click", () => {
+    const text = input.value.trim();
+    if (!text) return;
+    messageEl.dispatchEvent(new CustomEvent("chat:user-edit-send", { bubbles: true, detail: { messageId, text } }));
+  });
+  actions.append(cancel, send);
+  shell.append(input, actions);
+  body.replaceWith(shell);
+  input.focus();
 }

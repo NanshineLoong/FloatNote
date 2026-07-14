@@ -100,6 +100,28 @@
   border-radius: 14px 14px 4px 14px;
 }
 
+.chat-msg.chat-user.is-editing {
+  width: min(72%, 100%);
+  max-width: 72%;
+}
+.chat-user-edit-shell { width: 100%; min-width: 0; max-width: 100%; }
+.chat-user-edit-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 38px;
+  resize: vertical;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 14px 14px 4px 14px;
+  background: var(--color-bubble-user-bg);
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+}
+.chat-user-edit-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+
 .chat-msg.chat-assistant {
   align-self: flex-start;
   max-width: 88%;
@@ -315,7 +337,8 @@ pre.chat-codeblock code {
 .chat-message-actions.is-right {
   justify-content: flex-end;
 }
-.chat-retry-btn {
+.chat-retry-btn,
+.chat-edit-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -331,7 +354,9 @@ pre.chat-codeblock code {
   transition: opacity 0.15s ease, color 0.15s ease;
 }
 .chat-retry-btn:hover,
-.chat-retry-btn:focus-visible {
+.chat-retry-btn:focus-visible,
+.chat-edit-btn:hover,
+.chat-edit-btn:focus-visible {
   opacity: 1;
   color: var(--color-text);
 }
@@ -344,12 +369,18 @@ pre.chat-codeblock code {
 @media (hover: hover) {
   .chat-block-text:hover .chat-copy-btn,
   .chat-msg.chat-user:hover .chat-copy-btn,
+  .chat-msg.chat-user:hover .chat-retry-btn,
+  .chat-msg.chat-user:hover .chat-edit-btn,
+  .chat-retry-btn:focus-visible,
+  .chat-edit-btn:focus-visible,
   .chat-copy-btn:focus-visible {
     opacity: 1;
   }
 }
 @media (hover: none) {
-  .chat-copy-btn {
+  .chat-copy-btn,
+  .chat-retry-btn,
+  .chat-edit-btn {
     opacity: 0.6;
     pointer-events: auto;
   }

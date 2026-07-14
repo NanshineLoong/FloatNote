@@ -62,6 +62,18 @@ export interface OpenSessionRequest {
   sessionFile: string;
 }
 
+type RewindableSessionManager = Pick<PiSessionManager, "getBranch" | "branch" | "resetLeaf">;
+
+/** Move the active leaf to immediately before a visible user turn. */
+export function rewindSessionToUserTurn(manager: RewindableSessionManager, userEntryId: string): void {
+  const target = manager.getBranch().find(
+    (entry) => entry.id === userEntryId && entry.type === "message" && entry.message.role === "user",
+  );
+  if (!target) throw new Error("user turn not found in active session branch");
+  if (target.parentId) manager.branch(target.parentId);
+  else manager.resetLeaf();
+}
+
 const EMPTY_RESPONSE_MESSAGE = "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。";
 
 /**
@@ -165,11 +177,22 @@ export class AgentRunner {
       // 把结构化 references/skill 序列化进给 Pi 的 prompt 文本：skill 走 /skill:name 前缀
       // 原生展开，文件引用追加 [引用] 块。无引用时原样透传（向后兼容）。
       await session.prompt(composePromptText(req));
+      this.emitSessionSynced(req.conversationId);
       void this.generateTitle(req.conversationId, req.userText);
     } finally {
       unsubscribe();
       this.activeConversations.delete(req.requestId);
     }
+  }
+
+  /** Discard the selected user turn and its descendants from the active branch. */
+  rewind(conversationId: string, userEntryId: string): void {
+    if (this.activeConversations.size > 0) {
+      throw new Error("cannot rewind while an assistant response is streaming");
+    }
+    const manager = this.sessionManagers.get(conversationId);
+    if (!manager) throw new Error("conversation session not opened");
+    rewindSessionToUserTurn(manager, userEntryId);
   }
 
   /** Resolve a pending get_note_text round-trip with the host-supplied content. */
@@ -223,6 +246,19 @@ export class AgentRunner {
     }
     this.send({
       type: "session_opened",
+      conversationId,
+      sessionFile,
+      messages: displayMessagesFromSession(session),
+    });
+  }
+
+  private emitSessionSynced(conversationId: string): void {
+    const session = this.sessions.get(conversationId);
+    const manager = this.sessionManagers.get(conversationId);
+    const sessionFile = session?.sessionFile ?? session?.sessionManager?.getSessionFile() ?? manager?.getSessionFile();
+    if (!session || !sessionFile) return;
+    this.send({
+      type: "session_synced",
       conversationId,
       sessionFile,
       messages: displayMessagesFromSession(session),
@@ -382,10 +418,10 @@ export function displayMessagesFromSession(session: SessionLike): ChatDisplayMes
     const text = messageText(message);
     if (!text) return [];
     if (message.role === "user") {
-      return [{ role: "user", text, timestamp: safeTimestamp }];
+      return [{ role: "user", text, timestamp: safeTimestamp, entryId: entry.id }];
     }
     if (message.role === "assistant") {
-      return [{ role: "assistant", text, timestamp: safeTimestamp }];
+      return [{ role: "assistant", text, timestamp: safeTimestamp, entryId: entry.id }];
     }
     // 工具消息仅服务于当前 Agent 上下文，恢复会话时不作为用户可见历史输出。
     return [];

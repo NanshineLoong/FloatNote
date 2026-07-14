@@ -14,4 +14,4 @@ export {
   reduceEvents,
 } from "./state";
 
-export { decorateCodeBlocks, renderMessage, renderBlock } from "./view";
+export { decorateCodeBlocks, renderMessage, renderBlock, startUserMessageEdit } from "./view";

@@ -63,6 +63,35 @@ describe("reduceEvents", () => {
     expect(edited.messages[1]).toBe(state.messages[1]);
   });
 
+  it("rewinds a user turn and removes every following message", () => {
+    const state = run([
+      { type: "user", text: "first" },
+      { type: "delta", requestId: "r1", text: "answer" },
+      { type: "done", requestId: "r1" },
+      { type: "user", text: "second", references: [{ kind: "file", id: "piece.md", display: "piece.md" }] },
+      { type: "delta", requestId: "r2", text: "later answer" },
+      { type: "done", requestId: "r2" },
+    ]);
+    const first = state.messages[0];
+    if (first.role !== "user") throw new Error("expected user message");
+
+    const rewound = reduceEvents(state, { type: "user_rewind", messageId: first.id, text: "again" });
+
+    expect(norm(rewound.messages)).toEqual([{ role: "user", text: "again" }]);
+  });
+
+  it("keeps the stable session entry id when rewinding a user turn", () => {
+    const state = run([{ type: "session_opened", conversationId: "c1", sessionFile: "session.jsonl", messages: [
+      { role: "user", text: "old", timestamp: 0, entryId: "u1" },
+    ] }]);
+    const user = state.messages[0];
+    if (user.role !== "user") throw new Error("expected user message");
+
+    const rewound = reduceEvents(state, { type: "user_rewind", messageId: user.id, text: "new" });
+
+    expect(rewound.messages[0]).toMatchObject({ role: "user", text: "new", sessionEntryId: "u1" });
+  });
+
   it("shows a lightweight wait block instead of an assistant text bubble", () => {
     const state = run([{ type: "user", text: "你好" }, { type: "pending" }]);
     expect(norm(state.messages)).toEqual([

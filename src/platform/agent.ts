@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 export type AgentEvent =
   | { type: "ready" }
   | { type: "session_opened"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
+  | { type: "session_synced"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "delta"; requestId: string; conversationId: string; text: string }
   | { type: "tool"; requestId: string; conversationId: string; callId: string; name: string; phase: "start" | "end"; args?: unknown; result?: unknown; isError?: boolean }
   | { type: "done"; requestId: string; conversationId: string }
@@ -14,9 +15,9 @@ export type AgentEvent =
   | { type: "thinking_end"; requestId: string; conversationId: string };
 
 export type ChatDisplayMessage =
-  | { role: "user"; text: string; timestamp: number }
-  | { role: "assistant"; text: string; timestamp: number }
-  | { role: "error"; text: string; timestamp: number };
+  | { role: "user"; text: string; timestamp: number; entryId?: string }
+  | { role: "assistant"; text: string; timestamp: number; entryId?: string }
+  | { role: "error"; text: string; timestamp: number; entryId?: string };
 
 export interface NoteUpdated {
   noteId: string;
@@ -36,6 +37,11 @@ export function agentSend(args: {
   skill?: { name: string };
 }): Promise<string> {
   return invoke<string>("agent_send", args);
+}
+
+/** Move a conversation's active session branch to immediately before one user turn. */
+export function agentRewind(conversationId: string, userEntryId: string): Promise<void> {
+  return invoke("agent_rewind", { conversationId, userEntryId });
 }
 
 export function agentNewSession(args: { conversationId: string; cwd: string; sessionDir: string }): Promise<void> {

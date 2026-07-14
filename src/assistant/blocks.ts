@@ -1,5 +1,5 @@
 import type { Block, ChatMessage } from "./render";
-import { decorateCodeBlocks, renderBlock, renderMessage } from "./render";
+import { decorateCodeBlocks, renderBlock, renderMessage, startUserMessageEdit } from "./render";
 import { updateActionCard } from "./action-card";
 import { fillMarkdown } from "./markdown";
 
@@ -26,6 +26,16 @@ export function reconcileMessages(scroll: HTMLElement, messages: ChatMessage[], 
   for (const message of messages) {
     seen.add(message.id);
     let node = map.get(message.id);
+    if (
+      node
+      && message.role === "user"
+      && node.querySelector(".chat-user-message-text")?.textContent !== message.text
+    ) {
+      const replacement = renderMessage(message);
+      node.replaceWith(replacement);
+      node = replacement;
+      map.set(message.id, node);
+    }
     if (!node) {
       node = renderMessage(message);
       map.set(message.id, node);
@@ -54,6 +64,11 @@ export function reconcileMessages(scroll: HTMLElement, messages: ChatMessage[], 
   if (stickToBottom) {
     scroll.scrollTop = scroll.scrollHeight;
   }
+}
+
+/** 打开指定用户消息的临时编辑器，编辑状态仅保留在 DOM 内。 */
+export function beginUserMessageEdit(messageEl: HTMLElement, messageId: string, text: string): void {
+  startUserMessageEdit(messageEl, messageId, text);
 }
 
 /** 增量更新一条 assistant 消息的块序列。新建消息时 renderMessage 已构建块节点，
@@ -120,8 +135,11 @@ function updateBlockNode(node: HTMLElement, block: Block, streaming: boolean): v
       if (content) decorateCodeBlocks(content);
       node.dataset.copyText = block.text;
       node.classList.toggle("chat-streaming", streaming);
-      const retry = node.querySelector<HTMLButtonElement>(".chat-retry-btn");
-      if (retry) retry.disabled = streaming;
+      const copy = node.querySelector(".chat-copy-btn");
+      if (!streaming && !copy) {
+        const replacement = renderBlock(block, false);
+        node.replaceChildren(...Array.from(replacement.childNodes));
+      }
       break;
     }
     case "thinking": {

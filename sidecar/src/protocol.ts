@@ -40,6 +40,7 @@ export type HostToSidecar =
       /** 首个 Skill 引用（稳定 name），sidecar 用 /skill:name 前缀原生展开。 */
       skill?: { name: string };
     }
+  | { type: "rewind"; callId: string; conversationId: string; userEntryId: string }
   | {
       type: "apply_edit_result";
       callId: string;
@@ -101,6 +102,13 @@ export type SidecarToHost =
       sessionFile: string;
       messages: ChatDisplayMessage[];
     }
+  | {
+      type: "session_synced";
+      conversationId: string;
+      sessionFile: string;
+      messages: ChatDisplayMessage[];
+    }
+  | { type: "rewind_result"; callId: string; ok: boolean; error?: string }
   | { type: "delta"; requestId: string; conversationId: string; text: string }
   | {
       type: "thinking_start";
@@ -147,9 +155,9 @@ export type SidecarToHost =
     };
 
 export type ChatDisplayMessage =
-  | { role: "user"; text: string; timestamp: number }
-  | { role: "assistant"; text: string; timestamp: number }
-  | { role: "error"; text: string; timestamp: number };
+  | { role: "user"; text: string; timestamp: number; entryId?: string }
+  | { role: "assistant"; text: string; timestamp: number; entryId?: string }
+  | { role: "error"; text: string; timestamp: number; entryId?: string };
 
 /**
  * Encode a message as a single newline-terminated JSON line.

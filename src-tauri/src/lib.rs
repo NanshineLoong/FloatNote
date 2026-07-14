@@ -112,6 +112,7 @@ pub fn run() {
                 pending_edits: Mutex::new(std::collections::HashMap::new()),
                 pending_skill_lists: Mutex::new(std::collections::HashMap::new()),
                 pending_agent_configs: Mutex::new(std::collections::HashMap::new()),
+                pending_agent_rewinds: Mutex::new(std::collections::HashMap::new()),
                 authorized_roots: state::AuthorizedRoots::default(),
             });
 
@@ -212,6 +213,7 @@ pub fn run() {
             commands::save_ai_provider,
             commands::set_active_ai_provider,
             commands::agent_send,
+            commands::agent_rewind,
             commands::agent_new_session,
             commands::agent_open_session,
             commands::agent_cancel,

@@ -44,6 +44,11 @@ pub enum HostToSidecar {
         #[serde(skip_serializing_if = "Option::is_none")]
         skill: Option<PromptSkill>,
     },
+    Rewind {
+        call_id: String,
+        conversation_id: String,
+        user_entry_id: String,
+    },
     ApplyEditResult {
         call_id: String,
         ok: bool,
@@ -109,6 +114,17 @@ pub enum SidecarToHost {
         conversation_id: String,
         session_file: String,
         messages: Vec<ChatDisplayMessage>,
+    },
+    SessionSynced {
+        conversation_id: String,
+        session_file: String,
+        messages: Vec<ChatDisplayMessage>,
+    },
+    RewindResult {
+        call_id: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     },
     Delta {
         request_id: String,
@@ -227,10 +243,30 @@ pub struct PromptSkill {
     rename_all_fields = "camelCase"
 )]
 pub enum ChatDisplayMessage {
-    User { text: String, timestamp: u64 },
-    Assistant { text: String, timestamp: u64 },
-    Tool { label: String, timestamp: u64 },
-    Error { text: String, timestamp: u64 },
+    User {
+        text: String,
+        timestamp: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        entry_id: Option<String>,
+    },
+    Assistant {
+        text: String,
+        timestamp: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        entry_id: Option<String>,
+    },
+    Tool {
+        label: String,
+        timestamp: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        entry_id: Option<String>,
+    },
+    Error {
+        text: String,
+        timestamp: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        entry_id: Option<String>,
+    },
 }
 
 /// 当前活动笔记：由笔记窗 `set_active_note` 发布、`agent_send` 也会更新，

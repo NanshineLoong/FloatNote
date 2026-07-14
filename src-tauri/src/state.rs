@@ -95,6 +95,9 @@ pub struct AppState {
     /// Correlated configure replies used by transactional provider changes.
     pub pending_agent_configs:
         Mutex<HashMap<String, tokio::sync::oneshot::Sender<Result<(), String>>>>,
+    /// Correlated rewind replies; the frontend only truncates once this resolves successfully.
+    pub pending_agent_rewinds:
+        Mutex<HashMap<String, tokio::sync::oneshot::Sender<Result<(), String>>>>,
     /// Roots authorised by opening/watching a project in this app instance.
     pub authorized_roots: AuthorizedRoots,
 }

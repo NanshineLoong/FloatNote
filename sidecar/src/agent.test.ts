@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { AgentRunner, translateEvent } from "./agent.js";
+import { AgentRunner, rewindSessionToUserTurn, translateEvent } from "./agent.js";
 import type { SessionLike } from "./agent.js";
 import { displayMessagesFromSession } from "./runner.js";
 import type { SidecarToHost } from "./protocol.js";
@@ -85,6 +85,26 @@ describe("displayMessagesFromSession", () => {
       },
     } as SessionLike;
     expect(displayMessagesFromSession(session).map((message) => message.role)).toEqual(["user", "assistant"]);
+  });
+});
+
+describe("rewindSessionToUserTurn", () => {
+  it("branches immediately before the selected user message", () => {
+    const branch = [
+      { id: "u1", parentId: null, type: "message", message: { role: "user" } },
+      { id: "a1", parentId: "u1", type: "message", message: { role: "assistant" } },
+      { id: "u2", parentId: "a1", type: "message", message: { role: "user" } },
+    ];
+    const calls: string[] = [];
+    rewindSessionToUserTurn({ getBranch: () => branch, branch: (id) => calls.push(id), resetLeaf: () => calls.push("reset") }, "u2");
+    expect(calls).toEqual(["a1"]);
+  });
+
+  it("resets the leaf when rewinding the first user message", () => {
+    const branch = [{ id: "u1", parentId: null, type: "message", message: { role: "user" } }];
+    const calls: string[] = [];
+    rewindSessionToUserTurn({ getBranch: () => branch, branch: (id) => calls.push(id), resetLeaf: () => calls.push("reset") }, "u1");
+    expect(calls).toEqual(["reset"]);
   });
 });
 
@@ -172,6 +192,7 @@ describe("AgentRunner", () => {
       { type: "delta", requestId: "r1", conversationId: "c1", text: "Hel" },
       { type: "delta", requestId: "r1", conversationId: "c1", text: "lo" },
       { type: "done", requestId: "r1", conversationId: "c1" },
+      { type: "session_synced", conversationId: "c1", sessionFile: expect.any(String), messages: [] },
     ]);
   });
 
@@ -198,6 +219,7 @@ describe("AgentRunner", () => {
         message: "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。",
       },
       { type: "done", requestId: "r1", conversationId: "c1" },
+      { type: "session_synced", conversationId: "c1", sessionFile: expect.any(String), messages: [] },
     ]);
   });
 

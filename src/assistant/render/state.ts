@@ -21,6 +21,7 @@ export type ChatEvent =
       sessionFile: string;
       messages: ChatDisplayMessage[];
     }
+  | { type: "session_synced"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "delta"; requestId: string; conversationId?: string; text: string }
   | { type: "tool"; requestId: string; conversationId?: string; callId?: string; name: string; phase: "start" | "end"; args?: unknown; result?: unknown; isError?: boolean }
   | { type: "done"; requestId: string; conversationId?: string }
@@ -28,6 +29,7 @@ export type ChatEvent =
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }
   | { type: "user"; conversationId?: string; text: string; references?: ChatReference[] }
   | { type: "user_edit"; messageId: string; text: string }
+  | { type: "user_rewind"; messageId: string; text: string }
   | { type: "pending"; conversationId?: string }
   // thinking 块事件（sidecar 新转发）。
   | { type: "thinking_start"; requestId: string; conversationId?: string; blockId: string }
@@ -79,7 +81,7 @@ export type Block =
   | { id: string; kind: "error"; text: string };
 
 export type ChatMessage =
-  | { id: string; role: "user"; text: string; references?: ChatReference[] }
+  | { id: string; role: "user"; text: string; references?: ChatReference[]; sessionEntryId?: string }
   | { id: string; role: "assistant"; blocks: Block[]; streaming: boolean; pending?: true };
 
 export interface ChatState {
@@ -88,7 +90,12 @@ export interface ChatState {
 }
 
 /** 用户提交时已解析的文件/Skill 引用，供当前对话气泡渲染；不落入历史文本。 */
-export type ChatReference = { kind: "file" | "skill"; id: string; display: string; noteKind?: string };
+export type ChatReference = {
+  kind: "file" | "skill";
+  id: string;
+  display: string;
+  noteKind?: "inbox" | "tasks" | "piece" | "doc";
+};
 
 const EMPTY_RESPONSE_MESSAGE = "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。";
 
@@ -129,6 +136,22 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
           .filter((m): m is ChatMessage => m !== null),
       };
 
+    case "session_synced": {
+      if (!acceptsConversation(state, event)) return state;
+      const persistedUsers = event.messages.filter(
+        (message): message is Extract<ChatDisplayMessage, { role: "user" }> => message.role === "user",
+      );
+      let userIndex = 0;
+      return {
+        ...state,
+        messages: state.messages.map((message) => {
+          if (message.role !== "user") return message;
+          const entryId = persistedUsers[userIndex++]?.entryId;
+          return entryId ? { ...message, sessionEntryId: entryId } : message;
+        }),
+      };
+    }
+
     case "title":
       return state;
 
@@ -150,6 +173,18 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
             : message,
         ),
       };
+
+    case "user_rewind": {
+      const index = state.messages.findIndex(
+        (message) => message.role === "user" && message.id === event.messageId,
+      );
+      if (index < 0) return state;
+      const message = state.messages[index] as Extract<ChatMessage, { role: "user" }>;
+      return {
+        ...state,
+        messages: [...state.messages.slice(0, index), { ...message, text: event.text }],
+      };
+    }
 
     case "pending":
       if (!acceptsConversation(state, event)) return state;
@@ -467,7 +502,12 @@ function acceptsConversation(state: ChatState, event: { conversationId?: string 
 function displayMessageToChatMessage(message: ChatDisplayMessage): ChatMessage | null {
   switch (message.role) {
     case "user":
-      return { id: nextId("m"), role: "user", text: message.text };
+      return {
+        id: nextId("m"),
+        role: "user",
+        text: message.text,
+        ...(message.entryId ? { sessionEntryId: message.entryId } : {}),
+      };
     case "assistant":
       return {
         id: nextId("m"),

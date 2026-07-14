@@ -22,6 +22,8 @@ Assistant UI → src/platform/agent → Tauri command → Rust agent host
 
 sidecar 将流式对话事件输出到 JSONL；Rust 解析并广播为 `agent://event`，由 `src/platform/agent.ts` 订阅。工具事件携带稳定 `callId`，start 还携带参数摘要，end 携带结果和错误标记，使前端能按真实调用匹配交错执行并展示操作对象。写工具发起 `apply_edit` 时同时携带 Pi 的 `toolCallId`，Rust 将它透传到 `permission://request`，因此权限卡能原位升级正确的工具块。编辑不会立即落盘：Rust 解析 target、保存 pending edit；用户在 UI 中 allow 或 deny 后，`resolve_permission` 才完成写入并向 sidecar 回传结果。
 
+重试或编辑历史用户回合是一次 session 分支操作：前端先发 `agent_rewind`，sidecar 将活动 session 叶节点退回到目标用户回合之前；回退成功后前端删除该回合之后的显示消息并发送新 prompt。旧分支不再进入模型上下文，新的完成回合以 `session_synced` 刷新 Rust 的持久化历史索引。
+
 `list_notes` 由 sidecar 请求 Rust 根据当前 active project 动态枚举；具体文件名不注入 system prompt。`create_note` 使用独立 JSONL 请求，但复用同一 permission queue：确认后 Rust 再次校验 piece 文件名与同名冲突，随后原子创建。网络研究由 sidecar 的 `web_search` / `web_fetch` 直接完成，只读过程通过普通 tool start/end 卡展示，不进入本地写权限流程。
 
 ## AI 提供商保存与切换

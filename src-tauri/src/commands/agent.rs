@@ -89,7 +89,7 @@ pub(crate) async fn clear_agent_configuration(state: &AppState) -> Result<(), St
 
 #[tauri::command]
 pub fn agent_send(
-    state: State<AppState>,
+    state: State<'_, AppState>,
     conversation_id: String,
     user_text: String,
     references: Option<Vec<PromptRef>>,
@@ -119,6 +119,45 @@ pub fn agent_send(
         })
         .map_err(|error| error.to_string())?;
     Ok(request_id)
+}
+
+#[tauri::command]
+pub async fn agent_rewind(
+    state: State<'_, AppState>,
+    conversation_id: String,
+    user_entry_id: String,
+) -> Result<(), String> {
+    let seq = state.agent_seq.fetch_add(1, Ordering::Relaxed) + 1;
+    let call_id = format!("rw{seq}");
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    state
+        .pending_agent_rewinds
+        .lock()
+        .unwrap()
+        .insert(call_id.clone(), tx);
+    let sent = state
+        .agent
+        .lock()
+        .unwrap()
+        .as_mut()
+        .ok_or("助手未连接")?
+        .send(&HostToSidecar::Rewind {
+            call_id: call_id.clone(),
+            conversation_id,
+            user_entry_id,
+        });
+    if let Err(error) = sent {
+        state.pending_agent_rewinds.lock().unwrap().remove(&call_id);
+        return Err(error.to_string());
+    }
+    match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(_)) => Err("对话回退响应已丢弃".into()),
+        Err(_) => {
+            state.pending_agent_rewinds.lock().unwrap().remove(&call_id);
+            Err("对话回退超时，请重试".into())
+        }
+    }
 }
 
 #[tauri::command]

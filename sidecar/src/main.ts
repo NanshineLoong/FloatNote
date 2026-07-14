@@ -87,6 +87,14 @@ async function main(): Promise<void> {
           send({ type: "done", requestId: msg.requestId, conversationId: msg.conversationId });
         }
         break;
+      case "rewind":
+        try {
+          runner.rewind(msg.conversationId, msg.userEntryId);
+          send({ type: "rewind_result", callId: msg.callId, ok: true });
+        } catch (err) {
+          send({ type: "rewind_result", callId: msg.callId, ok: false, error: safeError(err) });
+        }
+        break;
       case "apply_edit_result":
         runner.onApplyEditResult(msg);
         break;

@@ -250,51 +250,7 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             session_file,
             messages,
         } => {
-            if let Ok(store) = crate::chat_history::ChatHistoryStore::default_for_user() {
-                let model = app
-                    .try_state::<AppState>()
-                    .and_then(|state| {
-                        let config = state.config.lock().unwrap();
-                        let provider = config.ai_settings.active_provider_id?;
-                        Some(config.ai_settings.providers.get(&provider)?.model.clone())
-                    })
-                    .unwrap_or_default();
-                let saved_messages = messages
-                    .iter()
-                    .filter_map(|message| match message {
-                        super::protocol::ChatDisplayMessage::User { text, timestamp } => {
-                            Some(crate::chat_history::ChatHistoryMessage {
-                                role: "user".into(),
-                                text: text.clone(),
-                                timestamp: *timestamp,
-                            })
-                        }
-                        super::protocol::ChatDisplayMessage::Assistant { text, timestamp } => {
-                            Some(crate::chat_history::ChatHistoryMessage {
-                                role: "assistant".into(),
-                                text: text.clone(),
-                                timestamp: *timestamp,
-                            })
-                        }
-                        _ => None,
-                    })
-                    .collect();
-                let tools = messages
-                    .iter()
-                    .filter_map(|message| match message {
-                        super::protocol::ChatDisplayMessage::Tool { label, timestamp } => {
-                            Some(crate::chat_history::ChatToolSummary {
-                                name: label.clone(),
-                                status: "completed".into(),
-                                timestamp: *timestamp,
-                            })
-                        }
-                        _ => None,
-                    })
-                    .collect();
-                let _ =
-                    store.update_session_history(&conversation_id, model, saved_messages, tools);
-            }
+            sync_session_history(app, &conversation_id, &messages);
             let _ = app.emit(
                 "agent://event",
                 &SidecarToHost::SessionOpened {
@@ -303,6 +259,33 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
                     messages,
                 },
             );
+        }
+        SidecarToHost::SessionSynced {
+            conversation_id,
+            session_file,
+            messages,
+        } => {
+            sync_session_history(app, &conversation_id, &messages);
+            let _ = app.emit(
+                "agent://event",
+                &SidecarToHost::SessionSynced {
+                    conversation_id,
+                    session_file,
+                    messages,
+                },
+            );
+        }
+        SidecarToHost::RewindResult { call_id, ok, error } => {
+            if let Some(state) = app.try_state::<AppState>() {
+                if let Some(sender) = state.pending_agent_rewinds.lock().unwrap().remove(&call_id) {
+                    let result = if ok {
+                        Ok(())
+                    } else {
+                        Err(error.unwrap_or_else(|| "对话回退失败".into()))
+                    };
+                    let _ = sender.send(result);
+                }
+            }
         }
         SidecarToHost::ApplyEdit {
             call_id,
@@ -387,6 +370,58 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             let _ = app.emit("agent://event", &other);
         }
     }
+}
+
+fn sync_session_history(
+    app: &AppHandle,
+    conversation_id: &str,
+    messages: &[super::protocol::ChatDisplayMessage],
+) {
+    let Ok(store) = crate::chat_history::ChatHistoryStore::default_for_user() else {
+        return;
+    };
+    let model = app
+        .try_state::<AppState>()
+        .and_then(|state| {
+            let config = state.config.lock().unwrap();
+            let provider = config.ai_settings.active_provider_id?;
+            Some(config.ai_settings.providers.get(&provider)?.model.clone())
+        })
+        .unwrap_or_default();
+    let saved_messages = messages
+        .iter()
+        .filter_map(|message| match message {
+            super::protocol::ChatDisplayMessage::User {
+                text, timestamp, ..
+            } => Some(crate::chat_history::ChatHistoryMessage {
+                role: "user".into(),
+                text: text.clone(),
+                timestamp: *timestamp,
+            }),
+            super::protocol::ChatDisplayMessage::Assistant {
+                text, timestamp, ..
+            } => Some(crate::chat_history::ChatHistoryMessage {
+                role: "assistant".into(),
+                text: text.clone(),
+                timestamp: *timestamp,
+            }),
+            _ => None,
+        })
+        .collect();
+    let tools = messages
+        .iter()
+        .filter_map(|message| match message {
+            super::protocol::ChatDisplayMessage::Tool {
+                label, timestamp, ..
+            } => Some(crate::chat_history::ChatToolSummary {
+                name: label.clone(),
+                status: "completed".into(),
+                timestamp: *timestamp,
+            }),
+            _ => None,
+        })
+        .collect();
+    let _ = store.update_session_history(conversation_id, model, saved_messages, tools);
 }
 
 /// sidecar 退出/崩溃：标记不可用、清空句柄、发错误事件，绝不 panic。

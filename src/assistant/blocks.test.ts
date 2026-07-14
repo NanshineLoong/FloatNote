@@ -101,19 +101,44 @@ describe("reconcileMessages", () => {
     reconcileMessages(scroll, s1.messages, map);
     const s2 = reduceEvents(s1, { type: "delta", requestId: "r1", text: "lo" });
     reconcileMessages(scroll, s2.messages, map);
+    const completed = reduceEvents(s2, { type: "done", requestId: "r1" });
+    reconcileMessages(scroll, completed.messages, map);
     scroll.querySelector<HTMLButtonElement>(".chat-copy-btn")!.click();
     await Promise.resolve();
     expect(writes).toEqual(["Hello"]);
   });
 
-  it("renders copy and retry as icon-only actions with accessible labels", () => {
+  it("renders only copy for a completed assistant text block", () => {
     const scroll = makeScroll();
     const map = new Map<string, HTMLElement>();
     const state = run([{ type: "delta", requestId: "r1", text: "answer" }, { type: "done", requestId: "r1" }]);
     reconcileMessages(scroll, state.messages, map);
-    const buttons = Array.from(scroll.querySelectorAll<HTMLButtonElement>(".chat-message-action"));
-    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual(["复制原文", "重试"]);
-    expect(buttons.every((button) => button.textContent === "")).toBe(true);
+    expect(Array.from(scroll.querySelectorAll<HTMLButtonElement>(".chat-message-action"))
+      .map((button) => button.getAttribute("aria-label"))).toEqual(["复制原文"]);
+  });
+
+  it("renders retry and edit actions on a user bubble", () => {
+    const scroll = makeScroll();
+    const map = new Map<string, HTMLElement>();
+    const state = run([{ type: "user", text: "question" }]);
+    reconcileMessages(scroll, state.messages, map);
+    expect(Array.from(scroll.querySelectorAll<HTMLButtonElement>(".chat-message-action"))
+      .map((button) => button.getAttribute("aria-label"))).toEqual(["重试", "编辑"]);
+  });
+
+  it("edits a user bubble in place and cancel restores its text", () => {
+    const scroll = makeScroll();
+    const map = new Map<string, HTMLElement>();
+    const state = run([{ type: "user", text: "before" }]);
+    reconcileMessages(scroll, state.messages, map);
+    scroll.querySelector<HTMLButtonElement>(".chat-edit-btn")!.click();
+    const input = scroll.querySelector<HTMLTextAreaElement>(".chat-user-edit-input")!;
+    expect(input.value).toBe("before");
+    expect(scroll.querySelector(".chat-message-actions")).toBeNull();
+    input.value = "after";
+    scroll.querySelector<HTMLButtonElement>(".chat-user-edit-cancel")!.click();
+    expect(scroll.querySelector(".chat-user-edit-input")).toBeNull();
+    expect(scroll.querySelector(".chat-user-message-text")?.textContent).toBe("before");
   });
 
   it("renders structured references as chips in a user bubble", () => {

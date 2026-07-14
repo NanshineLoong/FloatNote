@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { mountAssistant, type AssistantHandle } from "../assistant/assistant";
 import {
   agentCancel,
+  agentRewind,
   agentListSkills,
   agentNewSession,
   agentOpenSession,
@@ -62,6 +63,7 @@ export function createAssistantController(deps: AssistantControllerDeps): Assist
   const currentScope = () => chatScopeForSession(deps.session);
   const handle = mountAssistant(deps.region, {
     send: (payload, conversationId) => agentSend({ conversationId, ...payload }),
+    rewind: (conversationId, userTurnIndex) => agentRewind(conversationId, userTurnIndex),
     createConversation: async (scope) => {
       const conversation = await chatCreate(scope);
       await agentNewSession({
