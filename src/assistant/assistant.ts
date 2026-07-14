@@ -20,6 +20,7 @@ import {
 import { beginUserMessageEdit, reconcileMessages } from "./blocks";
 import { createButton } from "../shared/ui/button";
 import { showToast } from "../shared/toast";
+import type { AssistantOutputMode } from "../platform/assistant-output";
 
 /**
  * 与挂载点无关的助手组件。挂在笔记窗内的 `#assistant-region`，inline/floating 共用同一份。
@@ -50,6 +51,8 @@ export interface AssistantDeps {
   /** 拉取当前作用域内全部文件（供 `@` 文件提及）：project 模式为项目内全部 .md，
    *  document 模式为当前文档。 */
   listFiles: (scope: ChatScope) => Promise<MentionFile[]>;
+  getOutputMode?: () => Promise<AssistantOutputMode>;
+  subscribeOutputMode?: (callback: (mode: AssistantOutputMode) => void) => UnlistenFn | Promise<UnlistenFn>;
 }
 
 export interface AssistantHandle {
@@ -87,6 +90,7 @@ export interface AssistantHandle {
 
 export function mountAssistant(root: HTMLElement, deps: AssistantDeps): AssistantHandle {
   let state: ChatState = emptyChat();
+  let outputMode: AssistantOutputMode = "compact";
 
   root.classList.add("assistant");
   const newConversationButton = createButton({
@@ -140,9 +144,9 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
 
   function rerender() {
     // 定向增量更新：已完成消息/块节点复用，不重放进场动画 → 消灭闪烁。
-    reconcileMessages(scroll, state.messages, msgMap);
+    reconcileMessages(scroll, state.messages, msgMap, outputMode);
     // 无消息时不渲染聊天历史容器，避免 floating 态出现空的卡片/气泡（inline 态无副作用）。
-    root.classList.toggle("has-messages", state.messages.length > 0);
+    root.classList.toggle("has-messages", scroll.childElementCount > 0);
     for (const action of scroll.querySelectorAll<HTMLButtonElement>(".chat-retry-btn, .chat-edit-btn")) {
       action.disabled = isChatStreaming(state);
     }
@@ -445,6 +449,33 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
 
   let destroyed = false;
   let unlisten: UnlistenFn | null = null;
+  let outputModeUnlisten: UnlistenFn | null = null;
+  let outputModeRevision = 0;
+
+  const loadInitialOutputMode = () => {
+    const revision = outputModeRevision;
+    void deps.getOutputMode?.().then((mode) => {
+      if (destroyed || revision !== outputModeRevision) return;
+      outputMode = mode;
+      rerender();
+    }).catch(() => {});
+  };
+  if (!deps.subscribeOutputMode) {
+    loadInitialOutputMode();
+  } else {
+    void Promise.resolve(deps.subscribeOutputMode((mode) => {
+      outputModeRevision += 1;
+      outputMode = mode;
+      rerender();
+    })).then((unlistenMode) => {
+      if (destroyed) {
+        unlistenMode();
+        return;
+      }
+      outputModeUnlisten = unlistenMode;
+      loadInitialOutputMode();
+    });
+  }
 
   const permBubble = mountPermissionBubble(permRegion, (req, decision, writeMode) => {
     return resolvePermission(req.request_id, decision, writeMode);
@@ -485,6 +516,10 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   scroll.addEventListener("chat:toggle-thinking", (e) => {
     const detail = (e as CustomEvent).detail as { blockId: string };
     dispatch({ type: "thinking_toggle", blockId: detail.blockId });
+  });
+  scroll.addEventListener("chat:toggle-process", (e) => {
+    const detail = (e as CustomEvent).detail as { blockId: string; collapsed: boolean };
+    dispatch({ type: "process_toggle", blockId: detail.blockId, collapsed: detail.collapsed });
   });
 
   scroll.addEventListener("chat:user-retry", (e) => {
@@ -560,6 +595,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     destroy() {
       destroyed = true;
       unlisten?.();
+      outputModeUnlisten?.();
       permUnlisten?.();
       permBubble.destroy();
       composer.destroy();

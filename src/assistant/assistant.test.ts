@@ -78,4 +78,26 @@ describe("assistant message actions", () => {
     expect(rewind).toHaveBeenCalledWith("c1", "u1");
     expect(root.querySelector(".chat-user-message-text")?.textContent).toBe("after");
   });
+
+  it("does not let a stale initial output mode overwrite a newer change event", async () => {
+    let resolveInitial!: (mode: "compact" | "detailed") => void;
+    const initial = new Promise<"compact" | "detailed">((resolve) => { resolveInitial = resolve; });
+    let emitMode: (mode: "compact" | "detailed") => void = () => {};
+    const { root, emitAgent } = await mountWithDeps({
+      getOutputMode: () => initial,
+      subscribeOutputMode: (callback) => { emitMode = callback; return () => {}; },
+    });
+    emitAgent({ type: "session_opened", conversationId: "c1", sessionFile: conversation.sessionFile, messages: [{
+      role: "assistant", timestamp: 0, blocks: [
+        { type: "thinking", text: "分析" },
+        { type: "tool", callId: "c1", name: "read_note", label: "读取当前文档", status: "succeeded" },
+      ],
+    }] });
+    emitMode("detailed");
+    expect(root.querySelector(".chat-process-group")).not.toBeNull();
+    resolveInitial("compact");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(root.querySelector(".chat-process-group")).not.toBeNull();
+  });
 });

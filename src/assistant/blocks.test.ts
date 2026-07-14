@@ -66,6 +66,52 @@ describe("reconcileMessages", () => {
     expect(blocks[1].classList.contains("chat-block-thinking")).toBe(true);
   });
 
+  it("switches existing process blocks between compact and detailed projection", () => {
+    const scroll = makeScroll();
+    const map = new Map<string, HTMLElement>();
+    const state = run([
+      { type: "thinking_start", requestId: "r1", blockId: "t1" },
+      { type: "thinking_delta", requestId: "r1", text: "分析" },
+      { type: "tool", requestId: "r1", callId: "c1", name: "read_note", label: "读取当前文档", phase: "start" },
+    ]);
+    reconcileMessages(scroll, state.messages, map, "compact");
+    expect(scroll.querySelector(".chat-block-process_group")).toBeNull();
+    expect(scroll.querySelector(".chat-compact-progress")).not.toBeNull();
+
+    reconcileMessages(scroll, state.messages, map, "detailed");
+    expect(scroll.querySelector(".chat-block-process_group")).not.toBeNull();
+    expect(scroll.querySelector(".chat-compact-progress")).toBeNull();
+  });
+
+  it("puts the compact cursor after streaming text and removes it when done", () => {
+    const scroll = makeScroll();
+    const map = new Map<string, HTMLElement>();
+    const streaming = run([
+      { type: "thinking_start", requestId: "r1", blockId: "t1" },
+      { type: "thinking_end", requestId: "r1" },
+      { type: "delta", requestId: "r1", text: "答案" },
+    ]);
+    reconcileMessages(scroll, streaming.messages, map, "compact");
+    const cursor = scroll.querySelector(".chat-text-content .chat-compact-cursor");
+    expect(cursor).not.toBeNull();
+    expect(cursor?.closest(".chat-text-content")).not.toBeNull();
+    const done = reduceEvents(streaming, { type: "done", requestId: "r1" });
+    reconcileMessages(scroll, done.messages, map, "compact");
+    expect(scroll.querySelector(".chat-compact-cursor")).toBeNull();
+  });
+
+  it("does not leave an empty assistant row for a completed process-only turn in compact mode", () => {
+    const scroll = makeScroll();
+    const map = new Map<string, HTMLElement>();
+    const state = run([
+      { type: "thinking_start", requestId: "r1", blockId: "t1" },
+      { type: "thinking_end", requestId: "r1" },
+      { type: "done", requestId: "r1" },
+    ]);
+    reconcileMessages(scroll, state.messages, map, "compact");
+    expect(scroll.querySelector(".chat-assistant")).toBeNull();
+  });
+
   it("removes stale messages on session switch", () => {
     const scroll = makeScroll();
     const map = new Map<string, HTMLElement>();

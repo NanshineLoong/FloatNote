@@ -41,6 +41,10 @@ profiles plus an optional active ID. Provider save/activation belongs in
 configure result before persistence and must not reintroduce legacy connection
 migration.
 
+`Config.assistant_output_mode` is `compact` or `detailed`, defaults/falls back to
+`compact`, and changes through `set_assistant_output_mode`. Emit
+`assistant-output-mode-changed` only after atomic persistence succeeds.
+
 Skill catalog discovery and safe directory import belong to
 `commands/agent.rs` on the Rust host. Listing must remain available without a
 sidecar; `agent_reload_skills` only synchronizes the already-persisted catalog

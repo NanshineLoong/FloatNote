@@ -1,4 +1,4 @@
-use crate::config::{AiProviderConfig, AiProviderId, WindowShortcuts};
+use crate::config::{AiProviderConfig, AiProviderId, AssistantOutputMode, WindowShortcuts};
 use crate::state::AppState;
 use tauri::{Emitter, State};
 
@@ -104,6 +104,31 @@ pub fn get_window_shortcuts(state: State<AppState>) -> WindowShortcuts {
 }
 
 #[tauri::command]
+pub async fn set_assistant_output_mode(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    mode: AssistantOutputMode,
+) -> Result<(), String> {
+    let _transaction = state.ai_settings_tx.lock().await;
+    set_assistant_output_mode_inner(&state, mode, |saved| {
+        let _ = app.emit("assistant-output-mode-changed", saved);
+    })
+}
+
+fn set_assistant_output_mode_inner(
+    state: &AppState,
+    mode: AssistantOutputMode,
+    emit: impl FnOnce(AssistantOutputMode),
+) -> Result<(), String> {
+    let mut candidate = state.config.lock().unwrap().clone();
+    candidate.assistant_output_mode = mode;
+    crate::config::save(&state.config_path, &candidate).map_err(|error| error.to_string())?;
+    *state.config.lock().unwrap() = candidate;
+    emit(mode);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn apply_shortcuts(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -203,7 +228,8 @@ pub(crate) fn should_install_selection_monitor(mode: &str) -> bool {
 mod tests {
     use super::{
         apply_shortcuts_inner, is_valid_auto_popup_mode, save_ai_provider_inner,
-        set_active_ai_provider_inner, should_install_selection_monitor,
+        set_active_ai_provider_inner, set_assistant_output_mode_inner,
+        should_install_selection_monitor,
     };
     use crate::config::{AiProviderConfig, AiProviderId, Config, WindowShortcuts};
     use crate::state::{AppState, AuthorizedRoots, LocalSelectionCache};
@@ -330,5 +356,32 @@ mod tests {
         assert_eq!(applied.len(), 2);
         assert_eq!(applied[1].0, previous.shortcut_capture);
         assert_eq!(*state.config.lock().unwrap(), previous);
+    }
+
+    #[test]
+    fn output_mode_event_runs_only_after_successful_persistence() {
+        use crate::config::AssistantOutputMode;
+        let dir = crate::testutil::tempdir();
+        let path = dir.path().join("config.json");
+        let state = state_at(path, Config::default());
+        let mut emitted = 0;
+        set_assistant_output_mode_inner(&state, AssistantOutputMode::Detailed, |_| emitted += 1)
+            .unwrap();
+        assert_eq!(emitted, 1);
+
+        let blocker = dir.path().join("blocker");
+        std::fs::write(&blocker, "not a directory").unwrap();
+        let state = state_at(blocker.join("config.json"), Config::default());
+        let mut emitted = 0;
+        assert!(
+            set_assistant_output_mode_inner(&state, AssistantOutputMode::Detailed, |_| emitted +=
+                1)
+            .is_err()
+        );
+        assert_eq!(emitted, 0);
+        assert_eq!(
+            state.config.lock().unwrap().assistant_output_mode,
+            AssistantOutputMode::Compact
+        );
     }
 }

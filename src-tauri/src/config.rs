@@ -3,6 +3,27 @@ use std::{collections::BTreeMap, path::Path};
 
 static SAVE_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum AssistantOutputMode {
+    #[default]
+    Compact,
+    Detailed,
+}
+
+impl<'de> Deserialize<'de> for AssistantOutputMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Ok(match value.as_str() {
+            Some("detailed") => Self::Detailed,
+            _ => Self::Compact,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum AiProviderId {
@@ -157,6 +178,8 @@ pub struct Config {
     pub launch_at_login: bool,
     /// 助手是否展开显示（折叠则隐藏）。助手始终活在笔记窗内，按窗宽自动 inline/floating。
     pub assistant_open: bool,
+    /// Assistant process projection. Full session history is independent of this display setting.
+    pub assistant_output_mode: AssistantOutputMode,
     /// 最近打开过的项目空间绝对路径，最近的在前（MRU）。上限由前端维护（8 条）。
     /// 项目可散落在磁盘任意位置，此列表是项目切换菜单的唯一数据来源。
     pub recent_projects: Vec<String>,
@@ -180,6 +203,7 @@ impl Default for Config {
             window_shortcuts: WindowShortcuts::default(),
             launch_at_login: false,
             assistant_open: false,
+            assistant_output_mode: AssistantOutputMode::Compact,
             recent_projects: Vec::new(),
             recent_documents: Vec::new(),
             ai_settings: AiSettings::default(),
@@ -282,6 +306,22 @@ mod tests {
         let config: Config = serde_json::from_str(r#"{"launch_at_login":true}"#).unwrap();
         assert!(config.launch_at_login);
         assert_eq!(config.shortcut_capture, "Alt+Cmd+C");
+        assert_eq!(config.assistant_output_mode, AssistantOutputMode::Compact);
+    }
+
+    #[test]
+    fn assistant_output_mode_roundtrips_and_invalid_values_fall_back_without_losing_config() {
+        let detailed: Config =
+            serde_json::from_str(r#"{"assistant_output_mode":"detailed","launch_at_login":true}"#)
+                .unwrap();
+        assert_eq!(
+            detailed.assistant_output_mode,
+            AssistantOutputMode::Detailed
+        );
+        let invalid: Config =
+            serde_json::from_str(r#"{"assistant_output_mode":42,"launch_at_login":true}"#).unwrap();
+        assert_eq!(invalid.assistant_output_mode, AssistantOutputMode::Compact);
+        assert!(invalid.launch_at_login);
     }
 
     #[test]

@@ -125,8 +125,8 @@ export type SidecarToHost =
       callId: string;
       name: string;
       phase: "start" | "end";
-      args?: unknown;
-      result?: unknown;
+      label?: string;
+      error?: string;
       isError?: boolean;
     }
   | {
@@ -156,8 +156,13 @@ export type SidecarToHost =
 
 export type ChatDisplayMessage =
   | { role: "user"; text: string; timestamp: number; entryId?: string }
-  | { role: "assistant"; text: string; timestamp: number; entryId?: string }
+  | { role: "assistant"; blocks: ChatDisplayBlock[]; timestamp: number; entryId?: string }
   | { role: "error"; text: string; timestamp: number; entryId?: string };
+
+export type ChatDisplayBlock =
+  | { type: "text"; text: string }
+  | { type: "thinking"; text: string }
+  | { type: "tool"; callId: string; name: string; label: string; status: "succeeded" | "failed" | "incomplete"; error?: string };
 
 /**
  * Encode a message as a single newline-terminated JSON line.

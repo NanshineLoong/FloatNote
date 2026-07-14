@@ -8,7 +8,10 @@ into a reconciled message list with incremental DOM updates.
 - `assistant.ts` — `AssistantHandle` connector: builds DOM, wires input/
   submit/history/permission/skills/mentions, subscribes to agent events.
 - `render/` — `state.ts` owns the reducer/state machine and `view.ts` owns DOM
-  rendering; `index.ts` is the public feature API.
+  rendering; `index.ts` is the public feature API. Assistant state always keeps
+  complete ordered text/thinking/tool blocks. Two or more consecutive process
+  items form a `process_group`; only text ends a group. Compact/detailed output
+  modes are projections and must not discard state.
 - `blocks.ts` — incremental message-list reconciler (`reconcileMessages`).
 - `action-card.ts` — read-only action card (edit/tag diff preview, side-by-side
   with `mod`/`add`/`del`/`ctx` row kinds).
@@ -30,6 +33,10 @@ into a reconciled message list with incremental DOM updates.
   for the composer; their legacy textarea menus are no longer mounted by
   `assistant.ts`.
 - `styles.css` — assistant card/bubble/diff/picker styling.
+
+Tool rows use the sidecar-provided safe `label` and stable `callId`; never render
+raw tool arguments or result bodies. Compact mode is the default and owns the
+streaming cursor. Detailed mode owns process shimmer and expandable groups.
 
 Cross-feature contracts come from `src/platform/`; shared helpers/UI come from
 `src/shared/`. Do not import `src/note/` from this feature.

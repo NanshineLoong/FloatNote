@@ -15,10 +15,11 @@ import { createNoteTools, type CreateNoteResult, type NoteListEntry, type WriteR
 import { createDefaultWebTools } from "./web-tools.js";
 import { TUTOR_SYSTEM_PROMPT } from "./tutor-prompt.js";
 import { listSkills as listSkillsState, readSkillBody, loadSkillPaths, formatSkillsForSystemPrompt } from "./skills.js";
-import type { ChatDisplayMessage, EditPreview, HostToSidecar, NoteTarget, PromptRef, SidecarToHost } from "./protocol.js";
+import type { ChatDisplayBlock, ChatDisplayMessage, EditPreview, HostToSidecar, NoteTarget, PromptRef, SidecarToHost } from "./protocol.js";
 import { buildAgentModel, resolveAgentConfig, type AgentConfig } from "./model.js";
 import { translateEvent } from "./event-translate.js";
 import { composePromptText } from "./prompt-compose.js";
+import { formatToolTitle, sanitizeToolError } from "./tool-title.js";
 
 /** Minimal surface of a Pi AgentSession the runner depends on (injectable for tests). */
 export interface SessionLike {
@@ -410,22 +411,81 @@ const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager) 
 
 export function displayMessagesFromSession(session: SessionLike): ChatDisplayMessage[] {
   const branch = session.sessionManager?.getBranch() ?? [];
-  return branch.flatMap((entry): ChatDisplayMessage[] => {
-    if (entry.type !== "message") return [];
+  const results = new Map<string, { isError: boolean; error?: string }>();
+  for (const entry of branch) {
+    if (entry.type !== "message") continue;
+    const message = entry.message as unknown as Record<string, unknown>;
+    if (message.role !== "toolResult" && message.role !== "tool") continue;
+    const callId = typeof message.toolCallId === "string" ? message.toolCallId : undefined;
+    if (!callId) continue;
+    const isError = message.isError === true;
+    results.set(callId, { isError, ...(isError ? { error: sanitizeToolError(message) } : {}) });
+  }
+  const output: ChatDisplayMessage[] = [];
+  let assistantIndex: number | undefined;
+  for (const entry of branch) {
+    if (entry.type !== "message") continue;
     const timestamp = Date.parse(entry.timestamp);
     const safeTimestamp = Number.isFinite(timestamp) ? timestamp : Date.now();
     const message = entry.message as { role?: string; content?: unknown };
-    const text = messageText(message);
-    if (!text) return [];
     if (message.role === "user") {
-      return [{ role: "user", text, timestamp: safeTimestamp, entryId: entry.id }];
+      assistantIndex = undefined;
+      const text = messageText(message);
+      if (text) output.push({ role: "user", text, timestamp: safeTimestamp, entryId: entry.id });
+      continue;
     }
     if (message.role === "assistant") {
-      return [{ role: "assistant", text, timestamp: safeTimestamp, entryId: entry.id }];
+      const blocks = assistantDisplayBlocks(message.content, results);
+      if (!blocks.length) continue;
+      const current = assistantIndex === undefined ? undefined : output[assistantIndex];
+      if (current?.role === "assistant") {
+        current.blocks.push(...blocks);
+      } else {
+        assistantIndex = output.length;
+        output.push({ role: "assistant", blocks, timestamp: safeTimestamp, entryId: entry.id });
+      }
     }
     // 工具消息仅服务于当前 Agent 上下文，恢复会话时不作为用户可见历史输出。
-    return [];
-  });
+  }
+  return output;
+}
+
+function assistantDisplayBlocks(
+  content: unknown,
+  results: Map<string, { isError: boolean; error?: string }>,
+): Extract<ChatDisplayMessage, { role: "assistant" }>["blocks"] {
+  const items = Array.isArray(content) ? content : typeof content === "string" ? [{ type: "text", text: content }] : [];
+  const output: ChatDisplayBlock[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const block = item as Record<string, unknown>;
+    if (block.type === "text" && typeof block.text === "string" && block.text) {
+      output.push({ type: "text", text: block.text });
+      continue;
+    }
+    if (block.type === "thinking") {
+      const text = typeof block.thinking === "string" ? block.thinking : typeof block.text === "string" ? block.text : "";
+      if (text) output.push({ type: "thinking", text });
+      continue;
+    }
+    if (block.type === "toolCall") {
+      const callId = typeof block.id === "string" ? block.id : typeof block.toolCallId === "string" ? block.toolCallId : undefined;
+      const name = typeof block.name === "string" ? block.name : typeof block.toolName === "string" ? block.toolName : undefined;
+      if (!callId || !name) continue;
+      const args = block.arguments ?? block.args;
+      const result = results.get(callId);
+      const status = !result ? "incomplete" as const : result.isError ? "failed" as const : "succeeded" as const;
+      output.push({
+        type: "tool",
+        callId,
+        name,
+        label: formatToolTitle(name, args),
+        status,
+        ...(status === "failed" && result?.error ? { error: result.error } : {}),
+      });
+    }
+  }
+  return output;
 }
 
 function messageText(message: { content?: unknown }): string {

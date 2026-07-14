@@ -1,5 +1,6 @@
 import { type AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { SidecarToHost } from "./protocol.js";
+import { formatToolTitle, sanitizeToolError } from "./tool-title.js";
 
 /**
  * Translate a Pi agent-session event into a single protocol line, or null when
@@ -31,9 +32,19 @@ export function translateEvent(
       return null;
     }
     case "tool_execution_start":
-      return { type: "tool", requestId, conversationId, callId: event.toolCallId, name: event.toolName, phase: "start", args: event.args };
+      return { type: "tool", requestId, conversationId, callId: event.toolCallId, name: event.toolName, label: formatToolTitle(event.toolName, event.args), phase: "start" };
     case "tool_execution_end":
-      return { type: "tool", requestId, conversationId, callId: event.toolCallId, name: event.toolName, phase: "end", result: event.result, isError: event.isError };
+      const error = event.isError ? sanitizeToolError(event.result) : undefined;
+      return {
+        type: "tool",
+        requestId,
+        conversationId,
+        callId: event.toolCallId,
+        name: event.toolName,
+        phase: "end",
+        isError: event.isError,
+        ...(error ? { error } : {}),
+      };
     case "agent_end":
       return { type: "done", requestId, conversationId };
     default:

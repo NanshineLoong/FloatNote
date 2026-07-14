@@ -212,6 +212,7 @@ pub fn run() {
             commands::unwatch_dir,
             commands::save_ai_provider,
             commands::set_active_ai_provider,
+            commands::set_assistant_output_mode,
             commands::agent_send,
             commands::agent_rewind,
             commands::agent_new_session,

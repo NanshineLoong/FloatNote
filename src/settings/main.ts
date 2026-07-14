@@ -7,6 +7,7 @@ import { mountSkills } from "./skills";
 import { mountShortcutSettings } from "./shortcuts";
 import { mountTabs, settingsShellMarkup } from "./shell";
 import type { Config } from "./types";
+import { mountOutputMode } from "./output-mode";
 
 const app = document.querySelector<HTMLElement>("#app")!;
 
@@ -16,6 +17,7 @@ async function render(): Promise<void> {
     const config = await invoke<Config>("get_config");
     config.disabled_skills ??= [];
     config.ai_settings ??= createEmptyAiSettings();
+    config.assistant_output_mode = config.assistant_output_mode === "detailed" ? "detailed" : "compact";
     app.innerHTML = settingsShellMarkup();
     mountTabs(app);
     const save = () => invoke<void>("set_config", { newConfig: config });
@@ -24,6 +26,8 @@ async function render(): Promise<void> {
       saveProvider: (providerId, providerConfig) => invoke("save_ai_provider", { providerId, providerConfig }),
       setActiveProvider: (providerId) => invoke("set_active_ai_provider", { providerId }),
     });
+    mountOutputMode(app.querySelector<HTMLElement>("#output-mode-settings")!, config, (mode) =>
+      invoke("set_assistant_output_mode", { mode }));
     mountSkills(
       app.querySelector<HTMLElement>("#skills")!,
       app.querySelector<HTMLButtonElement>("#import-skill")!,

@@ -182,12 +182,17 @@
 }
 
 /* 流式光标（贴在内容末尾）。 */
-.chat-block-text.chat-streaming::after {
-  content: "▋";
+.chat-compact-cursor,
+.chat-compact-progress {
   display: inline-block;
   margin-left: 1px;
   opacity: 0.5;
   animation: caret-blink 1s step-end infinite;
+}
+.chat-compact-progress {
+  display: inline-block;
+  min-height: 1.4em;
+  color: var(--color-text-subtle);
 }
 
 .chat-block-text.chat-pending {
@@ -440,26 +445,37 @@ pre.chat-codeblock code {
 .chat-block-action {
   width: 100%;
 }
-.chat-block-action_group {
+.chat-block-process_group {
   width: 100%;
 }
-.chat-action-group details {
+.chat-process-group details {
   max-width: 380px;
   color: var(--color-text-muted);
   font-size: 12.5px;
 }
-.chat-action-group summary {
+.chat-process-group summary {
   min-height: 28px;
   cursor: pointer;
   font-weight: 500;
 }
-.chat-action-group-items {
+.chat-process-group-items {
   display: grid;
   gap: 4px;
   margin-left: 7px;
   padding-left: 12px;
   border-left: 2px solid var(--color-border);
 }
+.chat-process-group:has(.chat-action-pending, .chat-block-thinking:not(.chat-thinking-done)) summary,
+.chat-action-pending .chat-action-title,
+.chat-block-thinking:not(.chat-thinking-done) .chat-thinking-label {
+  color: transparent;
+  background: linear-gradient(90deg,var(--color-text-subtle) 10%,var(--color-text) 45%,var(--color-text-subtle) 80%);
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: process-shimmer 1.8s ease-in-out infinite;
+}
+@keyframes process-shimmer { to { background-position: -220% 0; } }
 .chat-action {
   width: 100%;
   max-width: 380px;
@@ -518,7 +534,7 @@ pre.chat-codeblock code {
   animation: chat-action-spin 0.7s linear infinite;
 }
 .chat-action-spinner.is-active {
-  display: inline-block;
+  display: none;
 }
 .chat-action-result {
   margin: 2px 0 0 21px;
@@ -585,8 +601,14 @@ pre.chat-codeblock code {
 .chat-action-rejected {
   opacity: 0.72;
 }
-.chat-action-failed {
+.chat-action-failed,
+.chat-action-incomplete {
   border-color: var(--color-danger);
+}
+.chat-action-failed .chat-action-header,
+.chat-action-incomplete .chat-action-header,
+.chat-process-group:has(.chat-action-failed, .chat-action-incomplete) > details > summary {
+  color: var(--color-danger);
 }
 .chat-action-outcome {
   margin-top: 8px;
@@ -693,6 +715,13 @@ pre.chat-codeblock code {
   .chat-block,
   .chat-wait-indicator,
   .chat-action-spinner {
+    animation: none !important;
+  }
+  .chat-process-group summary,
+  .chat-action-title,
+  .chat-thinking-label,
+  .chat-compact-progress,
+  .chat-compact-cursor {
     animation: none !important;
   }
 }

@@ -23,7 +23,7 @@ export type ChatEvent =
     }
   | { type: "session_synced"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "delta"; requestId: string; conversationId?: string; text: string }
-  | { type: "tool"; requestId: string; conversationId?: string; callId?: string; name: string; phase: "start" | "end"; args?: unknown; result?: unknown; isError?: boolean }
+  | { type: "tool"; requestId: string; conversationId?: string; callId?: string; name: string; label?: string; phase: "start" | "end"; error?: string; isError?: boolean }
   | { type: "done"; requestId: string; conversationId?: string }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }
@@ -51,12 +51,14 @@ export type ChatEvent =
   | { type: "permission_resolve"; requestId: string; decision: "allow" | "deny" }
   | { type: "permission_resolve_failed"; requestId: string; message: string }
   // thinking 折叠切换（仅内存，不落库）。
-  | { type: "thinking_toggle"; blockId: string };
+  | { type: "thinking_toggle"; blockId: string }
+  | { type: "process_toggle"; blockId: string; collapsed: boolean };
 
 export type ActionBlock = {
   id: string;
   kind: "action";
   tool: string;
+  label?: string;
   detail?: EditPreviewDetail;
   summary?: string;
   oldContent?: string;
@@ -65,19 +67,22 @@ export type ActionBlock = {
   callId?: string;
   targets: string[];
   decision: "pending" | "allowed" | "denied";
-  execution: "running" | "succeeded" | "failed";
+  execution: "running" | "succeeded" | "failed" | "incomplete";
   resultSummary?: string;
   writeMode?: WriteMode;
   requestId?: string;
   permissionError?: string;
 };
 
+export type ThinkingBlock = { id: string; kind: "thinking"; text: string; collapsed: boolean; done: boolean };
+export type ProcessItem = ThinkingBlock | ActionBlock;
+
 export type Block =
   | { id: string; kind: "wait"; label: string }
   | { id: string; kind: "text"; text: string; streaming?: boolean }
-  | { id: string; kind: "thinking"; text: string; collapsed: boolean; done: boolean }
+  | ThinkingBlock
   | ActionBlock
-  | { id: string; kind: "action_group"; category: "read"; summary: string; collapsed: boolean; items: ActionBlock[] }
+  | { id: string; kind: "process_group"; collapsed: boolean; items: ProcessItem[] }
   | { id: string; kind: "error"; text: string };
 
 export type ChatMessage =
@@ -108,6 +113,16 @@ function nextId(prefix: string): string {
 
 export function emptyChat(): ChatState {
   return { messages: [] };
+}
+
+export function processGroupSummary(items: ProcessItem[]): string {
+  const running = items.some((item) => item.kind === "thinking" ? !item.done : item.execution === "running");
+  const failed = items.filter((item) => item.kind === "action" && item.execution === "failed").length;
+  const incomplete = items.filter((item) => item.kind === "action" && item.execution === "incomplete").length;
+  if (running) return `正在处理 · ${items.length} 个步骤`;
+  if (failed) return `处理了 ${items.length} 个步骤 · ${failed} 项失败`;
+  if (incomplete) return `处理了 ${items.length} 个步骤 · ${incomplete} 项未完成`;
+  return `处理了 ${items.length} 个步骤`;
 }
 
 /** 当前是否正在流式输出（存在 streaming 的 assistant 消息）。 */
@@ -230,7 +245,7 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
       const { state: s, msg } = ensureStreaming(state);
       return updateLast(s, {
         ...msg,
-        blocks: [...msg.blocks, { id: event.blockId, kind: "thinking", text: "", collapsed: true, done: false }],
+        blocks: appendProcessItem(msg.blocks, { id: event.blockId, kind: "thinking", text: "", collapsed: true, done: false }),
       });
     }
 
@@ -239,11 +254,8 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
       const last = state.messages[state.messages.length - 1];
       if (!last || last.role !== "assistant" || !last.streaming) return state;
       const blocks = last.blocks.slice();
-      const lb = blocks[blocks.length - 1];
-      if (lb && lb.kind === "thinking" && !lb.done) {
-        blocks[blocks.length - 1] = { ...lb, text: lb.text + event.text };
-      } else {
-        blocks.push({ id: nextId("b"), kind: "thinking", text: event.text, collapsed: true, done: false });
+      if (!updateLastThinking(blocks, (thinking) => ({ ...thinking, text: thinking.text + event.text }))) {
+        return updateLast(state, { ...last, blocks: appendProcessItem(blocks, { id: nextId("b"), kind: "thinking", text: event.text, collapsed: true, done: false }) });
       }
       return updateLast(state, { ...last, blocks });
     }
@@ -253,12 +265,7 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
       const last = state.messages[state.messages.length - 1];
       if (!last || last.role !== "assistant") return state;
       const blocks = last.blocks.slice();
-      for (let i = blocks.length - 1; i >= 0; i--) {
-        if (blocks[i].kind === "thinking") {
-          blocks[i] = { ...(blocks[i] as Extract<Block, { kind: "thinking" }>), done: true };
-          break;
-        }
-      }
+      updateLastThinking(blocks, (thinking) => ({ ...thinking, done: true }));
       return updateLast(state, { ...last, blocks });
     }
 
@@ -288,18 +295,20 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
           kind: "action",
           callId: event.callId,
           tool: event.name,
-          targets: extractTargets(event.args),
+          label: event.label,
+          targets: [],
           decision: "pending",
           execution: "running",
         };
         return updateLast(s, {
           ...msg,
-          blocks: appendAction(msg.blocks, action),
+          blocks: appendProcessItem(msg.blocks, action),
         });
       }
       return updateAction(state, (b) => event.callId ? b.callId === event.callId : b.tool === event.name && b.execution === "running", (b) => ({
         ...b,
         execution: event.isError ? "failed" : "succeeded",
+        ...(event.isError && event.error ? { resultSummary: event.error } : {}),
       }));
     }
 
@@ -352,12 +361,31 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
             touched = true;
             return { ...b, collapsed: !b.collapsed };
           }
+          if (b.kind === "process_group") {
+            const items = b.items.map((item) => {
+              if (item.kind !== "thinking" || item.id !== event.blockId) return item;
+              touched = true;
+              return { ...item, collapsed: !item.collapsed };
+            });
+            return touched ? { ...b, items } : b;
+          }
           return b;
         });
         return touched ? { ...m, blocks } : m;
       });
       return { ...state, messages };
     }
+
+    case "process_toggle":
+      return {
+        ...state,
+        messages: state.messages.map((message) => message.role === "assistant"
+          ? { ...message, blocks: message.blocks.map((block) =>
+            block.kind === "process_group" && block.id === event.blockId
+              ? { ...block, collapsed: event.collapsed }
+              : block) }
+          : message),
+      };
   }
 }
 
@@ -387,9 +415,15 @@ function ensureStreaming(state: ChatState): { state: ChatState; msg: Extract<Cha
 function finalizeStreaming(state: ChatState): ChatState {
   const last = state.messages[state.messages.length - 1];
   if (last && last.role === "assistant" && last.streaming) {
-    const blocks = last.blocks.map((b) =>
-      b.kind === "text" ? { ...b, streaming: false } : b,
-    );
+    const finishItem = (item: ProcessItem): ProcessItem => item.kind === "thinking"
+      ? { ...item, done: true }
+      : item.execution === "running" ? { ...item, execution: "incomplete" } : item;
+    const blocks = last.blocks.map((block): Block => {
+      if (block.kind === "text") return { ...block, streaming: false };
+      if (block.kind === "thinking" || block.kind === "action") return finishItem(block);
+      if (block.kind === "process_group") return { ...block, items: block.items.map(finishItem) };
+      return block;
+    });
     return updateLast(state, { ...last, blocks, streaming: false });
   }
   return state;
@@ -439,11 +473,13 @@ function updateAction(
         messages[mi] = { ...message, blocks };
         return { ...state, messages };
       }
-      if (b.kind === "action_group") {
-        const itemIndex = b.items.findIndex(where);
+      if (b.kind === "process_group") {
+        const itemIndex = b.items.findIndex((item) => item.kind === "action" && where(item));
         if (itemIndex >= 0) {
           const items = b.items.slice();
-          items[itemIndex] = update(items[itemIndex]);
+          const action = items[itemIndex];
+          if (action.kind !== "action") continue;
+          items[itemIndex] = update(action);
           blocks[i] = { ...b, items };
           messages[mi] = { ...message, blocks };
           return { ...state, messages };
@@ -454,44 +490,43 @@ function updateAction(
   return state;
 }
 
-function appendAction(blocks: Block[], action: ActionBlock): Block[] {
-  if (!isReadTool(action.tool)) return [...blocks, action];
+function appendProcessItem(blocks: Block[], item: ProcessItem): Block[] {
   const out = blocks.slice();
   const last = out[out.length - 1];
-  if (last?.kind === "action_group" && last.category === "read") {
-    const items = [...last.items, action];
-    out[out.length - 1] = { ...last, items, summary: readGroupSummary(items) };
+  if (last?.kind === "process_group") {
+    out[out.length - 1] = { ...last, items: [...last.items, item] };
     return out;
   }
-  const previous = out[out.length - 2];
-  if (previous?.kind === "action" && last?.kind === "action" && isReadTool(previous.tool) && isReadTool(last.tool)) {
-    const items = [previous, last, action];
-    out.splice(out.length - 2, 2, { id: previous.id, kind: "action_group", category: "read", summary: readGroupSummary(items), collapsed: false, items });
+  if (last && isProcessItem(last)) {
+    out[out.length - 1] = { id: last.id, kind: "process_group", collapsed: true, items: [last, item] };
     return out;
   }
-  return [...out, action];
+  return [...out, item];
 }
 
-function isReadTool(tool: string): boolean {
-  return tool === "read_note";
+function isProcessItem(block: Block): block is ProcessItem {
+  return block.kind === "thinking" || block.kind === "action";
 }
 
-function readGroupSummary(items: ActionBlock[]): string {
-  const targets = new Set(items.flatMap((item) => item.targets));
-  const count = targets.size || items.length;
-  return `读取 ${count} 个文件`;
-}
-
-function extractTargets(args: unknown): string[] {
-  if (!args || typeof args !== "object") return [];
-  const value = args as Record<string, unknown>;
-  const target = value.target ?? value.file_path ?? value.path ?? value.name ?? value.tagName ?? value.title;
-  if (typeof target === "string" && target.trim()) return [target];
-  if (target && typeof target === "object") {
-    const named = (target as Record<string, unknown>).name;
-    if (typeof named === "string" && named.trim()) return [named];
+function updateLastThinking(blocks: Block[], update: (thinking: ThinkingBlock) => ThinkingBlock): boolean {
+  for (let index = blocks.length - 1; index >= 0; index--) {
+    const block = blocks[index];
+    if (block.kind === "thinking" && !block.done) {
+      blocks[index] = update(block);
+      return true;
+    }
+    if (block.kind === "process_group") {
+      for (let itemIndex = block.items.length - 1; itemIndex >= 0; itemIndex--) {
+        const item = block.items[itemIndex];
+        if (item.kind !== "thinking" || item.done) continue;
+        const items = block.items.slice();
+        items[itemIndex] = update(item);
+        blocks[index] = { ...block, items };
+        return true;
+      }
+    }
   }
-  return [];
+  return false;
 }
 
 function acceptsConversation(state: ChatState, event: { conversationId?: string }): boolean {
@@ -509,12 +544,30 @@ function displayMessageToChatMessage(message: ChatDisplayMessage): ChatMessage |
         ...(message.entryId ? { sessionEntryId: message.entryId } : {}),
       };
     case "assistant":
+      {
+        const displayBlocks = message.blocks ?? (message.text ? [{ type: "text" as const, text: message.text }] : []);
+        const blocks = displayBlocks.reduce<Block[]>((items, block) => {
+          if (block.type === "text") return [...items, { id: nextId("b"), kind: "text", text: block.text, streaming: false }];
+          if (block.type === "thinking") return appendProcessItem(items, { id: nextId("b"), kind: "thinking", text: block.text, collapsed: true, done: true });
+          return appendProcessItem(items, {
+            id: nextId("b"),
+            kind: "action",
+            callId: block.callId,
+            tool: block.name,
+            label: block.label,
+            targets: [],
+            decision: "pending",
+            execution: block.status,
+            ...(block.error ? { resultSummary: block.error } : {}),
+          });
+        }, []);
       return {
         id: nextId("m"),
         role: "assistant",
-        blocks: [{ id: nextId("b"), kind: "text", text: message.text, streaming: false }],
+        blocks,
         streaming: false,
       };
+      }
     case "error":
       return {
         id: nextId("m"),

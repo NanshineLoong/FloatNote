@@ -18,6 +18,7 @@ export function settingsShellMarkup(): string {
         <div class="settings-pane" data-pane="ai" hidden>
           <header class="settings-page-heading"><span>FloatNote</span><h1>AI</h1><p>配置模型提供商，并管理助手可使用的 Skills。</p></header>
           <section class="settings-section" aria-labelledby="providers-title"><h2 id="providers-title">AI 提供商</h2><div id="provider-settings"></div></section>
+          <section class="settings-section" aria-labelledby="output-mode-title"><h2 id="output-mode-title">输出显示</h2><div id="output-mode-settings"></div></section>
           <section class="settings-section" aria-labelledby="skills-title"><div class="settings-heading"><h2 id="skills-title">Skills</h2><button id="import-skill" class="settings-text-button" type="button">${createIcon({ phosphor: "ph ph-folder-open" }).outerHTML}<span>导入 Skill</span></button></div><div id="skills" class="skills-list"><span class="settings-muted">正在读取…</span></div><p id="skills-notice" class="settings-notice" role="status"></p></section>
         </div>
         <div class="settings-pane" data-pane="shortcuts" hidden>

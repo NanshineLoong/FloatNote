@@ -8,6 +8,7 @@ export interface Config {
   auto_popup_mode: string;
   launch_at_login: boolean;
   ai_settings: AiSettings;
+  assistant_output_mode: "compact" | "detailed";
   disabled_skills: string[];
   window_shortcuts: Record<WindowShortcutId, string>;
 }

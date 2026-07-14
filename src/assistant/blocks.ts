@@ -1,5 +1,5 @@
-import type { Block, ChatMessage } from "./render";
-import { decorateCodeBlocks, renderBlock, renderMessage, startUserMessageEdit } from "./render";
+import { processGroupSummary, type Block, type ChatMessage } from "./render";
+import { applyStreamingProjection, decorateCodeBlocks, renderBlock, renderMessage, startUserMessageEdit, type AssistantOutputMode } from "./render/view";
 import { updateActionCard } from "./action-card";
 import { fillMarkdown } from "./markdown";
 
@@ -18,12 +18,18 @@ const blockMaps = new WeakMap<HTMLElement, Map<string, HTMLElement>>();
 const STICK_TO_BOTTOM_PX = 120;
 
 /** rerender 入口：定向增量更新消息列表。 */
-export function reconcileMessages(scroll: HTMLElement, messages: ChatMessage[], map: Map<string, HTMLElement>): void {
+export function reconcileMessages(
+  scroll: HTMLElement,
+  messages: ChatMessage[],
+  map: Map<string, HTMLElement>,
+  outputMode: AssistantOutputMode = "detailed",
+): void {
   const stickToBottom = isNearBottom(scroll);
   const seen = new Set<string>();
   let cursor: HTMLElement | null = null;
 
   for (const message of messages) {
+    if (!isVisibleMessage(message, outputMode)) continue;
     seen.add(message.id);
     let node = map.get(message.id);
     if (
@@ -31,13 +37,13 @@ export function reconcileMessages(scroll: HTMLElement, messages: ChatMessage[], 
       && message.role === "user"
       && node.querySelector(".chat-user-message-text")?.textContent !== message.text
     ) {
-      const replacement = renderMessage(message);
+      const replacement = renderMessage(message, outputMode);
       node.replaceWith(replacement);
       node = replacement;
       map.set(message.id, node);
     }
     if (!node) {
-      node = renderMessage(message);
+      node = renderMessage(message, outputMode);
       map.set(message.id, node);
     }
     // 维持顺序（消息一般只 append，但 session_opened 会整体替换）。
@@ -49,7 +55,7 @@ export function reconcileMessages(scroll: HTMLElement, messages: ChatMessage[], 
     cursor = node!;
 
     if (message.role === "assistant") {
-      reconcileBlocks(node!, message);
+      reconcileBlocks(node!, message, outputMode);
     }
   }
 
@@ -66,6 +72,11 @@ export function reconcileMessages(scroll: HTMLElement, messages: ChatMessage[], 
   }
 }
 
+function isVisibleMessage(message: ChatMessage, outputMode: AssistantOutputMode): boolean {
+  if (message.role === "user" || outputMode === "detailed" || message.streaming) return true;
+  return message.blocks.some((block) => block.kind === "text" || block.kind === "error");
+}
+
 /** 打开指定用户消息的临时编辑器，编辑状态仅保留在 DOM 内。 */
 export function beginUserMessageEdit(messageEl: HTMLElement, messageId: string, text: string): void {
   startUserMessageEdit(messageEl, messageId, text);
@@ -73,7 +84,11 @@ export function beginUserMessageEdit(messageEl: HTMLElement, messageId: string, 
 
 /** 增量更新一条 assistant 消息的块序列。新建消息时 renderMessage 已构建块节点，
  *  这里先从 DOM 索引进 bmap，避免重复创建；之后按 blockId 复用/更新。 */
-function reconcileBlocks(msgEl: HTMLElement, message: Extract<ChatMessage, { role: "assistant" }>): void {
+function reconcileBlocks(
+  msgEl: HTMLElement,
+  message: Extract<ChatMessage, { role: "assistant" }>,
+  outputMode: AssistantOutputMode,
+): void {
   let bmap = blockMaps.get(msgEl);
   if (!bmap) {
     bmap = new Map();
@@ -86,7 +101,10 @@ function reconcileBlocks(msgEl: HTMLElement, message: Extract<ChatMessage, { rol
   const seen = new Set<string>();
   let cursor: HTMLElement | null = null;
 
-  for (const block of message.blocks) {
+  const visibleBlocks = outputMode === "compact"
+    ? message.blocks.filter((block) => block.kind === "text" || block.kind === "error")
+    : message.blocks;
+  for (const block of visibleBlocks) {
     seen.add(block.id);
     let node = bmap.get(block.id);
     if (!node) {
@@ -109,6 +127,7 @@ function reconcileBlocks(msgEl: HTMLElement, message: Extract<ChatMessage, { rol
       bmap.delete(id);
     }
   }
+  applyStreamingProjection(container, message, outputMode, visibleBlocks);
 }
 
 /** 把 renderMessage 已构建的块节点（按 data-block-id）索引进 bmap。 */
@@ -156,26 +175,35 @@ function updateBlockNode(node: HTMLElement, block: Block, streaming: boolean): v
     case "action":
       updateActionCard(node, block);
       break;
-    case "action_group": {
-      if (!node.classList.contains("chat-action-group")) {
+    case "process_group": {
+      if (!node.classList.contains("chat-process-group")) {
         const replacement = renderBlock(block, streaming);
         node.className = replacement.className;
         node.replaceChildren(...Array.from(replacement.childNodes));
         break;
       }
       const summary = node.querySelector<HTMLElement>("summary");
-      if (summary) summary.textContent = block.summary;
-      const items = node.querySelector<HTMLElement>(".chat-action-group-items");
+      if (summary) summary.textContent = processGroupSummary(block.items);
+      const details = node.querySelector<HTMLDetailsElement>("details");
+      if (details) details.open = !block.collapsed;
+      const items = node.querySelector<HTMLElement>(".chat-process-group-items");
       if (!items) break;
       const existing = new Map<string, HTMLElement>();
       for (const child of Array.from(items.children) as HTMLElement[]) {
         if (child.dataset.blockId) existing.set(child.dataset.blockId, child);
       }
+      let cursor: HTMLElement | null = null;
+      const seen = new Set<string>();
       for (const item of block.items) {
-        const child = existing.get(item.id);
-        if (child) updateActionCard(child, item);
-        else items.appendChild(renderBlock(item, streaming));
+        seen.add(item.id);
+        let child = existing.get(item.id);
+        if (child) updateBlockNode(child, item, streaming);
+        else child = renderBlock(item, streaming);
+        const expected: ChildNode | null = cursor ? cursor.nextSibling : items.firstChild;
+        if (expected !== child) cursor ? cursor.after(child) : items.prepend(child);
+        cursor = child;
       }
+      for (const [id, child] of existing) if (!seen.has(id)) child.remove();
       break;
     }
     case "error":

@@ -18,6 +18,9 @@ Entry: `src/main.ts`.
 - `protocol.ts` — `HostToSidecar`/`SidecarToHost` union types + line
   codec (`encodeLine`/`createLineDecoder`). `title` variant is declared but
   not emitted by the sidecar (kept intentionally for now).
+- `tool-title.ts` — pure safe tool-title and short-error formatting shared by
+  live events and session restoration; raw arguments/results never cross the
+  display protocol.
 - `note-tools.ts` — the note/project tools (`read_note`/`list_notes`/`list_tags`/
   `edit_note`/`write_note`/`create_note`/`set_tag`/`tag_create`/`tag_update`/
   `tag_delete`/`read_skill`). Tag tools

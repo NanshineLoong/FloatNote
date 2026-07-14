@@ -150,11 +150,11 @@ pub enum SidecarToHost {
         conversation_id: String,
         call_id: String,
         name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
         phase: String,
         #[serde(skip_serializing_if = "Option::is_none")]
-        args: Option<serde_json::Value>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        result: Option<serde_json::Value>,
+        error: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         is_error: Option<bool>,
     },
@@ -250,13 +250,7 @@ pub enum ChatDisplayMessage {
         entry_id: Option<String>,
     },
     Assistant {
-        text: String,
-        timestamp: u64,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        entry_id: Option<String>,
-    },
-    Tool {
-        label: String,
+        blocks: Vec<ChatDisplayBlock>,
         timestamp: u64,
         #[serde(skip_serializing_if = "Option::is_none")]
         entry_id: Option<String>,
@@ -267,6 +261,37 @@ pub enum ChatDisplayMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         entry_id: Option<String>,
     },
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(
+    tag = "type",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum ChatDisplayBlock {
+    Text {
+        text: String,
+    },
+    Thinking {
+        text: String,
+    },
+    Tool {
+        call_id: String,
+        name: String,
+        label: String,
+        status: ToolDisplayStatus,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolDisplayStatus {
+    Succeeded,
+    Failed,
+    Incomplete,
 }
 
 /// 当前活动笔记：由笔记窗 `set_active_note` 发布、`agent_send` 也会更新，
@@ -364,6 +389,35 @@ pub struct NoteUpdated {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn structured_assistant_history_round_trips() {
+        let message = ChatDisplayMessage::Assistant {
+            blocks: vec![
+                ChatDisplayBlock::Thinking {
+                    text: "分析".into(),
+                },
+                ChatDisplayBlock::Tool {
+                    call_id: "c1".into(),
+                    name: "read_note".into(),
+                    label: "读取 行动清单".into(),
+                    status: ToolDisplayStatus::Succeeded,
+                    error: None,
+                },
+                ChatDisplayBlock::Text {
+                    text: "结论".into(),
+                },
+            ],
+            timestamp: 1,
+            entry_id: Some("a1".into()),
+        };
+        let json = serde_json::to_string(&message).unwrap();
+        assert!(!json.contains("result"));
+        assert_eq!(
+            serde_json::from_str::<ChatDisplayMessage>(&json).unwrap(),
+            message
+        );
+    }
 
     #[test]
     fn prompt_serializes_to_camel_case_json() {

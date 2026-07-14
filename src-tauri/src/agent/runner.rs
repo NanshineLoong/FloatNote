@@ -399,26 +399,48 @@ fn sync_session_history(
                 timestamp: *timestamp,
             }),
             super::protocol::ChatDisplayMessage::Assistant {
-                text, timestamp, ..
-            } => Some(crate::chat_history::ChatHistoryMessage {
-                role: "assistant".into(),
-                text: text.clone(),
-                timestamp: *timestamp,
-            }),
+                blocks, timestamp, ..
+            } => {
+                let text = blocks
+                    .iter()
+                    .filter_map(|block| match block {
+                        super::protocol::ChatDisplayBlock::Text { text } => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect::<String>();
+                (!text.is_empty()).then_some(crate::chat_history::ChatHistoryMessage {
+                    role: "assistant".into(),
+                    text,
+                    timestamp: *timestamp,
+                })
+            }
             _ => None,
         })
         .collect();
     let tools = messages
         .iter()
-        .filter_map(|message| match message {
-            super::protocol::ChatDisplayMessage::Tool {
-                label, timestamp, ..
-            } => Some(crate::chat_history::ChatToolSummary {
-                name: label.clone(),
-                status: "completed".into(),
-                timestamp: *timestamp,
-            }),
-            _ => None,
+        .flat_map(|message| match message {
+            super::protocol::ChatDisplayMessage::Assistant {
+                blocks, timestamp, ..
+            } => blocks
+                .iter()
+                .filter_map(|block| match block {
+                    super::protocol::ChatDisplayBlock::Tool { label, status, .. } => {
+                        Some(crate::chat_history::ChatToolSummary {
+                            name: label.clone(),
+                            status: match status {
+                                super::protocol::ToolDisplayStatus::Succeeded => "completed",
+                                super::protocol::ToolDisplayStatus::Failed => "failed",
+                                super::protocol::ToolDisplayStatus::Incomplete => "incomplete",
+                            }
+                            .into(),
+                            timestamp: *timestamp,
+                        })
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
         })
         .collect();
     let _ = store.update_session_history(conversation_id, model, saved_messages, tools);

@@ -24,6 +24,7 @@ import {
 import { type NoteEntry, type ProjectEntry, listNotes, resolveDocuments, resolveProjects } from "./notes-state";
 import { NoteSession } from "./note-session";
 import { parentDir } from "./recent-projects";
+import { getAssistantOutputMode, onAssistantOutputModeChanged } from "../platform/assistant-output";
 
 export function chatScopeForSession(session: NoteSession): ChatScope | null {
   if (session.mode === "document") {
@@ -85,6 +86,8 @@ export function createAssistantController(deps: AssistantControllerDeps): Assist
     subscribe: onAgentEvent,
     cancel: (requestId) => { void agentCancel(requestId); },
     listSkills: agentListSkills,
+    getOutputMode: getAssistantOutputMode,
+    subscribeOutputMode: onAssistantOutputModeChanged,
     listFiles: async (scope) => {
       if (scope.scopeType === "project") {
         const notes = await listNotes(scope.scopePath);

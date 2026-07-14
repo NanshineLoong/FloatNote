@@ -58,10 +58,10 @@ describe("translateEvent", () => {
   it("maps tool execution start/end to tool lines", () => {
     expect(
       translateEvent("r1", "c1", ev({ type: "tool_execution_start", toolCallId: "c", toolName: "write_note", args: { target: "piece.md" } })),
-    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write_note", phase: "start", args: { target: "piece.md" } });
+    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write_note", label: "编辑 piece.md", phase: "start" });
     expect(
       translateEvent("r1", "c1", ev({ type: "tool_execution_end", toolCallId: "c", toolName: "write_note", result: {}, isError: false })),
-    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write_note", phase: "end", result: {}, isError: false });
+    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write_note", phase: "end", isError: false });
   });
 
   it("maps agent_end to a done line", () => {
@@ -74,17 +74,65 @@ describe("translateEvent", () => {
 });
 
 describe("displayMessagesFromSession", () => {
-  it("does not restore tool calls as permanent conversation history", () => {
+  it("restores ordered thinking, text and matched tool calls without result bodies", () => {
     const session = {
       sessionManager: {
         getBranch: () => [
-          { type: "message", timestamp: "2026-07-12T00:00:00.000Z", message: { role: "user", content: "问题" } },
-          { type: "message", timestamp: "2026-07-12T00:00:01.000Z", message: { role: "tool", content: "写入成功" } },
-          { type: "message", timestamp: "2026-07-12T00:00:02.000Z", message: { role: "assistant", content: "完成" } },
+          { id: "u1", type: "message", timestamp: "2026-07-12T00:00:00.000Z", message: { role: "user", content: "问题" } },
+          { id: "a1", type: "message", timestamp: "2026-07-12T00:00:01.000Z", message: { role: "assistant", content: [
+            { type: "thinking", thinking: "先读取" },
+            { type: "toolCall", id: "call-1", name: "read_note", arguments: { target: { kind: "tasks" }, content: "不得泄露" } },
+            { type: "text", text: "完成" },
+            { type: "toolCall", id: "call-2", name: "web_fetch", arguments: { url: "https://example.com/a" } },
+          ] } },
+          { id: "tr1", type: "message", timestamp: "2026-07-12T00:00:02.000Z", message: { role: "toolResult", toolCallId: "call-1", content: "大段工具返回", isError: false } },
+          { id: "tr2", type: "message", timestamp: "2026-07-12T00:00:03.000Z", message: { role: "toolResult", toolCallId: "call-2", content: "network denied\nresponse body", isError: true } },
         ],
       },
     } as SessionLike;
-    expect(displayMessagesFromSession(session).map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(displayMessagesFromSession(session)).toEqual([
+      { role: "user", text: "问题", timestamp: expect.any(Number), entryId: "u1" },
+      { role: "assistant", timestamp: expect.any(Number), entryId: "a1", blocks: [
+        { type: "thinking", text: "先读取" },
+        { type: "tool", callId: "call-1", name: "read_note", label: "读取 行动清单", status: "succeeded" },
+        { type: "text", text: "完成" },
+        { type: "tool", callId: "call-2", name: "web_fetch", label: "读取网页 example.com", status: "failed", error: "network denied" },
+      ] },
+    ]);
+    expect(JSON.stringify(displayMessagesFromSession(session))).not.toContain("大段工具返回");
+    expect(JSON.stringify(displayMessagesFromSession(session))).not.toContain("不得泄露");
+  });
+
+  it("marks a tool without a result as incomplete", () => {
+    const session = { sessionManager: { getBranch: () => [
+      { id: "a1", type: "message", timestamp: "2026-07-12T00:00:01.000Z", message: { role: "assistant", content: [
+        { type: "toolCall", id: "call-1", name: "read_note", arguments: {} },
+      ] } },
+    ] } } as SessionLike;
+    expect(displayMessagesFromSession(session)).toEqual([
+      { role: "assistant", timestamp: expect.any(Number), entryId: "a1", blocks: [
+        { type: "tool", callId: "call-1", name: "read_note", label: "读取当前文档", status: "incomplete" },
+      ] },
+    ]);
+  });
+
+  it("merges assistant continuation entries around tool results into one ordered turn", () => {
+    const session = { sessionManager: { getBranch: () => [
+      { id: "u1", type: "message", timestamp: "2026-07-12T00:00:00.000Z", message: { role: "user", content: "问题" } },
+      { id: "a1", type: "message", timestamp: "2026-07-12T00:00:01.000Z", message: { role: "assistant", content: [
+        { type: "thinking", thinking: "先看" },
+        { type: "toolCall", id: "c1", name: "read_note", arguments: {} },
+      ] } },
+      { id: "tr1", type: "message", timestamp: "2026-07-12T00:00:02.000Z", message: { role: "toolResult", toolCallId: "c1", content: [{ type: "text", text: "secret" }], isError: false } },
+      { id: "a2", type: "message", timestamp: "2026-07-12T00:00:03.000Z", message: { role: "assistant", content: [{ type: "text", text: "结论" }] } },
+    ] } } as SessionLike;
+    const messages = displayMessagesFromSession(session);
+    expect(messages).toHaveLength(2);
+    expect(messages[1]).toMatchObject({ role: "assistant", entryId: "a1", blocks: [
+      { type: "thinking", text: "先看" },
+      { type: "tool", callId: "c1", status: "succeeded" },
+      { type: "text", text: "结论" },
+    ] });
   });
 });
 

@@ -138,7 +138,8 @@ describe("split view CSS placement", () => {
   it("renders streaming with a caret (::after) instead of cancelling entrance animation", () => {
     // 新机制：增量渲染复用块节点（见 blocks.test.ts），不再用 `animation: none`
     // 抑制流式气泡的进场动画；流式指示改为 caret ::after。
-    expect(assistantCss).toMatch(/\.chat-block-text\.chat-streaming::after\s*{[^}]*content:/s);
+    expect(assistantCss).toMatch(/\.chat-compact-cursor,[^{]*\.chat-compact-progress\s*{/s);
+    expect(assistantCss).not.toMatch(/\.chat-block-text\.chat-streaming::after\s*{/s);
     expect(assistantCss).not.toMatch(/\.chat-streaming\s*\{[^}]*animation:\s*none/s);
   });
 });

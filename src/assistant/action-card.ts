@@ -138,10 +138,11 @@ export function updateActionCard(el: HTMLElement, block: Extract<Block, { kind: 
   el.classList.toggle("chat-action-rejected", block.decision === "denied");
   el.classList.toggle("chat-action-done", block.execution === "succeeded");
   el.classList.toggle("chat-action-failed", block.execution === "failed");
+  el.classList.toggle("chat-action-incomplete", block.execution === "incomplete");
 
   const titleEl = el.querySelector<HTMLElement>(".chat-action-title");
   const target = block.targets[0];
-  if (titleEl) titleEl.textContent = target ? `${titleFor(block.tool)} ${target}` : titleFor(block.tool);
+  if (titleEl) titleEl.textContent = block.label ?? (target ? `${titleFor(block.tool)} ${target}` : titleFor(block.tool));
 
   // 只读紧凑行：只切 done + spinner 可见性（无 summary/body/footer，无 ✓ 对勾）。
   if (el.classList.contains("chat-action-readonly")) {
@@ -153,12 +154,14 @@ export function updateActionCard(el: HTMLElement, block: Extract<Block, { kind: 
       result.className = "chat-action-result";
       el.appendChild(result);
     }
-    result.textContent = block.execution === "failed"
+    result.textContent = block.execution === "incomplete"
+      ? "未完成"
+      : block.execution === "failed"
       ? `执行失败${block.resultSummary ? `：${block.resultSummary}` : ""}`
       : block.execution === "succeeded" && block.resultSummary
         ? block.resultSummary
         : "";
-    result.classList.toggle("is-error", block.execution === "failed");
+    result.classList.toggle("is-error", block.execution === "failed" || block.execution === "incomplete");
     result.classList.toggle("is-empty", !result.textContent);
     return;
   }

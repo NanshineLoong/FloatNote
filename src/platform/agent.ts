@@ -6,7 +6,7 @@ export type AgentEvent =
   | { type: "session_opened"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "session_synced"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "delta"; requestId: string; conversationId: string; text: string }
-  | { type: "tool"; requestId: string; conversationId: string; callId: string; name: string; phase: "start" | "end"; args?: unknown; result?: unknown; isError?: boolean }
+  | { type: "tool"; requestId: string; conversationId: string; callId: string; name: string; label?: string; phase: "start" | "end"; error?: string; isError?: boolean }
   | { type: "done"; requestId: string; conversationId: string }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }
@@ -16,8 +16,13 @@ export type AgentEvent =
 
 export type ChatDisplayMessage =
   | { role: "user"; text: string; timestamp: number; entryId?: string }
-  | { role: "assistant"; text: string; timestamp: number; entryId?: string }
+  | { role: "assistant"; blocks?: ChatDisplayBlock[]; text?: string; timestamp: number; entryId?: string }
   | { role: "error"; text: string; timestamp: number; entryId?: string };
+
+export type ChatDisplayBlock =
+  | { type: "text"; text: string }
+  | { type: "thinking"; text: string }
+  | { type: "tool"; callId: string; name: string; label: string; status: "succeeded" | "failed" | "incomplete"; error?: string };
 
 export interface NoteUpdated {
   noteId: string;

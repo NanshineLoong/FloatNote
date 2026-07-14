@@ -11,7 +11,8 @@ export {
   type ChatState,
   emptyChat,
   isChatStreaming,
+  processGroupSummary,
   reduceEvents,
 } from "./state";
 
-export { decorateCodeBlocks, renderMessage, renderBlock, startUserMessageEdit } from "./view";
+export { decorateCodeBlocks, renderMessage, renderBlock, startUserMessageEdit, type AssistantOutputMode } from "./view";

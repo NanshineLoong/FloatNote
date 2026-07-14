@@ -1,4 +1,4 @@
-import type { Block, ChatMessage } from "./state";
+import { processGroupSummary, type Block, type ChatMessage } from "./state";
 import { buildActionCard } from "../action-card";
 import { fillMarkdown } from "../markdown";
 import { createIcon } from "../../shared/ui/icon";
@@ -125,7 +125,9 @@ export function decorateCodeBlocks(root: HTMLElement): void {
   }
 }
 
-export function renderMessage(message: ChatMessage): HTMLElement {
+export type AssistantOutputMode = "compact" | "detailed";
+
+export function renderMessage(message: ChatMessage, outputMode: AssistantOutputMode = "detailed"): HTMLElement {
   const el = document.createElement("div");
   el.className = `chat-msg chat-${message.role}`;
   el.dataset.messageId = message.id;
@@ -157,11 +159,45 @@ export function renderMessage(message: ChatMessage): HTMLElement {
   // assistant：纵向平级块容器。
   const stack = document.createElement("div");
   stack.className = "chat-blocks";
-  for (const block of message.blocks) {
+  const visibleBlocks = outputMode === "compact"
+    ? message.blocks.filter((block) => block.kind === "text" || block.kind === "error")
+    : message.blocks;
+  for (const block of visibleBlocks) {
     stack.appendChild(renderBlock(block, message.streaming));
   }
+  applyStreamingProjection(stack, message, outputMode, visibleBlocks);
   el.appendChild(stack);
   return el;
+}
+
+export function applyStreamingProjection(
+  stack: HTMLElement,
+  message: Extract<ChatMessage, { role: "assistant" }>,
+  outputMode: AssistantOutputMode,
+  visibleBlocks: Block[],
+): void {
+  stack.querySelector(".chat-compact-progress")?.remove();
+  stack.querySelectorAll(".chat-compact-cursor").forEach((node) => node.remove());
+  if (outputMode !== "compact" || !message.streaming) return;
+  const lastText = [...visibleBlocks].reverse().find((block) => block.kind === "text");
+  if (lastText) {
+    const block = Array.from(stack.children)
+      .find((node) => (node as HTMLElement).dataset.blockId === lastText.id) as HTMLElement | undefined;
+    const content = block?.querySelector<HTMLElement>(".chat-text-content");
+    if (!content) return;
+    const cursor = document.createElement("span");
+    cursor.className = "chat-compact-cursor";
+    cursor.setAttribute("aria-hidden", "true");
+    cursor.textContent = "▋";
+    (content.lastElementChild ?? content).appendChild(cursor);
+    return;
+  }
+  const progress = document.createElement("span");
+  progress.className = "chat-compact-progress";
+  progress.setAttribute("role", "status");
+  progress.setAttribute("aria-label", "助手正在处理");
+  progress.textContent = "▋";
+  stack.appendChild(progress);
 }
 
 /** 渲染单个块节点（可复用：reconcile 按需更新而非重建）。 */
@@ -216,15 +252,18 @@ export function renderBlock(block: Block, streaming: boolean): HTMLElement {
     case "action":
       // 动作卡由 action-card 模块构建（header/body/footer + 状态 class）。
       return buildActionCard(block);
-    case "action_group": {
-      el.classList.add("chat-action-group");
+    case "process_group": {
+      el.classList.add("chat-process-group");
       const details = document.createElement("details");
-      details.open = !block.collapsed && block.items.some((item) => item.execution === "running");
+      details.open = !block.collapsed;
+      details.addEventListener("toggle", () => {
+        el.dispatchEvent(new CustomEvent("chat:toggle-process", { bubbles: true, detail: { blockId: block.id, collapsed: !details.open } }));
+      });
       const summary = document.createElement("summary");
-      summary.textContent = block.summary;
+      summary.textContent = processGroupSummary(block.items);
       const items = document.createElement("div");
-      items.className = "chat-action-group-items";
-      for (const item of block.items) items.appendChild(buildActionCard(item));
+      items.className = "chat-process-group-items";
+      for (const item of block.items) items.appendChild(renderBlock(item, streaming));
       details.append(summary, items);
       el.appendChild(details);
       break;
