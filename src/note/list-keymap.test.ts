@@ -46,6 +46,16 @@ describe("list keymap indentation", () => {
 
     expect(handleTab(view)).toBe(true);
     expect(view.state.doc.toString()).toBe("    ");
+    expect(view.state.selection.main).toMatchObject({ anchor: 4, head: 4 });
+    view.destroy();
+  });
+
+  it("keeps the caret after indentation on a prose line", () => {
+    const view = mount("text", 0);
+
+    expect(handleTab(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe("    text");
+    expect(view.state.selection.main).toMatchObject({ anchor: 4, head: 4 });
     view.destroy();
   });
 

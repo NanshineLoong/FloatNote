@@ -58,13 +58,15 @@ function dispatchIndent(view: EditorView, direction: "indent" | "outdent"): bool
     }
   }
   if (changes.length === 0) return false;
-  const indentedState = view.state.update({ changes }).state;
+  const indentTransaction = view.state.update({ changes });
+  const indentedState = indentTransaction.state;
+  const selection = view.state.selection.map(indentTransaction.changes, 1);
   const normalization = orderedListMarkerChanges(indentedState.doc.toString());
   if (normalization.length === 0) {
-    view.dispatch({ changes, scrollIntoView: true });
+    view.dispatch({ changes, selection, scrollIntoView: true });
   } else {
     view.dispatch(
-      { changes, scrollIntoView: true },
+      { changes, selection, scrollIntoView: true },
       { changes: normalization, sequential: true },
     );
   }
