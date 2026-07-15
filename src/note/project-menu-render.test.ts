@@ -3,6 +3,29 @@ import { describe, expect, it, vi } from "vitest";
 import { createProjectMenuRenderer } from "./project-menu-render";
 
 describe("project menu renderer", () => {
+  it("does not submit a rename while an IME confirms text", async () => {
+    const closeMenu = vi.fn();
+    const renderer = createProjectMenuRenderer({
+      closeMenu,
+      closeSubmenu: vi.fn(),
+      openSubmenu: vi.fn(),
+      isSubmenuOpenFor: () => false,
+    });
+    const host = document.createElement("div");
+    document.body.append(host);
+    const commit = vi.fn().mockResolvedValue(undefined);
+    renderer.promptRename(host, "旧名称", commit);
+    const input = document.querySelector<HTMLInputElement>(".switch-new-input")!;
+    input.value = "新名称";
+
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, isComposing: true }));
+    expect(commit).not.toHaveBeenCalled();
+    expect(closeMenu).not.toHaveBeenCalled();
+
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(commit).toHaveBeenCalledWith("新名称"));
+  });
+
   it("opens and closes the section add submenu from its trigger", () => {
     const openSubmenu = vi.fn();
     const closeSubmenu = vi.fn();

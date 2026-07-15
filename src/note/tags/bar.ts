@@ -1,5 +1,6 @@
 import type { EditorView } from "@codemirror/view";
 import { freeColors, type TagDef } from "@floatnote/note-logic";
+import { isImeComposing } from "../../shared/keyboard";
 import { showToast } from "../../shared/toast";
 import { createMenu } from "../../shared/ui/menu";
 import { inboxMetadata, replaceInboxMetadata } from "../annotations/state";
@@ -133,6 +134,7 @@ function openContextMenu(
     }) });
   };
   input.onkeydown = (event) => {
+    if (isImeComposing(event)) return;
     if (event.key === "Enter") { event.preventDefault(); commitName(); close(); }
     if (event.key === "Escape") close();
   };

@@ -9,6 +9,7 @@ import {
   toggleTask,
   type TaskLine,
 } from "./tasks";
+import { isImeComposing } from "../shared/keyboard";
 import { createIcon } from "../shared/ui/icon";
 
 export interface TasksPanelHost {
@@ -150,6 +151,7 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
           draw();
         };
         editInput.addEventListener("keydown", (e) => {
+          if (isImeComposing(e)) return;
           if (e.key === "Enter") {
             e.preventDefault();
             commit();

@@ -3,6 +3,7 @@ import type { EditorView } from "@codemirror/view";
 import { parseImage, writeAttrs, type ImageAlign, type ImageAttrs } from "./image-attrs";
 import { computeResize, HANDLE_SPECS, type HandleSpec } from "./image-resize";
 import { imageSourceField, SetImageSourceEffect } from "./image-interaction";
+import { isImeComposing } from "../shared/keyboard";
 import { createIcon } from "../shared/ui/icon";
 
 interface Active {
@@ -227,6 +228,7 @@ function buildCaptionInput(caption: string): HTMLInputElement {
   };
   input.onkeydown = (e) => {
     e.stopPropagation();
+    if (isImeComposing(e)) return;
     if (e.key === "Enter") {
       input.blur();
     } else if (e.key === "Escape") {

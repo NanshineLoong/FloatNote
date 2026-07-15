@@ -13,6 +13,39 @@ beforeEach(() => {
 });
 
 describe("version menu", () => {
+  it("does not commit a title rename while an IME confirms text", () => {
+    const topbarMount = document.createElement("div");
+    const titleMount = document.createElement("div");
+    const previewMount = document.createElement("div");
+    document.body.append(topbarMount, titleMount, previewMount);
+    const focusBody = vi.fn();
+    createPieceHeader({
+      topbarMount,
+      titleMount,
+      previewMount,
+      host: {
+        dir: () => "/project",
+        current: () => ({ name: "piece", path: "/project/piece.md" }),
+        open: vi.fn(),
+        loadVersions: async () => [],
+        snapshot: vi.fn(),
+        preview: vi.fn().mockResolvedValue(false),
+        exitPreview: vi.fn(),
+        restore: vi.fn(),
+        renameVersion: vi.fn(),
+        deleteVersion: vi.fn(),
+        focusBody,
+      },
+    });
+
+    const title = titleMount.querySelector<HTMLTextAreaElement>(".piece-title-input")!;
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, isComposing: true }));
+    expect(focusBody).not.toHaveBeenCalled();
+
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(focusBody).toHaveBeenCalledOnce();
+  });
+
   it("renders two-line version rows and exposes row actions from a kebab menu", async () => {
     const topbarMount = document.createElement("div");
     const titleMount = document.createElement("div");

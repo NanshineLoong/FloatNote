@@ -8,6 +8,7 @@ import {
   type NoteEntry,
 } from "./notes-state";
 import { formatVersionEntry, type VersionEntry } from "./versions";
+import { isImeComposing } from "../shared/keyboard";
 import { createIcon } from "../shared/ui/icon";
 import { createMenu, type MenuHandle } from "../shared/ui/menu";
 import { showToast } from "../shared/toast";
@@ -139,6 +140,7 @@ export function createPieceHeader(args: {
   const ro = new ResizeObserver(() => fit());
   ro.observe(title);
   title.addEventListener("keydown", (e) => {
+    if (isImeComposing(e)) return;
     if (e.key === "Enter") {
       // 回车=提交重命名并跳到正文；Shift+Enter 同样不换行（标题永远单行 value）。
       e.preventDefault();
@@ -364,6 +366,7 @@ export function createPieceHeader(args: {
           };
           input.onblur = () => void commit();
           input.onkeydown = (keyEvent) => {
+            if (isImeComposing(keyEvent)) return;
             if (keyEvent.key === "Enter") {
               keyEvent.preventDefault();
               void commit();

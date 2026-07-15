@@ -8,6 +8,7 @@ import {
   type TextAnnotation,
   type TextRange,
 } from "@floatnote/note-logic";
+import { isImeComposing } from "../../shared/keyboard";
 import { showToast } from "../../shared/toast";
 import { createMenu } from "../../shared/ui/menu";
 import { PALETTE } from "../tags/palette";
@@ -127,6 +128,7 @@ function newTagControls(view: EditorView, ranges: TextRange[], close: () => void
     swatches.appendChild(button);
   }
   input.onkeydown = (event) => {
+    if (isImeComposing(event)) return;
     if (event.key === "Enter") { event.preventDefault(); commit(); }
   };
   const create = document.createElement("button");

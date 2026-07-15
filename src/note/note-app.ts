@@ -15,6 +15,7 @@ import {
   setEditorReadOnly,
 } from "./editor";
 import { mountTagBar } from "./tags/bar";
+import { isImeComposing } from "../shared/keyboard";
 import { showToast } from "../shared/toast";
 import { createIcon } from "../shared/ui/icon";
 import { createMenu, type MenuHandle } from "../shared/ui/menu";
@@ -1243,6 +1244,7 @@ function promptNewProjectName(host: HTMLElement, parent: string) {
   }
 
   input.addEventListener("keydown", (e) => {
+    if (isImeComposing(e)) return;
     if (e.key === "Enter") { e.preventDefault(); void confirm(); }
     if (e.key === "Escape") { e.preventDefault(); closeMenu(); }
   });

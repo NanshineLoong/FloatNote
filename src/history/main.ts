@@ -6,6 +6,7 @@ import { formatHistoryTime } from "../platform/chat-history-format";
 import { filterAndGroupHistory, scopeFilterKey } from "./history-model";
 import { createClearAllHistoryItem, createHistoryMoreButton } from "./history-ui";
 import { createButton } from "../shared/ui/button";
+import { isImeComposing } from "../shared/keyboard";
 import { createMenu } from "../shared/ui/menu";
 import { initializeAppearance } from "../shared/appearance";
 
@@ -110,7 +111,7 @@ function renameItem(conversation: ChatConversation, row: HTMLElement): HTMLButto
   item.addEventListener("click", () => {
     const input = document.createElement("input"); input.className = "fn-control history-rename"; input.value = conversation.title;
     const save = async () => { const title = input.value.trim(); if (!title) return; const updated = await chatUpdateTitle(conversation.id, title, "manual"); if (updated) { conversations = conversations.map((entry) => entry.id === updated.id ? updated : entry); void emit("chat://history-changed"); render(); } };
-    input.addEventListener("keydown", (event) => { if (event.key === "Enter") void save(); if (event.key === "Escape") render(); });
+    input.addEventListener("keydown", (event) => { if (isImeComposing(event)) return; if (event.key === "Enter") void save(); if (event.key === "Escape") render(); });
     row.querySelector(".history-row-main")!.replaceWith(input); input.focus(); input.select();
   }); return item;
 }

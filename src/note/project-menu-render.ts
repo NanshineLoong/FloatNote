@@ -1,3 +1,4 @@
+import { isImeComposing } from "../shared/keyboard";
 import { createIcon } from "../shared/ui/icon";
 
 export interface RowAction {
@@ -167,6 +168,7 @@ export function createProjectMenuRenderer(deps: ProjectMenuRendererDeps) {
     }
 
     input.addEventListener("keydown", (event) => {
+      if (isImeComposing(event)) return;
       if (event.key === "Enter") {
         event.preventDefault();
         void confirm();
