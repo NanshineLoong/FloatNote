@@ -1246,7 +1246,7 @@ function promptNewProjectName(host: HTMLElement, parent: string) {
   input.addEventListener("keydown", (e) => {
     if (isImeComposing(e)) return;
     if (e.key === "Enter") { e.preventDefault(); void confirm(); }
-    if (e.key === "Escape") { e.preventDefault(); closeMenu(); }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeMenu(); }
   });
 }
 

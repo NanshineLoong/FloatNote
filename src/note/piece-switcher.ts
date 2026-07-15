@@ -149,6 +149,7 @@ export function createPieceHeader(args: {
     }
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       const cur = host.current();
       if (cur) setLabel(cur.name);
       title.blur();
@@ -372,6 +373,7 @@ export function createPieceHeader(args: {
               void commit();
             } else if (keyEvent.key === "Escape") {
               keyEvent.preventDefault();
+              keyEvent.stopPropagation();
               input.replaceWith(main);
             }
           };

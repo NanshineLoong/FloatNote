@@ -121,6 +121,8 @@ function runEsc(act: EscAction, a: ShortcutActions): void {
 
 export function installShortcuts(actions: ShortcutActions, bindings: Bindings): () => void {
   const handler = (e: KeyboardEvent) => {
+    // 内层控件（输入框、菜单、对话框）消费快捷键后，不能再落到窗口级动作。
+    if (e.defaultPrevented) return;
     if (e.key === "Escape") {
       const act = resolveEsc({
         permissionBubbleOpen: actions.isPermissionBubbleOpen(),

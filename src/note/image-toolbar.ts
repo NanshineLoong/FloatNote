@@ -358,8 +358,9 @@ export function attachImageToolbar(view: EditorView): () => void {
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
       if (view.state.field(imageSourceField, false)) {
-        e.preventDefault();
         view.dispatch({ effects: SetImageSourceEffect.of(null) });
       }
       closeToolbar();

@@ -136,7 +136,11 @@ function openContextMenu(
   input.onkeydown = (event) => {
     if (isImeComposing(event)) return;
     if (event.key === "Enter") { event.preventDefault(); commitName(); close(); }
-    if (event.key === "Escape") close();
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    }
   };
   input.onblur = commitName;
   const remove = document.createElement("button");

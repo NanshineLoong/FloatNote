@@ -175,6 +175,7 @@ export function createProjectMenuRenderer(deps: ProjectMenuRendererDeps) {
       }
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         deps.closeMenu();
       }
     });

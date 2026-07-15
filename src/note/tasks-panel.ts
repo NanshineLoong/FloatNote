@@ -157,6 +157,7 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
             commit();
           } else if (e.key === "Escape") {
             e.preventDefault();
+            e.stopPropagation();
             cancel();
           }
         });
@@ -221,6 +222,9 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
     if (value) {
       input.value = "";
       input.focus();
+    } else if (document.activeElement === input) {
+      // 隐藏的输入框不能继续截获下一次 ESC；焦点回到文档后才轮到菜单处理。
+      input.blur();
     }
     syncLayout();
   }
@@ -248,6 +252,7 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
   input.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       setAdding(false);
     }
   });
@@ -316,7 +321,15 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
     if (menuEl && !menuEl.contains(e.target as Node)) closeMenu();
   }
   function onMenuEsc(e: KeyboardEvent) {
-    if (e.key === "Escape") closeMenu();
+    if (e.key !== "Escape") return;
+    // 编辑输入是菜单之上的一层：先让它自己的 ESC 取消编辑，下一次 ESC 才关闭菜单。
+    const target = e.target as Node | null;
+    if (target && (form.contains(target) || target instanceof HTMLElement && target.matches(".tasks-edit-input"))) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    closeMenu();
   }
 
   // ── 拖拽排序（阈值拖拽，整行为手柄） ───────────────────────
