@@ -33,11 +33,16 @@ export function placePopup(
   width: number,
   height: number,
   bounds: Rect,
-  gap = 10,
+  options: {
+    anchorOffsetX?: number;
+    gap?: number;
+    surfaceInset?: number;
+  } = {},
 ): { x: number; y: number } {
-  const right = anchorX + gap;
-  const below = anchorY + gap;
-  const x = right + width <= bounds.maxX ? right : anchorX - width - gap;
-  const y = below + height <= bounds.maxY ? below : anchorY - height - gap;
+  const { anchorOffsetX = -10, gap = 5, surfaceInset = 0 } = options;
+  const x = anchorX - anchorOffsetX;
+  const below = anchorY + gap - surfaceInset;
+  const above = anchorY - height - gap + surfaceInset;
+  const y = below + height <= bounds.maxY ? below : above;
   return clampToScreen(x, y, width, height, bounds);
 }

@@ -38,16 +38,16 @@ describe("clampToScreen", () => {
 describe("placePopup", () => {
   const screen = { minX: 0, minY: 0, maxX: 1000, maxY: 800 };
 
-  it("offsets the popup from the selection endpoint", () => {
-    expect(placePopup(200, 300, 90, 40, screen)).toEqual({ x: 210, y: 310 });
+  it("places the first action center under the pointer with a compact gap", () => {
+    expect(placePopup(200, 300, 90, 40, screen, { anchorOffsetX: 18, surfaceInset: 6 })).toEqual({ x: 182, y: 299 });
   });
 
-  it("flips left and above near the bottom-right edge", () => {
-    expect(placePopup(990, 790, 90, 40, screen)).toEqual({ x: 890, y: 740 });
+  it("clamps horizontally and flips above near the bottom-right edge", () => {
+    expect(placePopup(990, 790, 90, 40, screen, { anchorOffsetX: 18, surfaceInset: 6 })).toEqual({ x: 910, y: 751 });
   });
 
   it("still clamps on a negative-origin monitor", () => {
     const left = { minX: -1200, minY: -800, maxX: 0, maxY: 0 };
-    expect(placePopup(-1195, -795, 90, 40, left)).toEqual({ x: -1185, y: -785 });
+    expect(placePopup(-1195, -795, 90, 40, left, { anchorOffsetX: 18, surfaceInset: 6 })).toEqual({ x: -1200, y: -796 });
   });
 });

@@ -41,7 +41,7 @@ const captureBtn = actionButton("primary", "ph-quotes", "采集");
 const translateBtn = actionButton("secondary", "ph-translate", "翻译");
 const questionBtn = actionButton("secondary", "ph-chat-circle-dots", "提问");
 captureBtn.id = "btn-capture";
-actionsEl.append(captureBtn, translateBtn, questionBtn);
+actionsEl.append(captureBtn, actionDivider(), translateBtn, actionDivider(), questionBtn);
 
 let hideTimer: number | null = null;
 let activePayload: PopupPayload | null = null;
@@ -53,6 +53,13 @@ function actionButton(variant: "primary" | "secondary", icon: string, label: str
   const button = createButton({ variant, icon, label, title: label });
   button.setAttribute("aria-label", label);
   return button;
+}
+
+function actionDivider(): HTMLSpanElement {
+  const divider = document.createElement("span");
+  divider.className = "popup-action-divider";
+  divider.setAttribute("aria-hidden", "true");
+  return divider;
 }
 
 function requestId(): string {
@@ -111,7 +118,16 @@ async function resizeAndPlace(content: HTMLElement, taskIsCurrent: () => boolean
   if (!isCurrent()) return;
   const bounds = await getBoundsAt(payload.x, payload.y);
   if (!isCurrent()) return;
-  const placed = placePopup(payload.x, payload.y, width, height, bounds);
+  const isActionBar = content === actionsEl;
+  const firstActionRect = isActionBar ? captureBtn.getBoundingClientRect() : null;
+  const anchorOffsetX = firstActionRect
+    ? SHADOW_INSET + firstActionRect.left - rect.left + firstActionRect.width / 2
+    : -10;
+  const placed = placePopup(payload.x, payload.y, width, height, bounds, {
+    anchorOffsetX,
+    gap: isActionBar ? 5 : 10,
+    surfaceInset: isActionBar ? SHADOW_INSET : 0,
+  });
   await win.setPosition(new LogicalPosition(placed.x, placed.y));
   if (!isCurrent()) return;
   root.classList.remove("is-measuring");
