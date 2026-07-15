@@ -13,6 +13,42 @@ beforeEach(() => {
 });
 
 describe("version menu", () => {
+  it("reopens immediately after an outside click closes it", async () => {
+    const topbarMount = document.createElement("div");
+    const titleMount = document.createElement("div");
+    const previewMount = document.createElement("div");
+    document.body.append(topbarMount, titleMount, previewMount);
+    createPieceHeader({
+      topbarMount,
+      titleMount,
+      previewMount,
+      host: {
+        dir: () => "/project",
+        current: () => ({ name: "piece", path: "/project/piece.md" }),
+        open: vi.fn(),
+        loadVersions: async () => [],
+        snapshot: vi.fn(),
+        preview: vi.fn().mockResolvedValue(false),
+        exitPreview: vi.fn(),
+        restore: vi.fn(),
+        renameVersion: vi.fn(),
+        deleteVersion: vi.fn(),
+        focusBody: vi.fn(),
+      },
+    });
+
+    const trigger = topbarMount.querySelector<HTMLButtonElement>(".piece-version-btn")!;
+    trigger.click();
+    await vi.waitFor(() => expect(document.querySelector(".fn-menu")).toBeTruthy());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    expect(document.querySelector(".fn-menu")).toBeNull();
+
+    trigger.click();
+    await vi.waitFor(() => expect(document.querySelector(".fn-menu")).toBeTruthy());
+  });
+
   it("does not commit a title rename while an IME confirms text", () => {
     const topbarMount = document.createElement("div");
     const titleMount = document.createElement("div");

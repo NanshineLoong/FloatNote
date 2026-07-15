@@ -82,7 +82,6 @@ import {
 import { canSplit } from "./split";
 import { buildBindings, installShortcuts, type ShortcutActions } from "./shortcuts";
 import { WINDOW_SHORTCUT_DEFAULTS, type WindowShortcutId } from "../shared/shortcuts";
-import { clearLocalSelection, localSelectionPublisher } from "./local-selection";
 import {
   deleteVersion,
   listVersions,
@@ -239,7 +238,6 @@ const editor = createEditor(
     ),
     annotationDecorations(),
     annotationContextMenu(),
-    localSelectionPublisher(),
     ...tagFilter(),
     placeholder("在这里写点什么…"),
     EditorView.updateListener.of((u) => {
@@ -290,7 +288,7 @@ const pieceEditor = createEditor(
     const f = activePieceFile();
     if (f) scheduleSave(f.path, doc);
   },
-  [placeholder("开始写…"), localSelectionPublisher()],
+  [placeholder("开始写…")],
   {
     grow: true,
     // pieceEditor is shared by project piece session.mode AND document session.mode. Branch on
@@ -335,8 +333,6 @@ pieceEditor.contentDOM.addEventListener("focus", () => {
     kind: session.mode === "document" ? "doc" : "piece",
   });
 });
-
-window.addEventListener("blur", clearLocalSelection);
 
 // 文档头（标题 + 切换箭头）挂在「写作」栏内容区顶部，随正文一起滚。
 let pieceHeader: ReturnType<typeof createPieceHeader> | null = null;
@@ -926,7 +922,7 @@ async function showProjectSwitcher(anchor: HTMLElement) {
   session.recentDocuments = documents.map((d) => d.path);
 
   menuAnchor = anchor;
-  const handle = createMenu({ onOutside: () => { menuEl = null; } });
+  const handle = createMenu({ anchor, onOutside: () => { menuEl = null; } });
   const items: HTMLElement[] = [];
 
   // ── 项目区 ──

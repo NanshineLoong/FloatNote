@@ -117,8 +117,8 @@ pub enum PopupOrigin {
     Shortcut,
 }
 
-fn should_emit(origin: PopupOrigin, has_text: bool) -> bool {
-    has_text || origin == PopupOrigin::Shortcut
+fn should_emit(origin: PopupOrigin, has_text: bool, external_frontmost: bool) -> bool {
+    external_frontmost && (has_text || origin == PopupOrigin::Shortcut)
 }
 
 /// User clicked 「加入采集区」: forward the cached {text, html, source} to the
@@ -184,6 +184,13 @@ fn run_popup_capture_with_origin(
     origin: PopupOrigin,
     selection_event: Option<u64>,
 ) {
+    // FloatNote never captures from its own windows. Check before the
+    // accessibility prompt so the global popup shortcut is a silent no-op
+    // while any FloatNote window is frontmost.
+    if crate::capture::external_frontmost_pid().is_none() {
+        return;
+    }
+
     // Share capture.rs's guard so a popup capture and a direct capture can't
     // race the single shared system clipboard.
     let Some(_guard) = crate::capture::CaptureGuard::try_enter() else {
@@ -194,14 +201,18 @@ fn run_popup_capture_with_origin(
         return;
     }
 
-    let captured = crate::capture::capture_current_selection(app);
+    let captured = crate::capture::capture_current_selection();
     if selection_event
         .is_some_and(|event| !crate::selection_monitor::is_current_selection_event(event))
     {
         return;
     }
     let has_text = captured.is_some();
-    if !should_emit(origin, has_text) {
+    if !should_emit(
+        origin,
+        has_text,
+        crate::capture::external_frontmost_pid().is_some(),
+    ) {
         return;
     }
     let generation_id = if let Some(ref c) = captured {
@@ -311,8 +322,14 @@ mod tests {
 
     #[test]
     fn automatic_empty_capture_is_silent_but_shortcut_can_report_it() {
-        assert!(!should_emit(PopupOrigin::Auto, false));
-        assert!(should_emit(PopupOrigin::Shortcut, false));
-        assert!(should_emit(PopupOrigin::Auto, true));
+        assert!(!should_emit(PopupOrigin::Auto, false, true));
+        assert!(should_emit(PopupOrigin::Shortcut, false, true));
+        assert!(should_emit(PopupOrigin::Auto, true, true));
+    }
+
+    #[test]
+    fn own_process_never_emits_a_popup() {
+        assert!(!should_emit(PopupOrigin::Shortcut, false, false));
+        assert!(!should_emit(PopupOrigin::Shortcut, true, false));
     }
 }

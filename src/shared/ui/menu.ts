@@ -51,6 +51,10 @@ export interface MenuHandle {
 
 export function createMenu(opts: MenuOptions = {}): MenuHandle {
   const { anchor, parent, inside = [], placement = "free", onOutside } = opts;
+  // An HTMLElement anchor is itself a menu trigger. Treating it as an outside
+  // click makes a second click close the menu on pointerdown and reopen it in
+  // the trigger's click handler. DOMRect anchors have no DOM containment.
+  const insideElements = anchor instanceof HTMLElement ? [...inside, anchor] : inside;
   const host = parent ?? document.body;
   const el = document.createElement("div");
   el.className = "fn-menu";
@@ -66,7 +70,7 @@ export function createMenu(opts: MenuOptions = {}): MenuHandle {
       const target = e.target as Node | null;
       if (!target) return;
       if (el.contains(target)) return;
-      if (inside.some((n) => n.contains(target))) return;
+      if (insideElements.some((n) => n.contains(target))) return;
       if (submenu?.contains(target)) return;
       hide();
       onOutside?.();

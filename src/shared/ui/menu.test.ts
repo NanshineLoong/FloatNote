@@ -37,6 +37,26 @@ describe("createMenu showAt clamp", () => {
 });
 
 describe("createMenu outside-close lifecycle", () => {
+  it("lets a second anchor click close the menu", () => {
+    vi.useFakeTimers();
+    const anchor = document.createElement("button");
+    document.body.appendChild(anchor);
+    const handle = createMenu({ anchor });
+    handles.push(handle);
+    anchor.addEventListener("click", () => {
+      if (handle.isOpen()) handle.hide();
+      else handle.show(document.createElement("button"));
+    });
+    handle.show(document.createElement("button"));
+    vi.runAllTimers();
+
+    anchor.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    anchor.click();
+
+    expect(handle.isOpen()).toBe(false);
+    anchor.remove();
+  });
+
   it("stays armed after a submenu click and closes on the next outside click", () => {
     vi.useFakeTimers();
     const handle = createMenu();

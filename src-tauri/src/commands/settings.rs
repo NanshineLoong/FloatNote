@@ -240,7 +240,7 @@ mod tests {
         should_install_selection_monitor,
     };
     use crate::config::{AiProviderConfig, AiProviderId, Config, WindowShortcuts};
-    use crate::state::{AppState, AuthorizedRoots, LocalSelectionCache};
+    use crate::state::{AppState, AuthorizedRoots};
     use std::collections::HashMap;
     use std::sync::atomic::AtomicU64;
     use std::sync::Mutex;
@@ -258,7 +258,6 @@ mod tests {
             watcher: Mutex::new(None),
             write_suppress: crate::watcher::new_suppress_list(),
             popup_cache: crate::popup::PopupCache::default(),
-            local_selection: LocalSelectionCache::default(),
             pending_edits: Mutex::new(HashMap::new()),
             pending_skill_lists: Mutex::new(HashMap::new()),
             pending_agent_configs: Mutex::new(HashMap::new()),

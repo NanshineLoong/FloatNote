@@ -70,8 +70,9 @@ host 边界返回“尚未启用 AI 提供商”，不会把 prompt 交给残留
 ```text
 CGEvent mouse down/up
   → dedicated listen-only event-tap thread（callback 仅投递元数据）
+  → 前台 PID 边界（FloatNote 自身进程静默丢弃）
   → selection_intent worker（拖选/原生双击/原生三击候选）
-  → capture（AX focused/children/ancestors → 本地快照或外部剪贴板兜底）
+  → capture（AX focused/children/ancestors → 外部剪贴板兜底）
   → NSPasteboard 全 item/type 恢复；文本相符时附加 HTML
   → popup cache（generationId）
   → selection-popup WebView（测量 → resize → clamp/place → 不主动聚焦 show）
@@ -81,7 +82,10 @@ CGEvent mouse down/up
 
 新鼠标按下会使上一候选失效；抓取前后都检查原生事件代次。event tap 始终
 listen-only：按键和外部点击可异步关闭弹窗，但事件继续传给来源应用。显示
-路径不调用窗口 `set_focus()`，用户首次点击弹窗时才允许窗口获得焦点。
+路径不调用窗口 `set_focus()`，用户首次点击弹窗时才允许窗口获得焦点。自动、
+弹窗快捷键和直接采集入口都只接受 FloatNote 进程之外的前台 PID；自身窗口内
+触发时不读 AX、不访问剪贴板、不显示空结果，也不发送 `quote-captured`。
+已从外部应用缓存的弹窗内容不受此限制，用户点击弹窗后仍可正常提交。
 
 ## 打包时的 AI 启动
 

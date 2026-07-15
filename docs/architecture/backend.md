@@ -24,9 +24,11 @@
 session 都保留下来；从未形成持久 session 的空白“新对话”不进入历史列表。
 
 划词弹窗显示时不主动聚焦，但允许用户首次点击时成为 key window 并立即
-执行按钮。自动与快捷键模式共用 AX-first 捕获；FloatNote 自身 AX 失败时
-读取 CodeMirror 快照，外部应用才允许定向 `Cmd+C` 兜底。自动失败静默，
-专用快捷键允许显示短暂的空结果反馈。
+执行按钮。自动、弹窗快捷键与直接采集入口都会在 AX 和剪贴板操作前拒绝
+FloatNote 自身 PID，因此本软件任意窗口内的划词捕获均静默无效。外部应用
+共用 AX-first 捕获并允许定向 `Cmd+C` 兜底；自动失败静默，专用快捷键在外部
+应用无有效选区时仍允许显示短暂的空结果反馈。已缓存的外部选区可在弹窗成为
+前台窗口后正常提交。
 
 AI 配置以 `Config.ai_settings` 持久化：六个固定 provider profile 加一个可空的
 `active_provider_id`，不再读取旧的单 provider 或通用 connection 字段。

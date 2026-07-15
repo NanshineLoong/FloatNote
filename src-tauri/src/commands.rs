@@ -33,11 +33,6 @@ pub async fn set_config(state: State<'_, AppState>, new_config: Config) -> Resul
 }
 
 #[tauri::command]
-pub fn update_local_selection(state: State<AppState>, text: Option<String>) {
-    state.local_selection.update(text);
-}
-
-#[tauri::command]
 pub fn list_notes(dir: String) -> Result<Vec<notes::NoteEntry>, String> {
     notes::list_markdown(std::path::Path::new(&dir)).map_err(|error| error.to_string())
 }

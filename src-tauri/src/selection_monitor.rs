@@ -224,6 +224,10 @@ fn worker_loop(app: AppHandle, receiver: mpsc::Receiver<GlobalEvent>) {
             let Some(pid) = crate::source::frontmost_pid() else {
                 continue;
             };
+            if !crate::capture::is_external_frontmost_process(Some(pid), std::process::id() as i32)
+            {
+                continue;
+            }
             LATEST_SELECTION_EVENT.store(event.event_number, Ordering::SeqCst);
             tracker.on_mouse_down(MouseDown {
                 event_number: event.event_number,
@@ -243,6 +247,9 @@ fn worker_loop(app: AppHandle, receiver: mpsc::Receiver<GlobalEvent>) {
         let Some(pid) = crate::source::frontmost_pid() else {
             continue;
         };
+        if !crate::capture::is_external_frontmost_process(Some(pid), std::process::id() as i32) {
+            continue;
+        }
         let candidate = tracker.on_mouse_up(MouseUp {
             event_number: event.event_number,
             pid,

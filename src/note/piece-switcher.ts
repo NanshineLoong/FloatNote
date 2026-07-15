@@ -280,7 +280,14 @@ export function createPieceHeader(args: {
       return;
     }
     if (generation !== versionMenuGeneration || host.current()?.path !== target.path) return;
-    const handle = createMenu({ anchor: versionBtn, placement: "down-right" });
+    const handle = createMenu({
+      anchor: versionBtn,
+      placement: "down-right",
+      onOutside: () => {
+        versionMenuGeneration += 1;
+        versionMenuEl = null;
+      },
+    });
     const items: HTMLElement[] = [];
 
     // 顶部一行：手动记录当前版本（与成品切换菜单顶部的「新建」行同构）。
@@ -410,7 +417,7 @@ export function createPieceHeader(args: {
     const dir = host.dir();
     if (!dir) return;
     const pieces = await listPieces(dir);
-    const handle = createMenu();
+    const handle = createMenu({ anchor: crumb, onOutside: () => { menuEl = null; } });
     const items: HTMLElement[] = [];
 
     // 顶部：新建图标行。

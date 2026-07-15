@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
 /// Re-entrancy guard. The global-shortcut callback can fire more than once per
 /// physical press on macOS; two concurrent `run_capture` routines would race on
@@ -48,6 +48,10 @@ fn log_line(msg: &str) {
 }
 
 pub fn run_capture(app: &AppHandle) {
+    if external_frontmost_pid().is_none() {
+        return;
+    }
+
     let Some(_guard) = CaptureGuard::try_enter() else {
         log_line("already capturing, skipping");
         return;
@@ -59,7 +63,7 @@ pub fn run_capture(app: &AppHandle) {
 
     log_line("fired");
 
-    let Some(captured) = capture_current_selection(app) else {
+    let Some(captured) = capture_current_selection() else {
         return;
     };
 
@@ -103,7 +107,6 @@ pub fn check_accessibility(app: &AppHandle) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SelectionMethod {
     Accessibility,
-    LocalSnapshot,
     Clipboard,
 }
 
@@ -250,9 +253,17 @@ mod pasteboard {
     }
 }
 
-pub fn capture_current_selection(app: &AppHandle) -> Option<CurrentSelection> {
-    let pid = crate::source::frontmost_pid()?;
-    let own_pid = std::process::id() as i32;
+pub(crate) fn is_external_frontmost_process(pid: Option<i32>, own_pid: i32) -> bool {
+    pid.is_some_and(|pid| pid != own_pid)
+}
+
+pub(crate) fn external_frontmost_pid() -> Option<i32> {
+    let pid = crate::source::frontmost_pid();
+    is_external_frontmost_process(pid, std::process::id() as i32).then_some(pid?)
+}
+
+pub fn capture_current_selection() -> Option<CurrentSelection> {
+    let pid = external_frontmost_pid()?;
     if let Some(text) = crate::selection_probe::current_selected_text(pid) {
         let ax = CurrentSelection {
             text,
@@ -262,26 +273,9 @@ pub fn capture_current_selection(app: &AppHandle) -> Option<CurrentSelection> {
             method: SelectionMethod::Accessibility,
         };
         #[cfg(target_os = "macos")]
-        return Some(if pid == own_pid {
-            ax
-        } else {
-            merge_html(ax, pasteboard::copy_selection(pid))
-        });
+        return Some(merge_html(ax, pasteboard::copy_selection(pid)));
         #[cfg(not(target_os = "macos"))]
         return Some(ax);
-    }
-    if pid == own_pid {
-        let text = app
-            .state::<crate::state::AppState>()
-            .local_selection
-            .current()?;
-        return Some(CurrentSelection {
-            text,
-            html: None,
-            source_pid: pid,
-            anchor: None,
-            method: SelectionMethod::LocalSnapshot,
-        });
     }
     #[cfg(target_os = "macos")]
     return pasteboard::copy_selection(pid);
@@ -292,6 +286,13 @@ pub fn capture_current_selection(app: &AppHandle) -> Option<CurrentSelection> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capture_scope_accepts_only_an_external_frontmost_process() {
+        assert!(is_external_frontmost_process(Some(42), 7));
+        assert!(!is_external_frontmost_process(Some(7), 7));
+        assert!(!is_external_frontmost_process(None, 7));
+    }
 
     #[test]
     fn ax_text_survives_failed_or_mismatched_html_enrichment() {
