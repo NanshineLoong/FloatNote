@@ -1,5 +1,16 @@
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+/// Passive selection popups deliberately stay non-key so the source app keeps
+/// its selection. AppKit disables mouse-moved delivery by default, though, so
+/// the WebView cannot update CSS `:hover` until this window-level flag is set.
+#[cfg(target_os = "macos")]
+pub fn enable_popup_mouse_moved_events(window: &WebviewWindow) -> tauri::Result<()> {
+    let native = window.ns_window()?;
+    let native: &objc2_app_kit::NSWindow = unsafe { &*native.cast() };
+    native.setAcceptsMouseMovedEvents(true);
+    Ok(())
+}
+
 pub fn note_window(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window("main")
 }

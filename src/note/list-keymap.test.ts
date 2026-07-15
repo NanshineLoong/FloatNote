@@ -41,6 +41,14 @@ describe("list keymap indentation", () => {
     view.destroy();
   });
 
+  it("indents a blank prose line so Tab stays in the editor", () => {
+    const view = mount("", 0);
+
+    expect(handleTab(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe("    ");
+    view.destroy();
+  });
+
   it("outdents a selected nested list subtree together", () => {
     const doc = "    - parent\n        - child\n- next";
     const view = mount(doc, doc.indexOf("parent"));

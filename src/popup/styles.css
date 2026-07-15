@@ -211,7 +211,8 @@ body {
 
 .popup-bar .fn-btn:not(:disabled):hover {
   border-color: transparent;
-  background: var(--popup-hover);
+  background: var(--popup-accent-fill);
+  color: var(--popup-accent);
 }
 
 .popup-bar .fn-btn:not(:disabled):active {

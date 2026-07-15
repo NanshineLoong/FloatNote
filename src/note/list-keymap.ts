@@ -45,14 +45,12 @@ function dispatchIndent(view: EditorView, direction: "indent" | "outdent"): bool
   for (let i = start; i <= end; i++) {
     const line = view.state.doc.line(i + 1);
     if (direction === "indent") {
-      if (line.text.trim() !== "") {
-        const prefix = /^[ \t]*/.exec(line.text)?.[0] ?? "";
-        changes.push({
-          from: line.from,
-          to: line.from + prefix.length,
-          insert: " ".repeat(leadingColumns(prefix) + INDENT.length),
-        });
-      }
+      const prefix = /^[ \t]*/.exec(line.text)?.[0] ?? "";
+      changes.push({
+        from: line.from,
+        to: line.from + prefix.length,
+        insert: " ".repeat(leadingColumns(prefix) + INDENT.length),
+      });
     } else {
       const next = outdentLine(line.text);
       const removed = line.text.length - next.length;

@@ -39,7 +39,7 @@ macos-accessibility-client = "0.0.1"
 core-graphics = { version = "0.25", features = ["elcapitan"] }
 objc2 = "0.5"
 objc2-foundation = { version = "0.2", features = ["NSArray", "NSString", "NSData", "NSURL"] }
-objc2-app-kit = { version = "0.2", features = ["NSWorkspace", "NSRunningApplication", "NSImage", "NSPasteboard", "NSPasteboardItem", "libc"] }
+objc2-app-kit = { version = "0.2", features = ["NSWorkspace", "NSRunningApplication", "NSImage", "NSPasteboard", "NSPasteboardItem", "NSWindow", "NSResponder", "libc"] }
 image = { version = "0.25", features = ["tiff", "png"] }
 plist = "1.9"
 

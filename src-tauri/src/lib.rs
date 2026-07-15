@@ -134,6 +134,11 @@ pub fn run() {
                 .handle()
                 .set_activation_policy(tauri::ActivationPolicy::Accessory);
 
+            #[cfg(target_os = "macos")]
+            if let Some(popup_win) = app.get_webview_window("selection-popup") {
+                windows::enable_popup_mouse_moved_events(&popup_win)?;
+            }
+
             // Hide instead of close the note window so it can be re-opened later.
             if let Some(note_win) = app.get_webview_window("main") {
                 let handle = app.handle().clone();
