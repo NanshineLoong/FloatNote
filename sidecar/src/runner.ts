@@ -29,6 +29,8 @@ export interface SessionLike {
   sessionManager?: Pick<PiSessionManager, "getBranch" | "getSessionFile">;
   subscribe(listener: (event: AgentSessionEvent) => void): () => void;
   prompt(text: string): Promise<void>;
+  /** Navigate through the session tree and rebuild Pi's in-memory model context. */
+  navigateTree(targetId: string, options?: { summarize?: boolean }): Promise<{ cancelled: boolean }>;
   abort(): Promise<void>;
   dispose?: () => void;
 }
@@ -63,18 +65,6 @@ export interface NewSessionRequest {
 export interface OpenSessionRequest {
   conversationId: string;
   sessionFile: string;
-}
-
-type RewindableSessionManager = Pick<PiSessionManager, "getBranch" | "branch" | "resetLeaf">;
-
-/** Move the active leaf to immediately before a visible user turn. */
-export function rewindSessionToUserTurn(manager: RewindableSessionManager, userEntryId: string): void {
-  const target = manager.getBranch().find(
-    (entry) => entry.id === userEntryId && entry.type === "message" && entry.message.role === "user",
-  );
-  if (!target) throw new Error("user turn not found in active session branch");
-  if (target.parentId) manager.branch(target.parentId);
-  else manager.resetLeaf();
 }
 
 const EMPTY_RESPONSE_MESSAGE = "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。";
@@ -232,14 +222,17 @@ export class AgentRunner {
     }
   }
 
-  /** Discard the selected user turn and its descendants from the active branch. */
-  rewind(conversationId: string, userEntryId: string): void {
+  /** Rewind before a user turn and rebuild Pi's in-memory context for the new branch. */
+  async rewind(conversationId: string, userEntryId: string): Promise<void> {
     if (this.activeConversations.size > 0) {
       throw new Error("cannot rewind while an assistant response is streaming");
     }
-    const manager = this.sessionManagers.get(conversationId);
-    if (!manager) throw new Error("conversation session not opened");
-    rewindSessionToUserTurn(manager, userEntryId);
+    const session = this.sessions.get(conversationId);
+    if (!session) throw new Error("conversation session not opened");
+    const result = await session.navigateTree(userEntryId, { summarize: false });
+    if (result.cancelled) throw new Error("conversation rewind was cancelled");
+    // Persist the newly active branch even if the following retry fails before it can append a turn.
+    this.emitSessionSynced(conversationId);
   }
 
   /** Resolve a pending get_note_text round-trip with the host-supplied content. */

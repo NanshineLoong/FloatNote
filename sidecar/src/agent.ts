@@ -9,4 +9,4 @@
 // here since no current consumer reaches them through this barrel.
 export { buildAgentModel, type AgentConfig } from "./model.js";
 export { translateEvent } from "./event-translate.js";
-export { AgentRunner, rewindSessionToUserTurn, type SessionLike } from "./runner.js";
+export { AgentRunner, type SessionLike } from "./runner.js";

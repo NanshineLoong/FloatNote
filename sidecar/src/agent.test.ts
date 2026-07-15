@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { AgentRunner, rewindSessionToUserTurn, translateEvent } from "./agent.js";
+import { AgentRunner, translateEvent } from "./agent.js";
 import type { SessionLike } from "./agent.js";
 import { displayMessagesFromSession } from "./runner.js";
 import type { SidecarToHost } from "./protocol.js";
@@ -201,26 +201,6 @@ describe("session restoration", () => {
   });
 });
 
-describe("rewindSessionToUserTurn", () => {
-  it("branches immediately before the selected user message", () => {
-    const branch = [
-      { id: "u1", parentId: null, type: "message", message: { role: "user" } },
-      { id: "a1", parentId: "u1", type: "message", message: { role: "assistant" } },
-      { id: "u2", parentId: "a1", type: "message", message: { role: "user" } },
-    ];
-    const calls: string[] = [];
-    rewindSessionToUserTurn({ getBranch: () => branch, branch: (id) => calls.push(id), resetLeaf: () => calls.push("reset") }, "u2");
-    expect(calls).toEqual(["a1"]);
-  });
-
-  it("resets the leaf when rewinding the first user message", () => {
-    const branch = [{ id: "u1", parentId: null, type: "message", message: { role: "user" } }];
-    const calls: string[] = [];
-    rewindSessionToUserTurn({ getBranch: () => branch, branch: (id) => calls.push(id), resetLeaf: () => calls.push("reset") }, "u1");
-    expect(calls).toEqual(["reset"]);
-  });
-});
-
 /** Fake session that replays a scripted event stream when prompted. */
 function fakeSession(script: (emit: (e: AgentSessionEvent) => void) => Promise<void> | void): {
   session: SessionLike;
@@ -237,11 +217,35 @@ function fakeSession(script: (emit: (e: AgentSessionEvent) => void) => Promise<v
       await script((e) => listener?.(e));
     },
     async abort() {},
+    async navigateTree() {
+      return { cancelled: false };
+    },
   };
   return { session };
 }
 
 describe("AgentRunner", () => {
+  it("navigates the AgentSession tree and syncs history before retrying", async () => {
+    const sent: SidecarToHost[] = [];
+    const navigated: string[] = [];
+    const { session } = fakeSession(() => {});
+    session.navigateTree = async (entryId) => {
+      navigated.push(entryId);
+      return { cancelled: false };
+    };
+    const runner = new AgentRunner({ send: (message) => sent.push(message), createSession: async () => session });
+    await runner.configure({ provider: "openai", model: "gpt-5", apiKey: "test" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+    sent.length = 0;
+
+    await runner.rewind("c1", "u1");
+
+    expect(navigated).toEqual(["u1"]);
+    expect(sent).toEqual([
+      { type: "session_synced", conversationId: "c1", sessionFile: expect.any(String), messages: [] },
+    ]);
+  });
+
   it("discards an unaccepted session during conversation rollback", async () => {
     const disposed: string[] = [];
     const runner = new AgentRunner({
