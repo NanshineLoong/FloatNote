@@ -593,7 +593,13 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   });
 
   Promise.resolve(deps.subscribe((event) => {
-    if (event.type === "session_opened" || event.type === "session_synced") {
+    if (event.type === "session_opened") {
+      if (!activeConversation || activeConversation.id !== event.conversationId) return;
+      state = reduceEvents(state, event);
+      rerender();
+      return;
+    }
+    if (event.type === "session_synced") {
       state = reduceEvents(state, event);
       rerender();
       return;

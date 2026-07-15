@@ -22,6 +22,17 @@ describe("reduceEvents", () => {
     expect(emptyChat().messages).toEqual([]);
   });
 
+  it("ignores a stale session-opened event for a different active conversation", () => {
+    const active = reduceEvents(
+      { activeConversationId: "c2", messages: [] },
+      { type: "session_opened", conversationId: "c1", sessionFile: "c1.jsonl", messages: [
+        { role: "user", text: "stale", timestamp: 0 },
+      ] },
+    );
+
+    expect(active).toEqual({ activeConversationId: "c2", messages: [] });
+  });
+
   it("appends a user message when the user sends", () => {
     const state = run([{ type: "user", text: "你好" }]);
     expect(norm(state.messages)).toEqual([{ role: "user", text: "你好" }]);

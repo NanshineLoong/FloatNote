@@ -1,4 +1,5 @@
 import { complete } from "@earendil-works/pi-ai/compat";
+import { existsSync } from "node:fs";
 import type { Context } from "@earendil-works/pi-ai";
 import {
   AuthStorage,
@@ -147,6 +148,9 @@ export class AgentRunner {
   }
 
   async openSession(req: OpenSessionRequest): Promise<void> {
+    if (!existsSync(req.sessionFile)) {
+      throw new Error(`conversation session file not found: ${req.sessionFile}`);
+    }
     const sessionManager = SessionManager.open(req.sessionFile);
     await this.installSession(req.conversationId, sessionManager);
   }

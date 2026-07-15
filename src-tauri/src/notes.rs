@@ -98,8 +98,8 @@ pub fn delete_note_with(path: &Path, trash: &impl crate::trash::Trash) -> std::i
 static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// 原子写入：先写同目录临时文件（`.tmp` 后缀，watcher 与 list 均忽略）→
-/// `sync_all` fsync → `rename` 原子替换目标。任一步失败都清理临时文件并返回错误，
-/// 原文件不被破坏（rename 是同盘原子操作）。
+/// `sync_all` fsync → 平台原子替换目标。任一步失败都清理临时文件并返回错误，
+/// 原文件不被破坏（替换在同一文件系统中完成）。
 pub fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
     let file_name = path
@@ -120,11 +120,47 @@ pub fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
         return Err(error);
     }
 
-    if let Err(error) = std::fs::rename(&tmp, path) {
+    if let Err(error) = replace_file(&tmp, path) {
         let _ = std::fs::remove_file(&tmp);
         return Err(error);
     }
     Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    std::fs::rename(source, destination)
+}
+
+#[cfg(windows)]
+fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+    };
+
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let result = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 /// 取文件 `modified()` 的 UNIX_EPOCH 毫秒；文件不存在或不可读返回 None。
