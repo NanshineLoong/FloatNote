@@ -39,6 +39,8 @@ export function mountTagBar(
     const signature = JSON.stringify([metadata.tags, active]);
     if (signature === lastSignature) return;
     lastSignature = signature;
+    el.classList.toggle("tag-bar--hidden", metadata.tags.length === 0);
+    el.setAttribute("aria-hidden", String(metadata.tags.length === 0));
     allButton.classList.toggle("active", active === null);
     readonlyHint.hidden = active === null;
     discRow.innerHTML = "";

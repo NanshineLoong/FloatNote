@@ -1496,6 +1496,7 @@ body {
   align-items: center;
   gap: 8px;
   width: 100%;
+  max-height: 42px;
   padding-top: 6px;
   padding-right: 14px;
   padding-bottom: 6px;
@@ -1506,6 +1507,16 @@ body {
   user-select: none;
   flex: 0 0 auto;
   z-index: 2;
+  overflow: hidden;
+  transition: max-height 160ms ease, padding 160ms ease, border-color 160ms ease, opacity 120ms ease;
+}
+.tag-bar.tag-bar--hidden {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom-color: transparent;
+  opacity: 0;
+  pointer-events: none;
 }
 .tag-filter-all {
   display: inline-flex;
