@@ -137,7 +137,7 @@ describe("editor selection rendering", () => {
 });
 
 describe("explicit line-break spacing", () => {
-  it("gives an explicit following line a 0.26em gap", () => {
+  it("keeps the gap inside the measured line box", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const view = createEditor(host, () => {});
@@ -147,7 +147,8 @@ describe("explicit line-break spacing", () => {
         .find((line) => line.textContent === "second");
 
       expect(secondLine?.classList.contains("cm-hard-break-line")).toBe(true);
-      expect(getComputedStyle(secondLine!).marginTop).toBe("0.26em");
+      expect(getComputedStyle(secondLine!).marginTop).not.toBe("0.26em");
+      expect(getComputedStyle(secondLine!).paddingTop).toBe("0.26em");
     } finally {
       view.destroy();
       host.remove();

@@ -131,7 +131,7 @@ function buildTheme(grow: boolean) {
     ".cm-line": { minHeight: "1.6em" },
     // Soft wrapping stays compact inside a single .cm-line. This class is
     // attached only to a line with a preceding literal newline.
-    ".cm-hard-break-line": { marginTop: "0.26em" },
+    ".cm-hard-break-line": { paddingTop: "0.26em" },
     ".cm-placeholder": {
       whiteSpace: "nowrap",
       overflow: "hidden",
