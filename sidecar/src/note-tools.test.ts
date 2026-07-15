@@ -21,6 +21,14 @@ function makeDups(noteText: string): { deps: NoteToolDeps; writes: any[] } {
 }
 
 describe("project note tools", () => {
+  it("serializes every tool that can request a write permission", () => {
+    const writeToolNames = ["create_note", "edit_note", "write_note", "tag_text", "tag_create", "tag_update", "tag_delete"];
+    const tools = createNoteTools(makeDups("").deps);
+
+    expect(Object.fromEntries(tools.filter((tool) => writeToolNames.includes(tool.name)).map((tool) => [tool.name, tool.executionMode])))
+      .toEqual(Object.fromEntries(writeToolNames.map((name) => [name, "sequential"])));
+  });
+
   it("lists only project-space targets", async () => {
     const { deps } = makeDups("");
     const tools = createNoteTools(deps);

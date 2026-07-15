@@ -42,9 +42,10 @@ export function mountPermissionBubble(
   isOpen: () => boolean;
   reject: () => void;
   show: (req: PermissionRequest) => void;
-  clear: () => void;
+  clear: (requestId?: string) => void;
 } {
   root.classList.add("perm-bubble-root");
+  const requests: PermissionRequest[] = [];
   let currentRequest: PermissionRequest | null = null;
   let currentPresentation: PermissionPresentation | null = null;
   let resolving = false;
@@ -62,7 +63,7 @@ export function mountPermissionBubble(
     dialog.setDisabled(disabled);
   }
 
-  function clearBubble(): void {
+  function clearSurface(): void {
     dialog.close(false);
     allowControl?.destroy();
     allowControl = null;
@@ -73,16 +74,45 @@ export function mountPermissionBubble(
     resolving = false;
   }
 
+  function clearRequest(requestId?: string): void {
+    if (requestId === undefined) {
+      requests.splice(0);
+      clearSurface();
+      return;
+    }
+    const index = requests.findIndex((request) => request.request_id === requestId);
+    if (index < 0) return;
+    const wasCurrent = currentRequest?.request_id === requestId;
+    requests.splice(index, 1);
+    if (!wasCurrent) return;
+    clearSurface();
+    const next = requests[0];
+    if (next) render(next);
+  }
+
+  function requestResolution(
+    request: PermissionRequest,
+    decision: "allow" | "deny",
+    writeMode: WriteMode,
+  ): Promise<void> {
+    try {
+      const operation = onResolve
+        ? onResolve(request, decision, writeMode)
+        : invoke("resolve_permission", { requestId: request.request_id, decision, writeMode });
+      return Promise.resolve(operation).then(() => undefined);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+
   function resolve(decision: "allow" | "deny", writeMode: WriteMode): void {
     if (!currentRequest || resolving) return;
     const request = currentRequest;
     resolving = true;
     setDisabled(true);
-    const operation = onResolve
-      ? Promise.resolve(onResolve(request, decision, writeMode))
-      : Promise.resolve(invoke("resolve_permission", { requestId: request.request_id, decision, writeMode })).then(() => undefined);
+    const operation = requestResolution(request, decision, writeMode);
     operation.then(() => {
-      if (currentRequest?.request_id === request.request_id) clearBubble();
+      clearRequest(request.request_id);
     }).catch((error) => {
       if (currentRequest?.request_id !== request.request_id) return;
       resolving = false;
@@ -91,7 +121,7 @@ export function mountPermissionBubble(
     });
   }
 
-  function show(request: PermissionRequest): void {
+  function render(request: PermissionRequest): void {
     dialog.close(false);
     allowControl?.destroy();
     root.replaceChildren();
@@ -135,15 +165,26 @@ export function mountPermissionBubble(
     root.appendChild(card);
   }
 
+  function show(request: PermissionRequest): void {
+    if (requests.some((pending) => pending.request_id === request.request_id)) return;
+    requests.push(request);
+    if (!currentRequest) render(request);
+  }
+
   return {
     destroy() {
-      clearBubble();
+      const inFlightRequestId = resolving ? currentRequest?.request_id : undefined;
+      const abandoned = requests.filter((request) => request.request_id !== inFlightRequestId);
+      clearRequest();
       dialog.destroy();
       root.classList.remove("perm-bubble-root");
+      for (const request of abandoned) {
+        void requestResolution(request, "deny", "direct").catch((error) => onError?.(error));
+      }
     },
     isOpen: () => currentRequest !== null,
     reject: () => resolve("deny", "direct"),
     show,
-    clear: clearBubble,
+    clear: clearRequest,
   };
 }

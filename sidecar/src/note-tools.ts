@@ -101,6 +101,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     description: "经用户确认后在当前项目空间新建一个 piece。",
     parameters: Type.Object({ title: Type.String(), content: Type.Optional(Type.String()) }),
     promptSnippet: "create_note — 新建 piece",
+    executionMode: "sequential",
     async execute(toolCallId, params: { title: string; content?: string }) {
       const filename = `${params.title.trim().replace(/\.md$/i, "")}.md`;
       const content = params.content ?? "";
@@ -131,6 +132,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     description: "精确替换唯一文本。Inbox 会保留并映射文本标注。",
     parameters: Type.Object({ old_string: Type.String(), new_string: Type.String(), target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })) }),
     promptSnippet: "edit_note — 唯一 str_replace",
+    executionMode: "sequential",
     async execute(toolCallId, params: { old_string: string; new_string: string; target?: NoteTarget }) {
       const raw = await deps.getNoteText(params.target);
       const inbox = shouldDecodeInbox(params.target, raw);
@@ -161,6 +163,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     description: "整篇覆写目标笔记。带文本标注的 Inbox 必须改用 edit_note。",
     parameters: Type.Object({ content: Type.String(), target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })) }),
     promptSnippet: "write_note — 整篇覆写",
+    executionMode: "sequential",
     async execute(toolCallId, params: { content: string; target?: NoteTarget }) {
       const raw = await deps.getNoteText(params.target);
       const inbox = shouldDecodeInbox(params.target, raw);
@@ -189,6 +192,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
       target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })),
     }),
     promptSnippet: "tag_text — 给精确文本添加/移除标签",
+    executionMode: "sequential",
     async execute(toolCallId, params: { exact: string; prefix?: string; suffix?: string; tagId: string; action: "add" | "remove"; target?: NoteTarget }) {
       const guarded = tagTarget("tag_text", params.target);
       if (!guarded.ok) return guarded.result;
@@ -212,6 +216,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     name: "tag_create", label: "Create tag", description: "新建 Inbox 标签。",
     parameters: Type.Object({ name: Type.String(), color: Type.String(), target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })) }),
     promptSnippet: "tag_create — 新建标签",
+    executionMode: "sequential",
     async execute(toolCallId, params: { name: string; color: string; target?: NoteTarget }) {
       const guarded = tagTarget("tag_create", params.target); if (!guarded.ok) return guarded.result;
       if (!isValidTagName(params.name)) return errorResult("标签名不能为空、不能换行，且不能超过 80 个字符");
@@ -229,6 +234,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     name: "tag_update", label: "Update tag", description: "修改 Inbox 标签。",
     parameters: Type.Object({ tagId: Type.String(), name: Type.Optional(Type.String()), color: Type.Optional(Type.String()), target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })) }),
     promptSnippet: "tag_update — 修改标签",
+    executionMode: "sequential",
     async execute(toolCallId, params: { tagId: string; name?: string; color?: string; target?: NoteTarget }) {
       const guarded = tagTarget("tag_update", params.target); if (!guarded.ok) return guarded.result;
       if (params.name === undefined && params.color === undefined) return errorResult("tag_update 至少需要 name 或 color");
@@ -251,6 +257,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     name: "tag_delete", label: "Delete tag", description: "删除 Inbox 标签及其全部文本标注。",
     parameters: Type.Object({ tagId: Type.String(), target: Type.Optional(Type.Object({ kind: Type.String(), name: Type.Optional(Type.String()) })) }),
     promptSnippet: "tag_delete — 删标签",
+    executionMode: "sequential",
     async execute(toolCallId, params: { tagId: string; target?: NoteTarget }) {
       const guarded = tagTarget("tag_delete", params.target); if (!guarded.ok) return guarded.result;
       const raw = await deps.getNoteText(guarded.target); const decoded = decodeInbox(raw);

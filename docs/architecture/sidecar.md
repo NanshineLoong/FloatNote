@@ -10,6 +10,7 @@ sidecar 是独立 Node 进程，入口为 `sidecar/src/main.ts`，通过 stdin/s
 - `runner.ts` 在调用 Pi `SessionManager.open` 前验证 session 文件存在，避免旧索引中的错误路径被 Pi 静默初始化成一段新的空会话。
 - 用户从历史回合重试或编辑重发时，host 发送 `rewind`（该用户回合稳定的 session entry ID）。sidecar 通过 Pi `SessionManager` 将活动叶节点移动到该回合之前，并以关联的 `rewind_result` 确认结果；旧分支仍保留在 append-only session 文件中，但不再属于活动上下文。下一次 prompt 会写入新分支，随后 `session_synced` 让 Rust 刷新持久化对话索引而不重置前端草稿状态。
 - `configuration-gate.ts` 串行 provider 配置变更；栅栏初始保持关闭，直到 host 下发启动 `configure` 或 `configuration_ready`。因此即使新建或恢复会话先于启动配置到达，也会等待明确的配置决策；其他 prompt、工具回调和取消消息仍可并发处理。
+- Pi 默认并行执行同轮工具，但所有会触发本地写权限的 note/tag 工具都声明为 `sequential`，使读取、变换、用户确认和写入构成一个完整串行窗口；只读与网络工具仍可使用默认并行执行。
 - `note-tools.ts` 提供动态项目笔记列表、读取、受控 piece 创建、编辑、写入、标签与技能工具；文件访问均通过 host 请求回到 Rust。Inbox 的 `read_note` 返回 clean Markdown，`tag_text` 以 exact + 可选 prefix/suffix 定位文本，`edit_note` 映射 v2 标注；存在标注时 `write_note` 拒绝整篇覆写。Agent 不支持 loose root Markdown target。
 - `web-tools.ts` 提供 `web_search` / `web_fetch`。网络结果作为不可信外部资料返回；fetch 会限制协议、重定向、响应大小和内容类型，并拒绝本机、私网与 link-local 地址。
 - `skills.ts` 只负责运行时加载 host 下发的技能目录；设置窗口的目录发现、来源

@@ -76,6 +76,77 @@ describe("permission bubble", () => {
     expect(bubble.isOpen()).toBe(true);
   });
 
+  it("queues concurrent requests and advances only after the current request resolves", async () => {
+    let finishFirst!: () => void;
+    const firstPending = new Promise<void>((resolve) => { finishFirst = resolve; });
+    const resolve = vi.fn((req: PermissionRequest) => req.request_id === "req-1" ? firstPending : Promise.resolve());
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const bubble = mountPermissionBubble(root, resolve);
+
+    bubble.show(request({ request_id: "req-1", resolved_path: "/notes/First.md" }));
+    root.querySelector<HTMLButtonElement>(".perm-allow-main")!.click();
+    bubble.show(request({ request_id: "req-2", resolved_path: "/notes/Second.md" }));
+
+    expect(root.querySelector(".perm-title")?.textContent).toBe("创建「First.md」");
+    finishFirst();
+    await firstPending;
+    await Promise.resolve();
+    expect(root.querySelector(".perm-title")?.textContent).toBe("创建「Second.md」");
+
+    root.querySelector<HTMLButtonElement>(".perm-allow-main")!.click();
+    await vi.waitFor(() => expect(bubble.isOpen()).toBe(false));
+    expect(resolve.mock.calls.map(([req]) => req.request_id)).toEqual(["req-1", "req-2"]);
+  });
+
+  it("clears a resolved request by id without dismissing a newer request", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const bubble = mountPermissionBubble(root, vi.fn());
+    bubble.show(request({ request_id: "req-1", resolved_path: "/notes/First.md" }));
+    bubble.show(request({ request_id: "req-2", resolved_path: "/notes/Second.md" }));
+
+    bubble.clear("req-1");
+
+    expect(root.querySelector(".perm-title")?.textContent).toBe("创建「Second.md」");
+    expect(bubble.isOpen()).toBe(true);
+  });
+
+  it("denies every queued request when the permission controller is destroyed", async () => {
+    const resolve = vi.fn().mockResolvedValue(undefined);
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const bubble = mountPermissionBubble(root, resolve);
+    bubble.show(request({ request_id: "req-1" }));
+    bubble.show(request({ request_id: "req-2" }));
+
+    bubble.destroy();
+
+    await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(2));
+    expect(resolve.mock.calls.map(([req, decision]) => [req.request_id, decision])).toEqual([
+      ["req-1", "deny"],
+      ["req-2", "deny"],
+    ]);
+  });
+
+  it("does not deny the current request again when its decision is already in flight", async () => {
+    const resolve = vi.fn((_req: PermissionRequest, _decision: "allow" | "deny") => new Promise<void>(() => {}));
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const bubble = mountPermissionBubble(root, resolve);
+    bubble.show(request({ request_id: "req-1" }));
+    root.querySelector<HTMLButtonElement>(".perm-allow-main")!.click();
+    bubble.show(request({ request_id: "req-2" }));
+
+    bubble.destroy();
+
+    await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(2));
+    expect(resolve.mock.calls.map(([req, decision]) => [req.request_id, decision])).toEqual([
+      ["req-1", "allow"],
+      ["req-2", "deny"],
+    ]);
+  });
+
   it("sends the exact snapshot invoke payload without a second confirmation", async () => {
     const root = document.createElement("div");
     document.body.appendChild(root);

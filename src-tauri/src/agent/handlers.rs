@@ -82,9 +82,8 @@ pub(super) fn handle_apply_edit(
             if let Some(t) = &target {
                 payload["target"] = serde_json::to_value(t).unwrap_or(serde_json::Value::Null);
             }
-            let _ = app.emit("permission://request", &payload);
             state.pending_edits.lock().unwrap().insert(
-                request_id,
+                request_id.clone(),
                 PendingEdit {
                     call_id,
                     old_content,
@@ -96,6 +95,9 @@ pub(super) fn handle_apply_edit(
                     create_only: false,
                 },
             );
+            if let Err(error) = app.emit("permission://request", &payload) {
+                fail_pending_permission_emit(&state, &request_id, error.to_string());
+            }
         }
         None => {
             // 无法定位目标笔记：无 pending 可待裁决，直接回 deny 解除 sidecar 等待。
@@ -224,9 +226,8 @@ pub(super) fn handle_create_note(
         "preview": preview, "can_snapshot": false, "resolved_dir": dir.to_string_lossy(),
         "resolved_note_id": filename.trim_end_matches(".md"), "resolved_path": path.to_string_lossy()
     });
-    let _ = app.emit("permission://request", &payload);
     state.pending_edits.lock().unwrap().insert(
-        request_id,
+        request_id.clone(),
         PendingEdit {
             call_id,
             old_content: String::new(),
@@ -238,6 +239,36 @@ pub(super) fn handle_create_note(
             create_only: true,
         },
     );
+    if let Err(error) = app.emit("permission://request", &payload) {
+        fail_pending_permission_emit(&state, &request_id, error.to_string());
+    }
+}
+
+fn fail_pending_permission_emit(state: &AppState, request_id: &str, error: String) {
+    let pending = state.pending_edits.lock().unwrap().remove(request_id);
+    let Some(pending) = pending else {
+        return;
+    };
+    let message = format!("无法显示写入确认：{error}");
+    let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
+        if pending.create_only {
+            agent.send(&HostToSidecar::CreateNoteResult {
+                call_id: pending.call_id,
+                ok: false,
+                denied: Some(false),
+                name: None,
+                error: Some(message),
+            })
+        } else {
+            agent.send(&HostToSidecar::ApplyEditResult {
+                call_id: pending.call_id,
+                ok: false,
+                denied: Some(false),
+                version: None,
+                error: Some(message),
+            })
+        }
+    });
 }
 
 /// 收到 get_note_text：按 `NoteTarget` 定位文件、读取内容、回 `NoteText`。

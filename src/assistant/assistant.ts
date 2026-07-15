@@ -523,7 +523,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
   ): Promise<void> {
     dispatch({ type: "permission_resolve", requestId, decision });
     return invoke("resolve_permission", { requestId, decision, writeMode }).then(() => {
-      permBubble.clear();
+      permBubble.clear(requestId);
     }).catch((err) => {
       dispatch({ type: "permission_resolve_failed", requestId, message: err instanceof Error ? err.message : String(err) });
       throw err;

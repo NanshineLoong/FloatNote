@@ -15,8 +15,10 @@ into a reconciled message list with incremental DOM updates.
 - `blocks.ts` — incremental message-list reconciler (`reconcileMessages`).
 - `action-card.ts` — read-only action card (edit/tag diff preview, side-by-side
   with `mod`/`add`/`del`/`ctx` row kinds).
-- `permission-bubble.ts` — pending-request controller and compact dock card;
-  it is the only permission surface that initiates resolution.
+- `permission-bubble.ts` — FIFO pending-request controller and compact dock
+  card; it is the only permission surface that initiates resolution. Concurrent
+  requests are deduplicated by request id and advance only after the current
+  request resolves.
 - `permission-model.ts` — pure semantic title, filename, view, and snapshot
   projection. `EditPreviewDetail` and permission payload types live here and
   are re-exported by `permission-bubble.ts` for compatibility.
