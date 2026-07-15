@@ -22,7 +22,7 @@ Assistant UI → src/platform/agent → Tauri command → Rust agent host
 
 sidecar 将流式对话事件输出到 JSONL；Rust 解析并广播为 `agent://event`，由 `src/platform/agent.ts` 订阅。工具事件携带稳定 `callId`、安全显示标题、状态和可选短错误，使前端能按真实调用匹配交错执行；原始参数和工具返回正文不进入 UI 协议。写工具发起 `apply_edit` 时同时携带 Pi 的 `toolCallId`，Rust 将它透传到 `permission://request`，因此权限卡能原位升级正确的工具块。编辑不会立即落盘：Rust 解析 target、保存 pending edit；用户在 UI 中 allow 或 deny 后，`resolve_permission` 才完成写入并向 sidecar 回传结果。
 
-Pi session JSONL 是完整会话事实源；`chat-history/index.json` 只保存列表元数据、正文摘要和工具摘要。打开会话时 sidecar 从活动分支恢复有序 thinking/text/tool blocks，前端始终保存这份完整状态，再按 `assistant_output_mode` 做 compact/detailed 投影。设置保存成功后 Rust 广播 `assistant-output-mode-changed`，已打开笔记窗口立即重投影，不重新请求模型或改写 session。
+Pi session JSONL 是完整会话事实源；`chat-history/index.json` 只保存列表元数据、正文摘要和工具摘要。打开会话是只读操作，不改变 `updatedAt` 或历史顺序；只有 prompt 成功交给 sidecar（包括继续输入、重试、编辑后重发）才刷新活动时间。`session_opened` / `session_synced` 会把 Pi 返回的真实 session 文件路径和摘要同步回索引，但不会把一次查看误记成新活动。打开会话时 sidecar 从活动分支恢复有序 thinking/text/tool blocks，前端始终保存这份完整状态，再按 `assistant_output_mode` 做 compact/detailed 投影；过期会话的乱序 `session_opened` 事件不会覆盖当前明确选择的对话。设置保存成功后 Rust 广播 `assistant-output-mode-changed`，已打开笔记窗口立即重投影，不重新请求模型或改写 session。
 
 重试或编辑历史用户回合是一次 session 分支操作：前端先发 `agent_rewind`，sidecar 将活动 session 叶节点退回到目标用户回合之前；回退成功后前端删除该回合之后的显示消息并发送新 prompt。旧分支不再进入模型上下文，新的完成回合以 `session_synced` 刷新 Rust 的持久化历史索引。
 

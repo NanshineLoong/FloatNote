@@ -7,6 +7,7 @@ sidecar 是独立 Node 进程，入口为 `sidecar/src/main.ts`，通过 stdin/s
 - `event-translate.ts` 将 Pi 事件转换为 host protocol 事件；`tool-title.ts` 从参数生成安全短标题，wire 事件只携带 `callId`、标题、状态和清理后的短错误，不携带参数或工具返回正文。写权限请求仍通过独立受控通道携带对应的 `toolCallId`。
 - `protocol.ts` 定义 JSONL 消息和行编解码。
 - `runner.ts` 打开会话时遍历 Pi 当前活动分支，把 assistant 的 thinking/text/toolCall 按原顺序转换为结构化 blocks，并用后续 toolResult 的 `toolCallId` 恢复 succeeded/failed/incomplete；无法解析的单块会被跳过，原 session JSONL 不重写。
+- `runner.ts` 在调用 Pi `SessionManager.open` 前验证 session 文件存在，避免旧索引中的错误路径被 Pi 静默初始化成一段新的空会话。
 - 用户从历史回合重试或编辑重发时，host 发送 `rewind`（该用户回合稳定的 session entry ID）。sidecar 通过 Pi `SessionManager` 将活动叶节点移动到该回合之前，并以关联的 `rewind_result` 确认结果；旧分支仍保留在 append-only session 文件中，但不再属于活动上下文。下一次 prompt 会写入新分支，随后 `session_synced` 让 Rust 刷新持久化对话索引而不重置前端草稿状态。
 - `configuration-gate.ts` 串行 provider 配置变更；新建或恢复会话会等待该栅栏，其他 prompt、工具回调和取消消息仍可并发处理。
 - `note-tools.ts` 提供动态项目笔记列表、读取、受控 piece 创建、编辑、写入、标签与技能工具；文件访问均通过 host 请求回到 Rust。Agent 不支持 loose root Markdown target。

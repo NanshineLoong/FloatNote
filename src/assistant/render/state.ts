@@ -137,6 +137,9 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
       return state;
 
     case "session_opened":
+      if (state.activeConversationId && state.activeConversationId !== event.conversationId) {
+        return state;
+      }
       if (
         state.activeConversationId === event.conversationId &&
         state.messages.length > 0 &&

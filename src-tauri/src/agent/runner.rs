@@ -250,7 +250,7 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             session_file,
             messages,
         } => {
-            sync_session_history(app, &conversation_id, &messages);
+            sync_session_history(app, &conversation_id, &session_file, &messages);
             let _ = app.emit(
                 "agent://event",
                 &SidecarToHost::SessionOpened {
@@ -265,7 +265,7 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             session_file,
             messages,
         } => {
-            sync_session_history(app, &conversation_id, &messages);
+            sync_session_history(app, &conversation_id, &session_file, &messages);
             let _ = app.emit(
                 "agent://event",
                 &SidecarToHost::SessionSynced {
@@ -375,6 +375,7 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
 fn sync_session_history(
     app: &AppHandle,
     conversation_id: &str,
+    session_file: &str,
     messages: &[super::protocol::ChatDisplayMessage],
 ) {
     let Ok(store) = crate::chat_history::ChatHistoryStore::default_for_user() else {
@@ -443,7 +444,13 @@ fn sync_session_history(
             _ => Vec::new(),
         })
         .collect();
-    let _ = store.update_session_history(conversation_id, model, saved_messages, tools);
+    let _ = store.update_session_snapshot(
+        conversation_id,
+        session_file.to_string(),
+        model,
+        saved_messages,
+        tools,
+    );
 }
 
 /// sidecar 退出/崩溃：标记不可用、清空句柄、发错误事件，绝不 panic。

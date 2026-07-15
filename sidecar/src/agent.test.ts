@@ -5,7 +5,7 @@ import { AgentRunner, rewindSessionToUserTurn, translateEvent } from "./agent.js
 import type { SessionLike } from "./agent.js";
 import { displayMessagesFromSession } from "./runner.js";
 import type { SidecarToHost } from "./protocol.js";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { formatSkillsForSystemPrompt } from "./skills.js";
@@ -133,6 +133,23 @@ describe("displayMessagesFromSession", () => {
       { type: "tool", callId: "c1", status: "succeeded" },
       { type: "text", text: "结论" },
     ] });
+  });
+});
+
+describe("session restoration", () => {
+  it("rejects a missing session file instead of creating a blank conversation", async () => {
+    const root = mkdtempSync(join(tmpdir(), "floatnote-missing-session-"));
+    const missing = join(root, "missing.jsonl");
+    const runner = new AgentRunner({
+      send: () => {},
+      createSession: async () => fakeSession(() => {}).session,
+    });
+    await runner.configure({ provider: "openai", model: "gpt-5", apiKey: "test" });
+
+    await expect(runner.openSession({ conversationId: "c1", sessionFile: missing }))
+      .rejects.toThrow("conversation session file not found");
+    expect(existsSync(missing)).toBe(false);
+    rmSync(root, { recursive: true, force: true });
   });
 });
 

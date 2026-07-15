@@ -89,6 +89,7 @@ pub(crate) async fn clear_agent_configuration(state: &AppState) -> Result<(), St
 
 #[tauri::command]
 pub fn agent_send(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     conversation_id: String,
     user_text: String,
@@ -112,12 +113,20 @@ pub fn agent_send(
     agent
         .send(&HostToSidecar::Prompt {
             request_id: request_id.clone(),
-            conversation_id,
+            conversation_id: conversation_id.clone(),
             user_text,
             references,
             skill,
         })
         .map_err(|error| error.to_string())?;
+    drop(guard);
+    if let Ok(store) = crate::chat_history::ChatHistoryStore::default_for_user() {
+        if let Err(error) = store.touch_activity(&conversation_id) {
+            eprintln!("failed to update chat activity for {conversation_id}: {error}");
+        }
+    }
+    let _ = crate::tray::refresh_menu(&app);
+    let _ = app.emit("chat://history-changed", ());
     Ok(request_id)
 }
 

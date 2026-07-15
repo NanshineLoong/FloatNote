@@ -54,6 +54,25 @@ describe("assistant message actions", () => {
     expect(cancel).toHaveBeenCalledWith("r1");
   });
 
+  it("ignores a late session-opened event after the active scope was cleared", async () => {
+    const { root, emitAgent, handle } = await mountWithDeps();
+    handle.setScope({
+      scopeType: "project",
+      scopePath: "/other",
+      scopeLabel: "Other",
+      cwd: "/other",
+    });
+
+    emitAgent({
+      type: "session_opened",
+      conversationId: "c1",
+      sessionFile: conversation.sessionFile,
+      messages: [{ role: "user", text: "stale", timestamp: 0 }],
+    });
+
+    expect(root.querySelectorAll(".chat-msg")).toHaveLength(0);
+  });
+
   it("resends the selected user message", async () => {
     const send = vi.fn().mockResolvedValue("r2");
     const rewind = vi.fn().mockResolvedValue(undefined);
