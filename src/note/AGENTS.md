@@ -2,7 +2,7 @@
 
 The main note window (CodeMirror 6 editor + inbox/pieces/tasks + assistant).
 Entry: `main.ts` calls `startNoteApp()` in `note-app.ts`. Two CM6 editors
-(inbox + piece) share preview/tag decorations.
+(inbox + piece) share live preview; Inbox additionally owns range annotations.
 
 ## Module map
 
@@ -14,11 +14,10 @@ Entry: `main.ts` calls `startNoteApp()` in `note-app.ts`. Two CM6 editors
   and `icons.ts`.
 - `tasks-panel.ts` — `_tasks.md` checklist panel (render, mutate, drag-reorder,
   filter). Imports task logic from `./tasks` (migrated from shared).
-- `tags/` — tag system: `bar.ts` (gutter bar), `palette.ts` (re-exports
-  canonical `PALETTE`/`freeColors` from `@floatnote/note-logic`, + `tint`),
-  `picker.ts`, `decoration.ts`, `filter.ts`, `floating.ts` (floating menu
-  helper used across the note window + assistant pickers).
-- `blocks/` — `drag.ts` (block reorder), `handle-gutter.ts` (gutter handle).
+- `annotations/` — Inbox clean-projection metadata `StateField`, v2 autosave,
+  inline decoration, selection context menu, and read-only segmented filter
+  projection. `tags/bar.ts` manages definitions and selects the active filter;
+  `tags/palette.ts` re-exports the canonical palette.
 - `piece-switcher.ts`, `seg-switch.ts`, `split.ts`, `layout*.ts`,
   `topbar.ts` — layout/view switching.
 - `image-*.ts` — image drop/resize/toolbar/attrs/fs. Block image widgets carry
@@ -29,7 +28,8 @@ Entry: `main.ts` calls `startNoteApp()` in `note-app.ts`. Two CM6 editors
 - `recent-projects.ts` — MRU list helpers.
 - `agent.ts` — compatibility re-export; the frontend↔Rust bridge lives in
   `src/platform/agent.ts`.
-- `append.ts`, `paste.ts`, `quote.ts`, `table.ts`/`table-keymap.ts`,
+- `append.ts`, `paste.ts`, `quote.ts` (quote-card-specific ranges and minimal
+  append), `table.ts`/`table-keymap.ts`,
   `list-indent.ts`/`list-keymap.ts`, `markdown-keymap.ts`, `inline.ts`, `empty-state.ts`,
   `versions.ts`, `window-state.ts`, `shortcuts.ts`, `scrollbar.ts`,
   — focused editor helpers.

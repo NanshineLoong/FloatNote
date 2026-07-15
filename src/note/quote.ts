@@ -1,7 +1,5 @@
-/** Source attribution for a captured quote. `url` is null for app sources.
- *  `bundleId` is the stable app identity (e.g. "com.google.chrome"); null for
- *  legacy/unknown sources. It drives same-source merge detection and the
- *  live-rendered app icon, and is persisted per-card via a hidden bid marker. */
+import type { QuoteSourceMetadata, TextChange, TextRange } from "@floatnote/note-logic";
+
 export type Source = {
   kind: "web" | "app";
   title: string;
@@ -9,197 +7,150 @@ export type Source = {
   bundleId: string | null;
 };
 
-/** Mirror of the old Rust `quote::format_quote`: line-by-line `> ` prefix,
- *  blank line -> bare `>`. Input is assumed trimmed (capture trims it). */
 export function quoteBody(text: string): string {
-  return text
-    .split("\n")
-    .map((line) => (line === "" ? ">" : `> ${line}`))
-    .join("\n");
+  return text.split("\n").map((line) => line === "" ? ">" : `> ${line}`).join("\n");
 }
 
-/** Escape `[`, `]`, `\` in chip text so it is safe inside a markdown link. */
 function escapeChipText(text: string): string {
-  return text.replace(/[\[\]\\]/g, (m) => `\\${m}`);
+  return text.replace(/[\[\]\\]/g, (match) => `\\${match}`);
 }
 
-/** Inverse of escapeChipText. */
 function unescapeChipText(text: string): string {
   return text.replace(/\\([\[\]\\])/g, "$1");
 }
 
-/** `[title](url)` for web (with url), bare `title` for app or web-without-url. */
 export function sourceToChip(source: Source): string {
-  if (source.kind === "web" && source.url) {
-    return `[${escapeChipText(source.title)}](${source.url})`;
-  }
-  return escapeChipText(source.title);
+  return source.kind === "web" && source.url
+    ? `[${escapeChipText(source.title)}](${source.url})`
+    : escapeChipText(source.title);
 }
 
-/** Normalise a URL for dedup/merge: lowercase, strip trailing slashes. */
 function normalizeWebUrl(url: string): string {
   return url.toLowerCase().replace(/\/+$/, "");
 }
 
-// ── bundle-id marker ──────────────────────────────────────────────────────
-// Mirrors the tag-marker convention in @floatnote/note-logic (tags/model): an inline HTML comment
-// `<!-- floatnote:bid=<id> -->` on the title line. The tag decoration plugin
-// hides it; parseChips / the chip-widget range strip it so it never reads as a
-// chip. Persisting it per card lets the icon re-render on file reopen.
-
 const BID_RE = /<!-- floatnote:bid=([^>]*?) -->/g;
 const BID_FIRST = /<!-- floatnote:bid=([^>]*?) -->/;
 
-/** `<!-- floatnote:bid=<id> -->`. */
 export function buildBidMarker(bundleId: string): string {
   return `<!-- floatnote:bid=${bundleId} -->`;
 }
 
-/** Remove every `floatnote:bid=` marker from `s`. */
-export function stripBidMarker(s: string): string {
-  return s.replace(BID_RE, "");
+export function stripBidMarker(value: string): string {
+  return value.replace(BID_RE, "");
 }
 
-/** The bundle id recorded in a card block, or null (whole-block scan). */
-export function readBidMarker(blockText: string): string | null {
-  const m = BID_FIRST.exec(blockText);
-  return m ? m[1] : null;
+export function readBidMarker(value: string): string | null {
+  return BID_FIRST.exec(value)?.[1] ?? null;
 }
 
-/** Parse the chip portion of a title line (text after `> [!quote] `).
- *  Splits on ` · `; `[text](url)` -> web, else app. Lenient on malformed input.
- *  Strips any floatnote tag + bid markers first so trailing markers on the
- *  title line don't pollute the chip string. Chips themselves never carry a
- *  bundleId (it lives in the per-card bid marker); parsed chips get null. */
-export function parseChips(chipsStr: string): Source[] {
-  const cleaned = stripBidMarker(stripTagMarker(chipsStr));
-  const chips: Source[] = [];
+export function parseChips(chips: string): Source[] {
+  const cleaned = stripBidMarker(chips);
+  const sources: Source[] = [];
   for (const part of cleaned.split(" · ")) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-    const m = /^\[(.*)\]\((.*)\)$/.exec(trimmed);
-    if (m) {
-      chips.push({ kind: "web", title: unescapeChipText(m[1]), url: m[2], bundleId: null });
-    } else {
-      chips.push({ kind: "app", title: unescapeChipText(trimmed), url: null, bundleId: null });
-    }
+    const value = part.trim();
+    if (!value) continue;
+    const match = /^\[(.*)\]\((.*)\)$/.exec(value);
+    sources.push(match
+      ? { kind: "web", title: unescapeChipText(match[1]), url: match[2], bundleId: null }
+      : { kind: "app", title: unescapeChipText(value), url: null, bundleId: null });
   }
-  return chips;
+  return sources;
 }
 
-/** Build `> [!quote] <chips><!-- bid -->\n<quoted body>`. Null source -> empty
- *  title line and no bid marker. The bid marker is inline on the title line so
- *  it adds no extra card row and stays hidden in the live preview. */
+/** Build clean editor Markdown. Bundle identity is stored in InboxMetadata. */
 export function buildQuoteBlock(text: string, source: Source | null): string {
-  const chipsStr = source ? sourceToChip(source) : "";
-  const bid = source?.bundleId ? buildBidMarker(source.bundleId) : "";
-  const titleLine = `> [!quote]${chipsStr ? ` ${chipsStr}` : ""}${bid}`;
-  return `${titleLine}\n${quoteBody(text)}`;
+  const chip = source ? sourceToChip(source) : "";
+  return `> [!quote]${chip ? ` ${chip}` : ""}\n${quoteBody(text)}`;
 }
 
-/** Merge `text` into an existing `[!quote]` card block. Same-source is
- *  guaranteed by the caller (`resolveMergeTarget`); this fn only appends body
- *  after a `>` blank separator and preserves the title line (and its bid
- *  marker) verbatim. Preserves the block's floatnote tag marker: strips any
- *  existing marker from the lines, then re-appends one on the new last line
- *  (whole-block scan means it stays findable). */
-export function mergeQuoteBlock(existingBlock: string, text: string): string {
-  const tagId = blockTagId(existingBlock);
-  const lines = existingBlock.split("\n").map(stripTagMarker);
-  const titleLine = lines[0] ?? "> [!quote]";
-
-  const bodyLines = lines.slice(1);
-  const newBody = bodyLines.length > 0
-    ? `${bodyLines.join("\n")}\n>\n${quoteBody(text)}`
-    : quoteBody(text);
-
-  const suffix = tagId ? buildMarker(tagId) : "";
-  return `${titleLine}\n${newBody}${suffix}`;
-}
-
-/** True iff the block's first line matches `^>\s*\[!quote\]`. */
 export function isQuoteCardBlock(blockText: string): boolean {
-  const firstLine = blockText.split("\n", 1)[0] ?? "";
-  return /^>\s*\[!quote\]/.test(firstLine);
+  return /^>\s*\[!quote\]/.test(blockText.split("\n", 1)[0] ?? "");
 }
 
-import { blockRanges, blockTagId, buildMarker, stripTagMarker, type BlockRange } from "@floatnote/note-logic";
+/** Find quote cards without depending on the removed generic Inbox block model. */
+export function quoteCardRanges(markdown: string): TextRange[] {
+  const ranges: TextRange[] = [];
+  let offset = 0;
+  while (offset <= markdown.length) {
+    const newline = markdown.indexOf("\n", offset);
+    const lineTo = newline < 0 ? markdown.length : newline;
+    const line = markdown.slice(offset, lineTo);
+    if (/^>\s*\[!quote\]/.test(line)) {
+      const from = offset;
+      let to = lineTo;
+      let next = newline < 0 ? markdown.length + 1 : newline + 1;
+      while (next <= markdown.length) {
+        const nextNewline = markdown.indexOf("\n", next);
+        const nextTo = nextNewline < 0 ? markdown.length : nextNewline;
+        if (!/^>/.test(markdown.slice(next, nextTo))) break;
+        to = nextTo;
+        next = nextNewline < 0 ? markdown.length + 1 : nextNewline + 1;
+      }
+      ranges.push({ from, to });
+      offset = next;
+      continue;
+    }
+    if (newline < 0) break;
+    offset = newline + 1;
+  }
+  return ranges;
+}
+
+/** Append only at the body end so existing annotation positions map naturally. */
+export function buildQuoteAppendChange(
+  existingBlock: string,
+  _cardFrom: number,
+  cardTo: number,
+  text: string,
+): TextChange {
+  const separator = existingBlock.includes("\n") ? "\n>\n" : "\n";
+  return { from: cardTo, to: cardTo, insert: `${separator}${quoteBody(text)}` };
+}
+
+/** Compatibility helper for callers that only need the resulting block text. */
+export function mergeQuoteBlock(existingBlock: string, text: string): string {
+  const change = buildQuoteAppendChange(existingBlock, 0, existingBlock.length, text);
+  return existingBlock + change.insert;
+}
 
 export type MergeTarget =
-  | { kind: "merge"; range: BlockRange }
+  | { kind: "merge"; range: TextRange }
   | { kind: "new"; at: number };
 
-/** Extract the chips string from a card block's title line (text after
- *  `> [!quote] `), before any markers are stripped. */
 function titleChipsOf(blockText: string): string {
-  const firstLine = blockText.split("\n", 1)[0] ?? "";
-  const m = /^>\s*\[!quote\]\s?(.*)$/.exec(firstLine);
-  return m ? m[1] : "";
+  return /^>\s*\[!quote\]\s?(.*)$/.exec(blockText.split("\n", 1)[0] ?? "")?.[1] ?? "";
 }
 
-/** True iff an incoming source is "the same" as the card's source for merge
- *  purposes:
- *  • app identity: bundle id equal (title-equal fallback when either side lacks
- *    a bundle id — legacy files / sourceless captures);
- *  • web: additionally the normalised url must match. */
-function sameSource(card: Source, cardBid: string | null, incoming: Source): boolean {
-  const sameApp =
-    cardBid && incoming.bundleId
-      ? cardBid === incoming.bundleId
-      : card.title === incoming.title;
-  if (incoming.kind === "web") {
-    return sameApp && card.kind === "web" &&
-      normalizeWebUrl(card.url ?? "") === normalizeWebUrl(incoming.url ?? "");
-  }
-  return sameApp;
+function sameSource(card: Source, cardBundleId: string | null, incoming: Source): boolean {
+  const sameIdentity = cardBundleId && incoming.bundleId
+    ? cardBundleId === incoming.bundleId
+    : card.title === incoming.title;
+  return incoming.kind === "web"
+    ? sameIdentity && card.kind === "web" &&
+      normalizeWebUrl(card.url ?? "") === normalizeWebUrl(incoming.url ?? "")
+    : sameIdentity && card.kind === "app";
 }
 
-/** Decide whether a capture of `incoming` at `caret` should merge into an
- *  existing `[!quote]` card (inside or immediately preceding, separated only by
- *  blank lines, AND same source) or start a new card. Pure over (doc, caret,
- *  incoming) so it is unit-testable without a live CodeMirror.
- *
- *  Returns `{kind:"new", at}` where `at` is the insertion offset: the caret when
- *  there's no nearby card, or the end of the candidate card when the source
- *  differs — so different-source quotes stack as sibling blocks after the card
- *  rather than merging or splitting it. */
 export function resolveMergeTarget(
-  doc: string,
+  markdown: string,
   caret: number,
   incoming: Source | null,
+  quoteSources: QuoteSourceMetadata[] = [],
 ): MergeTarget {
-  const ranges = blockRanges(doc);
-
-  // Candidate card: caret inside one, or in blank lines immediately after one.
-  let candidate: BlockRange | null = null;
-  for (const r of ranges) {
-    if (r.from <= caret && caret <= r.to && isQuoteCardBlock(doc.slice(r.from, r.to))) {
-      candidate = r;
-      break;
-    }
-  }
+  const ranges = quoteCardRanges(markdown);
+  let candidate = ranges.find((range) => range.from <= caret && caret <= range.to) ?? null;
   if (!candidate) {
-    let prev: BlockRange | null = null;
-    for (const r of ranges) {
-      if (r.to < caret) prev = r;
-      else break;
-    }
-    if (prev && isQuoteCardBlock(doc.slice(prev.from, prev.to))) {
-      const between = doc.slice(prev.to, caret);
-      if (between.trim() === "") candidate = prev;
-    }
+    const previous = [...ranges].reverse().find((range) => range.to <= caret);
+    if (previous && markdown.slice(previous.to, caret).trim() === "") candidate = previous;
   }
-
   if (!candidate) return { kind: "new", at: caret };
-
   if (incoming) {
-    const blockText = doc.slice(candidate.from, candidate.to);
-    const first = parseChips(titleChipsOf(blockText))[0];
-    if (first && sameSource(first, readBidMarker(blockText), incoming)) {
-      return { kind: "merge", range: candidate };
-    }
+    const block = markdown.slice(candidate.from, candidate.to);
+    const card = parseChips(titleChipsOf(block))[0];
+    const bundleId = quoteSources.find((source) => source.cardFrom === candidate?.from)?.bundleId
+      ?? readBidMarker(block);
+    if (card && sameSource(card, bundleId, incoming)) return { kind: "merge", range: candidate };
   }
-
-  // Different source (or sourceless incoming): new sibling block after the card.
   return { kind: "new", at: candidate.to };
 }

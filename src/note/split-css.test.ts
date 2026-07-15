@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 const noteAppSource = readFileSync(resolve(process.cwd(), "src/note/note-app.ts"), "utf8");
 const editorSource = readFileSync(resolve(process.cwd(), "src/note/editor.ts"), "utf8");
-const tagDecorationSource = readFileSync(resolve(process.cwd(), "src/note/tags/decoration.ts"), "utf8");
+const annotationDecorationSource = readFileSync(resolve(process.cwd(), "src/note/annotations/decoration.ts"), "utf8");
 const pieceSwitcherSource = readFileSync(resolve(process.cwd(), "src/note/piece-switcher.ts"), "utf8");
 const assistantCss = readFileSync(resolve(process.cwd(), "src/assistant/styles.css"), "utf8");
 const semanticCss = readFileSync(resolve(process.cwd(), "src/styles/semantic.css"), "utf8");
@@ -49,38 +49,18 @@ describe("split view CSS placement", () => {
     expect(css).toMatch(/\.cm-selected-line-break\s*{[^}]*background:\s*var\(--color-selected\);/s);
   });
 
-  it("keeps inbox block handles in the compact left margin", () => {
-    expect(css).toMatch(
-      /#editor-root\s*{[^}]*overflow:\s*visible;/s,
-    );
+  it("removes the Inbox block gutter and handle surface", () => {
     expect(editorSource).toMatch(/padding:\s*"16px 0"/);
-    expect(css).toMatch(
-      /#editor-root\s+\.cm-scroller\s*{[^}]*margin-left:\s*-14px;[^}]*width:\s*calc\(100% \+ 14px\);/s,
-    );
-    expect(css).toMatch(
-      /\.cm-block-gutter\s*{[^}]*width:\s*14px;/s,
-    );
-    expect(css).toMatch(
-      /#editor-root\s+\.cm-gutters\s*{[^}]*border-right:\s*none;[^}]*border-left:\s*none;[^}]*background:\s*transparent;/s,
-    );
-    expect(css).toMatch(
-      /\.cm-gutterElement:hover\s+\.cm-block-handle\s*{[^}]*opacity:\s*1;/s,
-    );
-    expect(css).toMatch(
-      /\.cm-block-handle:hover\s*{[^}]*opacity:\s*1;/s,
-    );
-    expect(css).not.toMatch(/\.cm-editor:hover\s+\.cm-block-handle\s*{/);
+    expect(css).not.toContain(".cm-block-handle");
+    expect(css).not.toContain(".cm-block-gutter");
+    expect(noteAppSource).not.toContain("blockHandleGutter");
   });
 
-  it("renders tagged blocks as one rounded background without a quote-style rule or outline", () => {
-    const taggedBlock = css.match(/\.cm-tagged-block\s*{([^}]*)}/s)?.[1] ?? "";
-    expect(taggedBlock).toMatch(/border-left:\s*none;/);
-    expect(taggedBlock).not.toMatch(/box-shadow:/);
-    expect(css).toMatch(/\.cm-tagged-block-first\s*{[^}]*border-top-left-radius:\s*8px;/s);
-    expect(css).toMatch(/\.cm-tagged-block-last\s*{[^}]*border-bottom-left-radius:\s*8px;/s);
-    expect(taggedBlock).not.toMatch(/border-left:\s*3px\s+solid/);
-    expect(tagDecorationSource).toMatch(/cm-tagged-block-first/);
-    expect(tagDecorationSource).toMatch(/cm-tagged-block-last/);
+  it("renders inline annotations without visible tag chips in body text", () => {
+    expect(css).toMatch(/\.cm-inline-annotation\s*{/s);
+    expect(annotationDecorationSource).toContain("background-image");
+    expect(annotationDecorationSource).toContain("aria-label");
+    expect(annotationDecorationSource).not.toContain("title:");
   });
 
   it("expands top tag discs into label chips on hover or active state without a selection ring", () => {
@@ -108,13 +88,10 @@ describe("split view CSS placement", () => {
     expect(css).toMatch(/#text-col\s*{[^}]*grid-row:\s*2;/s);
   });
 
-  it("makes the filtered tag view visually and interactively read-only", () => {
-    expect(css).toMatch(
-      /#editor-root\.tag-filter-readonly\s+\.cm-content\s*{[^}]*pointer-events:\s*none;[^}]*caret-color:\s*transparent;/s,
-    );
-    expect(css).toMatch(
-      /#editor-root\.tag-filter-readonly\s+\.cm-block-gutter\s*{[^}]*pointer-events:\s*none;/s,
-    );
+  it("renders filtered results in a separate read-only segmented projection", () => {
+    expect(noteAppSource).toContain('id="annotation-projection-root"');
+    expect(css).toMatch(/\.annotation-projection-item\s*{/s);
+    expect(css).toMatch(/#annotation-projection-root\[hidden\]\s*{[^}]*display:\s*none;/s);
     expect(css).toMatch(/\.tag-readonly-hint\s*{[^}]*margin-left:\s*auto;/s);
   });
 

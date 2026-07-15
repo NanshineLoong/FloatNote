@@ -44,7 +44,6 @@ describe("permission bubble", () => {
     expect(resolve).not.toHaveBeenCalled();
     expect(bubble.isOpen()).toBe(true);
   });
-
   it("submits only the first decision and disables compact and dialog controls together", async () => {
     let finish!: () => void;
     const pending = new Promise<void>((resolve) => { finish = resolve; });

@@ -14,7 +14,6 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
-import { stripTagMarker } from "@floatnote/note-logic";
 import { stripBidMarker } from "./quote";
 
 /**
@@ -84,7 +83,7 @@ export function parseListItems(state: EditorState): ListFoldItem[] {
       const nested = findChild(sn, LIST_CONTAINER);
       const firstLine = doc.lineAt(node.from);
       const markTo = listMark ? listMark.to : node.from;
-      const text = stripBidMarker(stripTagMarker(doc.sliceString(markTo, firstLine.to).trim()));
+      const text = stripBidMarker(doc.sliceString(markTo, firstLine.to).trim());
       let childFrom = node.to;
       let childTo = node.to;
       if (nested) {

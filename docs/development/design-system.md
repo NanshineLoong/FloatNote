@@ -78,6 +78,17 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 | Form control | `components.css` | `.fn-control` | settings 的 text/password/select 与 assistant 输入框 |
 | EmptyState | `empty-state.ts` | `.fn-empty*` + `.fn-btn*` actions | 笔记窗口全页 `NO_PROJECT` / `PATH_ERROR` / `NO_PIECE` |
 
+## Inbox 文本标注
+
+Inbox 不再使用左侧 block handle、拖拽落点、块删除菜单或整块 tag tint。选中文本的
+原生右键/Control-click 入口在存在可标注正文时打开 `.fn-menu`；每个标签保留原始
+palette 色。正文装饰统一使用低对比中性底色，并以 1px 堆叠线分别呈现覆盖标签，
+不混色、不插入 chip、不显示 hover 名称；名称只出现在顶栏、菜单与无障碍描述中。
+
+激活顶栏标签后显示 `#annotation-projection-root`：每个 Markdown 语义上下文是独立、
+可聚焦的 `.annotation-projection-item`，匹配文本用中性 `mark`。单击只聚焦结果，
+双击或 Enter 回到 clean editor 并选中源标注；projection 本身始终只读。
+
 设置窗口采用不透明内容画布与柔和描边卡片。标题栏和侧栏可以消费外壳表面
 token，内容卡片只消费 settings component token，不直接读取 primitive。原生
 `select` 保留键盘与系统语义，通过 `.select-wrap` 统一单箭头、高度和状态；开关
@@ -96,7 +107,7 @@ token，内容卡片只消费 settings component token，不直接读取 primiti
 - ✅ 设置与助手：设置页原生 text/password/select、助手输入框切到 `.fn-control`；助手的新对话与历史入口切到 `createButton`。
 - ✅ 设置窗口成为第一套完整迁移样板：原生平台外壳、侧栏导航、不透明卡片、
   内缩分隔线、统一 select/switch/recorder/error 状态均由现有三层 token 驱动。
-- ✅ 阶段二（第一批）：笔记窗口的项目/成品/版本/标签/块操作菜单统一 `.fn-menu` / `.fn-menu__item`；全页 EmptyState 统一 `.fn-empty*` 与 `.fn-btn*` actions；assistant 的 history / skill / mention 下拉复用 `.fn-popover` 表面。`createMenu` 外点监听修复为在子菜单交互后仍保持有效，并有回归测试。
+- ✅ 阶段二（第一批）：笔记窗口的项目/成品/版本/标签/文本标注菜单统一 `.fn-menu` / `.fn-menu__item`；全页 EmptyState 统一 `.fn-empty*` 与 `.fn-btn*` actions；assistant 的 history / skill / mention 下拉复用 `.fn-popover` 表面。`createMenu` 外点监听修复为在子菜单交互后仍保持有效，并有回归测试。
 - ⏳ 后续：继续逐调用点切到 `createButton`/`createIcon`，重点收敛笔记窗口遗留 `.icon-btn`；任务面板菜单与编辑器专属控件需保留其定位、拖拽或 CodeMirror 交互，再按行为抽取。
 - 守卫：`src/styles/tokens.test.ts` 断言窗口 CSS 无残留 accent/danger rgba、无 per-window dark `@media` 块、danger 语义 token 存在、组件层不裸用 primitives。
 

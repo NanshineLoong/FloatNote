@@ -11,9 +11,8 @@ import {
   type DecorationSet,
   EditorView,
 } from "@codemirror/view";
-import { readBidMarker, stripBidMarker } from "../quote";
+import { inboxMetadata } from "../annotations/state";
 import { isSafeUrl } from "../inline";
-import { stripTagMarker } from "@floatnote/note-logic";
 import { olOrdinal } from "../list-indent";
 import { IconReadyEffect, iconStateKeyFor } from "./icons";
 import { ACCENT, ACCENT_HOVER } from "../../styles/accent";
@@ -494,24 +493,17 @@ function buildDecorations(state: EditorState): DecorationSet {
 
     // Title-line chip widget (skip cursor line so the raw marker stays editable).
     // m[1] = `> [!quote] ` (quote marker + type + optional space) — exactly the
-    // text already hidden by QuoteMark + the callout-marker loop. m[2] = chips,
-    // minus any trailing floatnote tag OR bid marker (stripped here so neither
-    // reads as a chip nor overlaps the widget's replaced range; both markers are
-    // hidden by the tag decoration plugin). The widget range ends at the chips'
-    // length so it does not overlap the markers' own hide decorations.
+    // text already hidden by QuoteMark + the callout-marker loop. m[2] is clean
+    // chip text; bundle identity lives in the Inbox metadata StateField.
     const titleLine = doc.line(firstLine);
     if (titleLine.from >= vpFrom && titleLine.to <= vpTo &&
         !cursorLines.has(firstLine)) {
       const m = /^(>\s*\[!quote\]\s?)(.*)$/.exec(titleLine.text);
       if (m) {
         const chipStart = titleLine.from + m[1].length;
-        const chipsStr = stripBidMarker(stripTagMarker(m[2]));
-        // The bid marker lives inline on the title line; read it from the whole
-        // card block so the widget can fetch the app icon.
-        const lastLineNo = cardLastLine.get(firstLine) ?? firstLine;
-        const lastLine = doc.line(lastLineNo);
-        const blockText = doc.sliceString(titleLine.from, lastLine.to);
-        const bundleId = readBidMarker(blockText);
+        const chipsStr = m[2];
+        const bundleId = inboxMetadata(state).quoteSources
+          .find((source) => source.cardFrom === titleLine.from)?.bundleId ?? null;
         const iconStateKey = iconStateKeyFor(bundleId);
         entries.push({
           from: chipStart,

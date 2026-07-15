@@ -40,17 +40,17 @@ describe("projectPermission", () => {
 
   it("projects tag operations without exposing raw markers", () => {
     const assign = projectPermission(request({
-      tool_name: "set_tag",
-      preview: { tool: "set_tag", summary: "", detail: { kind: "tag_assign", blockPreview: "块摘要", tagName: "重点", tagColor: "#f00" } },
+      tool_name: "tag_text",
+      preview: { tool: "tag_text", summary: "", detail: { kind: "tag_assign", textExcerpt: "文本摘要", annotationCount: 2, action: "add", tagName: "重点", tagColor: "#f00" } },
     }));
-    expect(assign.title).toBe("为「块摘要」设置标签「重点」");
+    expect(assign.title).toBe("为「文本摘要」添加标签「重点」");
     expect(assign.colors).toEqual([{ label: "重点", color: "#f00" }]);
 
     const clear = projectPermission(request({
-      tool_name: "set_tag",
-      preview: { tool: "set_tag", summary: "", detail: { kind: "tag_assign", blockPreview: "块摘要", tagName: "", tagColor: "" } },
+      tool_name: "tag_text",
+      preview: { tool: "tag_text", summary: "", detail: { kind: "tag_assign", textExcerpt: "文本摘要", annotationCount: 1, action: "remove", tagName: "重点", tagColor: "#f00" } },
     }));
-    expect(clear.title).toBe("清除「块摘要」的标签");
+    expect(clear.title).toBe("为「文本摘要」移除标签「重点」");
   });
 
   it("projects create, update, and delete tag titles with color cues", () => {
@@ -60,8 +60,8 @@ describe("projectPermission", () => {
     const update = projectPermission(request({ tool_name: "tag_update", preview: { tool: "tag_update", summary: "", detail: { kind: "tag_update", tagId: "x", oldName: "旧", oldColor: "#111", newName: "新", newColor: "#222" } } }));
     expect(update.title).toBe("修改标签「旧」→「新」");
     expect(update.colors).toHaveLength(2);
-    const remove = projectPermission(request({ tool_name: "tag_delete", preview: { tool: "tag_delete", summary: "", detail: { kind: "tag_delete", tagName: "重点", markerCount: 3 } } }));
-    expect(remove.title).toBe("删除标签「重点」并清除 3 处标记");
+    const remove = projectPermission(request({ tool_name: "tag_delete", preview: { tool: "tag_delete", summary: "", detail: { kind: "tag_delete", tagName: "重点", annotationCount: 3 } } }));
+    expect(remove.title).toBe("删除标签「重点」并清除 3 个标注");
   });
 
   it("only enables snapshot split approval for snapshot-capable write_note", () => {

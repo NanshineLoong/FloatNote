@@ -81,11 +81,11 @@ export interface PromptRef {
 
 export type EditPreviewDetail =
   | { kind: "diff"; hunks: string }
-  | { kind: "tag_assign"; blockPreview: string; tagName: string; tagColor: string }
+  | { kind: "tag_assign"; textExcerpt: string; annotationCount: number; action: "add" | "remove"; tagName: string; tagColor: string }
   | { kind: "tag_create"; tagName: string; tagColor: string }
   | { kind: "tag_update"; tagId: string; oldName: string; oldColor: string; newName: string; newColor: string }
   | { kind: "note_create"; filename: string; contentPreview: string }
-  | { kind: "tag_delete"; tagName: string; markerCount: number };
+  | { kind: "tag_delete"; tagName: string; annotationCount: number };
 
 export interface EditPreview {
   tool: string;

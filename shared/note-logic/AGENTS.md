@@ -6,18 +6,20 @@ Barrel: `src/index.ts`.
 
 ## Modules
 
-- `blocks/ranges.ts` — `BlockRange`, `blockRanges`, `moveBlockChanges`/
-  `removeBlockChanges`, `ChangeOp`, `applyChange`/`applyChanges` (batch
-  apply, right-to-left so offsets stay valid).
-- `tags/model.ts` — tag-definition parsing/serialization, per-block markers
-  (`buildMarker`/`stripTagMarker`/`countMarkers`), and change ops
-  (`setBlockTagChange`/`addTagDefChange`/`deleteTagChanges`), slug helpers.
+- `annotations/codec.ts` — v2 disk metadata ↔ clean Inbox Markdown codec,
+  including paired text markers and quote-source metadata.
+- `annotations/ranges.ts` — same-tag union/subtraction and text-change mapping.
+- `annotations/contexts.ts` — Lezer Markdown eligible-context segmentation and
+  read-only projection grouping; code, URL, image, and syntax ranges are excluded.
+- `annotations/matching.ts` — exact text plus prefix/suffix disambiguation.
+- `tags/model.ts` — the shared `TagDef` DTO only; persistence belongs to the codec.
 - `tags/palette.ts` — canonical tag color `PALETTE` (8 swatches) +
   `freeColors(used)`. Shared so the agent's tag tools see the same colors
   the user sees in the picker.
 - `tasks.ts` was migrated to `src/note/tasks.ts` (frontend-only); `matching.ts`
   to `sidecar/src/matching.ts` (sidecar-only). This package now holds only
-  logic used by BOTH consumers.
+  logic used by BOTH consumers. The former Inbox top-level block parser and
+  block-scoped tag APIs were removed.
 
-Tests: `*.test.ts` next to each module. Note: the package has no
-`dependencies`; `vitest/globals` types resolve via the consuming workspaces.
+Tests: `*.test.ts` next to each module. The only runtime dependency is the
+pure `@lezer/markdown` parser; there is no DOM, Node I/O, or Tauri dependency.

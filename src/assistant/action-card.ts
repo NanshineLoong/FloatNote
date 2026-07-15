@@ -328,7 +328,7 @@ function renderTagAssign(d: Extract<EditPreviewDetail, { kind: "tag_assign" }>):
   chip.className = "tag-chip";
   chip.style.background = d.tagColor;
   chip.textContent = d.tagName;
-  row.append("块「" + d.blockPreview + "」→ ", chip);
+  row.append(`${d.action === "add" ? "添加" : "移除"}「${d.textExcerpt}」→ `, chip, `（${d.annotationCount} 个标注）`);
   return row;
 }
 
@@ -346,7 +346,7 @@ function renderTagCreate(d: Extract<EditPreviewDetail, { kind: "tag_create" }>):
 function renderTagDelete(d: Extract<EditPreviewDetail, { kind: "tag_delete" }>): HTMLElement {
   const row = document.createElement("div");
   row.className = "chat-tag-row";
-  row.textContent = `删除标签「${d.tagName}」，${d.markerCount} 处标记将清除`;
+  row.textContent = `删除标签「${d.tagName}」，${d.annotationCount} 个标注将清除`;
   return row;
 }
 

@@ -3,9 +3,9 @@ import { TUTOR_SYSTEM_PROMPT } from "./tutor-prompt.js";
 
 describe("TUTOR_SYSTEM_PROMPT", () => {
   it("teaches FloatNote structured note and source semantics", () => {
-    expect(TUTOR_SYSTEM_PROMPT).toContain("<!-- floatnote:tag=<id> -->");
+    expect(TUTOR_SYSTEM_PROMPT).toContain("tag_text");
     expect(TUTOR_SYSTEM_PROMPT).toContain("> [!quote]");
-    expect(TUTOR_SYSTEM_PROMPT).toContain("floatnote:bid");
+    expect(TUTOR_SYSTEM_PROMPT).toContain("来源应用身份由内部 metadata 保存");
     expect(TUTOR_SYSTEM_PROMPT).toContain("不是正文");
   });
 

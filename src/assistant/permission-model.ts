@@ -1,10 +1,10 @@
 export type EditPreviewDetail =
   | { kind: "diff"; hunks: string }
-  | { kind: "tag_assign"; blockPreview: string; tagName: string; tagColor: string }
+  | { kind: "tag_assign"; textExcerpt: string; annotationCount: number; action: "add" | "remove"; tagName: string; tagColor: string }
   | { kind: "tag_create"; tagName: string; tagColor: string }
   | { kind: "tag_update"; tagId: string; oldName: string; oldColor: string; newName: string; newColor: string }
   | { kind: "note_create"; filename: string; contentPreview: string }
-  | { kind: "tag_delete"; tagName: string; markerCount: number };
+  | { kind: "tag_delete"; tagName: string; annotationCount: number };
 
 export interface EditPreview {
   tool: string;
@@ -62,12 +62,11 @@ export function projectPermission(request: PermissionRequest): PermissionPresent
       if (d?.tagColor) colors.push({ label: d.tagName, color: d.tagColor });
       break;
     }
-    case "set_tag": {
+    case "tag_text": {
       const d = detail.kind === "tag_assign" ? detail : null;
-      title = d?.tagName
-        ? `为「${d.blockPreview}」设置标签「${d.tagName}」`
-        : `清除「${d?.blockPreview ?? "块"}」的标签`;
-      if (d?.tagName && d.tagColor) colors.push({ label: d.tagName, color: d.tagColor });
+      const action = d?.action === "remove" ? "移除" : "添加";
+      title = d ? `为「${d.textExcerpt}」${action}标签「${d.tagName}」` : "设置文本标签";
+      if (d?.tagColor) colors.push({ label: d.tagName, color: d.tagColor });
       break;
     }
     case "tag_update": {
@@ -79,7 +78,7 @@ export function projectPermission(request: PermissionRequest): PermissionPresent
     }
     case "tag_delete": {
       const d = detail.kind === "tag_delete" ? detail : null;
-      title = d ? `删除标签「${d.tagName}」并清除 ${d.markerCount} 处标记` : "删除标签";
+      title = d ? `删除标签「${d.tagName}」并清除 ${d.annotationCount} 个标注` : "删除标签";
       break;
     }
     default: title = request.preview.summary || "写入变更";

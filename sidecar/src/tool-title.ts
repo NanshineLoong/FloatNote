@@ -47,10 +47,9 @@ export function formatToolTitle(name: string, args: unknown): string {
     case "edit_note":
     case "write_note": return target ? `编辑 ${target}` : "编辑当前文档";
     case "list_tags": return "列出标签";
-    case "set_tag": {
-      const rawAnchor = value.anchor ?? value.blockPreview ?? value.block;
-      const anchor = shortLine(typeof rawAnchor === "string" ? rawAnchor.split(/[\r\n]/, 1)[0] : rawAnchor, 32);
-      return anchor ? `给“${anchor}”设置标签` : "设置标签";
+    case "tag_text": {
+      const exact = shortLine(value.exact, 32);
+      return exact ? `给“${exact}”设置标签` : "设置文本标签";
     }
     case "tag_create": return `新建标签 ${shortLine(value.tagName ?? value.name) ?? ""}`.trim();
     case "tag_update": return `修改标签 ${shortLine(value.tagName ?? value.name ?? value.newName) ?? ""}`.trim();

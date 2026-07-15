@@ -8,7 +8,7 @@ describe("formatToolTitle", () => {
     ["edit_note", { target: { kind: "piece", name: "piece.md" }, old_string: "secret" }, "编辑 piece.md"],
     ["create_note", { title: "Ideas" }, "创建 Ideas.md"],
     ["read_note", {}, "读取当前文档"],
-    ["set_tag", { anchor: "第一行\n后续正文", tagName: "行动" }, "给“第一行”设置标签"],
+    ["tag_text", { exact: "第一行\n后续正文", tagName: "行动" }, "给“第一行 后续正文”设置标签"],
     ["read_skill", { name: "brainstorming" }, "读取技能 brainstorming"],
     ["web_search", { query: "FloatNote Tauri" }, "搜索网页 FloatNote Tauri"],
     ["web_fetch", { url: "https://example.com/a?secret=1" }, "读取网页 example.com"],

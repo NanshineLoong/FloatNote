@@ -28,9 +28,9 @@ describe("quoteBody", () => {
 });
 
 describe("buildQuoteBlock", () => {
-  it("builds a title line with a web chip + bid marker + body", () => {
+  it("builds clean editor Markdown while bundle metadata stays out of the document", () => {
     expect(buildQuoteBlock("hello", web("GitHub", "https://github.com/x", "com.google.chrome")))
-      .toBe("> [!quote] [GitHub](https://github.com/x)<!-- floatnote:bid=com.google.chrome -->\n> hello");
+      .toBe("> [!quote] [GitHub](https://github.com/x)\n> hello");
   });
   it("omits the bid marker when source has no bundleId", () => {
     expect(buildQuoteBlock("hello", web("GitHub", "https://github.com/x", null)))
@@ -39,9 +39,9 @@ describe("buildQuoteBlock", () => {
   it("empty title line when source is null", () => {
     expect(buildQuoteBlock("hello", null)).toBe("> [!quote]\n> hello");
   });
-  it("app chip is bare text + bid marker", () => {
+  it("app chip is bare text without inline metadata", () => {
     expect(buildQuoteBlock("hi", app("终端", "com.apple.terminal")))
-      .toBe("> [!quote] 终端<!-- floatnote:bid=com.apple.terminal -->\n> hi");
+      .toBe("> [!quote] 终端\n> hi");
   });
   it("app chip without bundleId", () => {
     expect(buildQuoteBlock("hi", app("终端", null))).toBe("> [!quote] 终端\n> hi");
@@ -99,14 +99,6 @@ describe("parseChips × floatnote markers", () => {
     expect(parseChips("[GitHub](https://github.com/x)<!-- floatnote:bid=com.google.chrome -->"))
       .toEqual([web("GitHub", "https://github.com/x", null)]);
   });
-  it("strips a trailing tag marker before chip parsing", () => {
-    const s = app("终端");
-    expect(parseChips(sourceToChip(s) + "<!-- floatnote:tag=concept -->")).toEqual([s]);
-  });
-  it("strips both tag and bid markers", () => {
-    expect(parseChips("终端<!-- floatnote:bid=com.apple.terminal --><!-- floatnote:tag=t -->"))
-      .toEqual([app("终端", null)]);
-  });
 });
 
 describe("mergeQuoteBlock", () => {
@@ -117,16 +109,6 @@ describe("mergeQuoteBlock", () => {
   });
   it("merges into a card with empty body (title only)", () => {
     expect(mergeQuoteBlock("> [!quote]", "first")).toBe("> [!quote]\n> first");
-  });
-  it("preserves the bid marker on the title line and the tag marker on the new last line", () => {
-    const existing = "> [!quote] [A](https://a)<!-- floatnote:bid=com.google.chrome -->\n> first<!-- floatnote:tag=t -->";
-    const merged = mergeQuoteBlock(existing, "more");
-    // bid marker stays on the title line (not stripped, not moved)
-    expect(merged.split("\n", 1)[0])
-      .toBe("> [!quote] [A](https://a)<!-- floatnote:bid=com.google.chrome -->");
-    // tag marker re-appended on the new last line
-    expect(merged.endsWith("<!-- floatnote:tag=t -->")).toBe(true);
-    expect(merged).toContain("> more");
   });
   it("leaves an untagged card untagged after merge", () => {
     const existing = "> [!quote] [A](https://a)\n> first";

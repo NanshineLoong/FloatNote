@@ -7,10 +7,14 @@ FloatNote 使用 Vite 多页面应用：根目录 HTML 是各 WebView 入口。`
 - `src/platform/` 是共享 agent/chat invoke/event gateway 与跨 feature DTO 所在处。feature 自己的窗口命令仍在相应 feature 内调用；跨 feature 合同应放在这里。
 - `src/shared/` 放跨 feature 的 UI、Markdown、escape、快捷键和 toast；不能包含 feature 状态。`src/shared/ui/modal-paper.ts` 统一管理 body-level 纸张弹窗的 inert、焦点边界、Escape、portal 注册和焦点恢复。
 - `src/styles/` 是设计系统 token 层（`primitives` → `semantic` → `base`/`components`，由 `index.css` 聚合并被四个窗口链入）；`src/shared/ui/` 放跨窗口共享组件（Button/Icon/Menu/Scrollbar/EmptyState）。详见 `docs/development/design-system.md`。
-- `src/note/` 管理 CodeMirror 编辑、项目空间、任务、标签、图片与笔记窗口布局。
+- `src/note/` 管理 CodeMirror 编辑、项目空间、任务、文本标注、图片与笔记窗口布局。
   Markdown 编辑器使用测量式选区层；live preview 只把独占整行的图片替换为
   figure widget，并以精确源码偏移定位工具栏写回。Tab/Shift+Tab 对多行及完整
   列表子树操作。
+  Inbox 的 CodeMirror 文档只包含 clean Markdown；`annotations/state.ts` 的
+  `StateField` 持有标签、文本区间和 quote 来源位置，`autosave.ts` 在正文或
+  metadata 变化后编码 v2 磁盘快照。右键菜单只作用于 Lezer 识别的可见正文，
+  tag filter 使用独立只读分段 projection，不折叠或改写 live editor。
   `piece-switcher.ts` 同时管理版本菜单与预览操作条；`version-preview.ts` 只保存预览前正文的状态语义，CodeMirror 的只读切换由 `editor.ts` 提供。版本列表用主标题与小号时间元信息分层显示，普通版本不显示“手动”来源，AI 快照保留低调标识。
 - `src/assistant/` 管理流式聊天、消息 reducer、渲染、技能和 mention 选择器；不得导入 `src/note/` 内部模块。assistant turn 是严格有序的 block 流，连续两个以上 thinking/tool 过程项组成 `process_group`，只有正式 text 会切断过程段；工具状态用稳定 `callId` 更新，不能用“最近一个工具”推断。完整 block 状态与输出显示模式解耦：默认 `compact` 只投影正文、中性状态、错误和流式光标，`detailed` 投影可展开过程段并以流光表示运行项，运行时事件切换只重投影现有状态。取消 turn 会结束 streaming、保留已有部分内容并追加“已中断”状态，不得复用错误块。写权限审批保留在 dock 卡片：`permission-model.ts` 产生语义标题，`permission-dialog.ts` 展示完整创建预览或由 `permission-diff.ts` 生成的双栏行 diff，`permission-allow-button.ts` 处理直接/快照分段写入；对话 action 行仍只读。长输入通过 `input/overlay.ts` 把现有 `.assistant-input-wrap` 移入 `body` 下的聚焦纸张 portal；Floating 与 Inline 共用同一层级和响应式几何，且始终只保留一个 `EditorView`。普通态 Enter 发送、Shift+Enter 换行；聚焦纸张中 Enter 换行且只能点击发送按钮提交。收起或销毁时宿主回到当前 dock，发送仅在 sidecar 返回 request id 后清空并收起，失败则保留草稿；若握手期间文档继续变化，旧完成回调不得清空或收起这份新草稿。scope 或会话 generation 改变后，旧异步提交也不得更新当前 UI。
 - `src/history/`、`src/popup/`、`src/settings/` 分别是历史、选中文本弹窗和设置窗口的 UI。
@@ -27,7 +31,9 @@ FloatNote 使用 Vite 多页面应用：根目录 HTML 是各 WebView 入口。`
 `initializeAppearance` 也不读取配置或订阅 appearance 事件；编辑器不再注册
 Cmd/Ctrl 加减号的应用级字号调整链路。
 
-`shared/note-logic/` 是前端和 sidecar 共享的 workspace package，只包含 Markdown block、标签模型与调色板等纯逻辑；它不依赖 DOM、Node I/O 或 Tauri API。
+`shared/note-logic/` 是前端和 sidecar 共享的 workspace package，包含 Inbox v2
+codec、文本区间变换、Markdown 语义上下文、精确文本匹配和标签调色板等纯逻辑；
+它不依赖 DOM、Node I/O 或 Tauri API。旧 Inbox top-level block parser 已删除。
 
 ## 兼容入口
 
