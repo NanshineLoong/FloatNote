@@ -135,7 +135,7 @@ export function updateActionCard(el: HTMLElement, block: Extract<Block, { kind: 
   el.dataset.requestId = block.requestId ?? "";
   el.classList.toggle("chat-action-pending", block.execution === "running");
   el.classList.toggle("chat-action-approved", block.decision === "allowed");
-  el.classList.toggle("chat-action-rejected", block.decision === "denied");
+  el.classList.toggle("chat-action-rejected", block.execution === "rejected");
   el.classList.toggle("chat-action-done", block.execution === "succeeded");
   el.classList.toggle("chat-action-failed", block.execution === "failed");
   el.classList.toggle("chat-action-incomplete", block.execution === "incomplete");
@@ -200,7 +200,6 @@ export function updateActionCard(el: HTMLElement, block: Extract<Block, { kind: 
 
 function actionOutcome(block: Extract<Block, { kind: "action" }>): string {
   if (block.permissionError) return `权限操作失败：${block.permissionError}`;
-  if (block.decision === "denied") return "已拒绝";
   if (block.decision === "allowed" && block.execution === "running") return "已允许 · 正在写入";
   if (block.decision === "allowed" && block.execution === "succeeded") return "已允许 · 写入成功";
   if (block.decision === "allowed" && block.execution === "failed") return "已允许 · 写入失败";

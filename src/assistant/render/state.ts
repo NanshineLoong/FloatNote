@@ -67,7 +67,7 @@ export type ActionBlock = {
   callId?: string;
   targets: string[];
   decision: "pending" | "allowed" | "denied";
-  execution: "running" | "succeeded" | "failed" | "incomplete";
+  execution: "running" | "succeeded" | "failed" | "incomplete" | "rejected";
   resultSummary?: string;
   writeMode?: WriteMode;
   requestId?: string;
@@ -349,7 +349,7 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
           blocks: appendProcessItem(msg.blocks, action),
         });
       }
-      return updateAction(state, (b) => event.callId ? b.callId === event.callId : b.tool === event.name && b.execution === "running", (b) => ({
+      return updateAction(state, (b) => (event.callId ? b.callId === event.callId : b.tool === event.name && b.execution === "running") && b.execution !== "rejected", (b) => ({
         ...b,
         execution: event.isError ? "failed" : "succeeded",
         ...(event.isError && event.error ? { resultSummary: event.error } : {}),
@@ -384,6 +384,7 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
       return updateAction(state, (b) => b.requestId === event.requestId, (b) => ({
         ...b,
         decision: event.decision === "allow" ? "allowed" : "denied",
+        ...(event.decision === "deny" ? { execution: "rejected" as const } : {}),
         permissionError: undefined,
       }));
     }
@@ -507,9 +508,14 @@ function removeConfigurationErrors(state: ChatState): ChatState {
  * 找不到则忽略（dock 固定弹窗作为兜底会处理）。
  */
 function fillActionBlock(state: ChatState, event: Extract<ChatEvent, { type: "permission_request" }>): ChatState {
-  // 交互确认仅显示在 dock 气泡中。对话流中的 action 始终是不可展开的结果行。
-  void event;
-  return state;
+  // 交互确认仅显示在 dock 气泡中。对话流只保存关联键，以便把用户裁决
+  // 映射回正确的工具行；预览数据仍不进入聊天流。
+  if (!event.callId) return state;
+  return updateAction(
+    state,
+    (block) => block.callId === event.callId && block.execution === "running" && !block.requestId,
+    (block) => ({ ...block, requestId: event.requestId }),
+  );
 }
 
 /**

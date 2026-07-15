@@ -47,6 +47,9 @@
   --color-danger-fill:        rgba(220, 38, 38, 0.08);
   --color-danger-fill-strong: rgba(220, 38, 38, 0.14);
 
+  /* ── Warning (user-declined actions) ── */
+  --color-warning:            #a16207;
+
   /* ── Success (status text only) ── */
   --color-success: #059669;
 
@@ -125,6 +128,8 @@
     --color-danger-fill:        rgba(248, 113, 113, 0.14);
     --color-danger-fill-strong: rgba(248, 113, 113, 0.22);
 
+    --color-warning:            #fbbf24;
+
     --color-success: #34d399;
 
     --color-bubble-user-bg:   #2d3a52;
@@ -160,4 +165,5 @@
   --color-hover: rgba(255,255,255,.08);
   --color-hover-strong: rgba(255,255,255,.1);
   --color-selected: var(--indigo-accent-fill-dark);
+  --color-warning: #fbbf24;
 }

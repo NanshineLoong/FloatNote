@@ -677,6 +677,10 @@
 .chat-action-rejected {
   opacity: 0.72;
 }
+.chat-action-rejected .chat-action-header,
+.chat-action-rejected .chat-action-icon {
+  color: var(--color-warning);
+}
 .chat-action-failed,
 .chat-action-incomplete {
   border-color: var(--color-danger);

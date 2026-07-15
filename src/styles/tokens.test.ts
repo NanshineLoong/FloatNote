@@ -58,6 +58,12 @@ describe("design tokens", () => {
     expect(p).toContain("--danger-400:");
   });
 
+  it("exposes a warning token for user-declined actions in both color schemes", () => {
+    const s = readFileSync(resolve(root, "src/styles/semantic.css"), "utf8");
+    expect(s).toMatch(/:root\s*\{[\s\S]*--color-warning:/);
+    expect(s).toMatch(/@media \(prefers-color-scheme: dark\)[\s\S]*--color-warning:/);
+  });
+
   it("has no residual accent/danger rgba literals in window CSS", () => {
     // After migration, hover/selected/focus-ring/danger fills in window
     // styles go through semantic tokens — no raw rgba(37,99,235)/danger ramps.

@@ -411,11 +411,12 @@ describe("reduceEvents", () => {
     expect(assistant.blocks[1]).toMatchObject({ kind: "text", text: "结论" });
   });
 
-  it("keeps permission details out of the conversation flow", () => {
+  it("keeps a user-denied tool rejected after its normal tool end", () => {
     const started = run([{ type: "tool", requestId: "r1", callId: "call-1", name: "edit_note", label: "编辑 piece.md", phase: "start" }]);
     const filled = reduceEvents(started, {
       type: "permission_request",
       requestId: "pe-1",
+      callId: "call-1",
       toolName: "edit_note",
       detail: { kind: "diff", hunks: "- a\n+ b" },
       summary: "编辑文本",
@@ -426,21 +427,21 @@ describe("reduceEvents", () => {
     const action = (filled.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks[0];
     expect(action.kind).toBe("action");
     if (action.kind === "action") {
-      expect(action.requestId).toBeUndefined();
+      expect(action.requestId).toBe("pe-1");
       expect(action.detail).toBeUndefined();
       expect(action.decision).toBe("pending");
     }
 
-    const resolved = reduceEvents(filled, { type: "permission_resolve", requestId: "pe-1", decision: "allow" });
+    const resolved = reduceEvents(filled, { type: "permission_resolve", requestId: "pe-1", decision: "deny" });
     const after = (resolved.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks[0];
     if (after.kind === "action") {
-      expect(after.decision).toBe("pending");
-      expect(after.execution).toBe("running");
+      expect(after.decision).toBe("denied");
+      expect(after.execution).toBe("rejected");
     }
 
     const ended = reduceEvents(resolved, { type: "tool", requestId: "r1", callId: "call-1", name: "edit_note", phase: "end", isError: false });
     const finalBlock = (ended.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks[0];
-    expect(finalBlock).toMatchObject({ kind: "action", decision: "pending", execution: "succeeded" });
+    expect(finalBlock).toMatchObject({ kind: "action", decision: "denied", execution: "rejected" });
   });
 
   it("interleaves a full exchange", () => {
