@@ -54,6 +54,42 @@ describe("assistant message actions", () => {
     expect(cancel).toHaveBeenCalledWith("r1");
   });
 
+  it("reopens the active conversation after configuration becomes available", async () => {
+    const openConversation = vi.fn().mockResolvedValue(conversation);
+    const { root, emitAgent, handle } = await mountWithDeps({ openConversation });
+    emitAgent({ type: "error", requestId: null, conversationId: "c1", message: "尚未配置或启用 AI 提供商" });
+    expect(root.querySelector(".chat-block-error")?.textContent).toContain("尚未配置");
+
+    await handle.refreshConversation();
+    expect(openConversation).toHaveBeenCalledTimes(2);
+
+    emitAgent({ type: "session_opened", conversationId: "c1", sessionFile: conversation.sessionFile, messages: [] });
+    expect(root.querySelector(".chat-block-error")).toBeNull();
+  });
+
+  it("does not show a stale refresh error after switching conversations", async () => {
+    const other = { ...conversation, id: "c2", sessionFile: "/notes/.chat-2.json" };
+    let rejectRefresh!: (error: Error) => void;
+    let calls = 0;
+    const openConversation = vi.fn((selected: ChatConversation) => {
+      calls += 1;
+      if (calls === 2) {
+        return new Promise<ChatConversation>((_resolve, reject) => { rejectRefresh = reject; });
+      }
+      return Promise.resolve(selected);
+    });
+    const { root, handle } = await mountWithDeps({ openConversation });
+
+    const refresh = handle.refreshConversation();
+    await Promise.resolve();
+    await handle.openConversation(other);
+    rejectRefresh(new Error("旧会话打开失败"));
+    await refresh;
+
+    expect(root.dataset.conversationId).toBe("c2");
+    expect(root.querySelector(".chat-block-error")).toBeNull();
+  });
+
   it("resends the selected user message", async () => {
     const send = vi.fn().mockResolvedValue("r2");
     const rewind = vi.fn().mockResolvedValue(undefined);

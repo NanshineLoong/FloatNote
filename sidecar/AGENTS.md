@@ -10,13 +10,14 @@ Entry: `src/main.ts`.
 - `main.ts` — stdio loop: decodes `HostToSidecar`, dispatches to `AgentRunner`,
   encodes `SidecarToHost` replies, including correlated configure results.
 - `configuration-gate.ts` — serializes provider configuration changes and lets
-  new/open session commands await their completion without blocking prompts,
-  tool callbacks, or cancellation.
+  new/open session commands await the initial host configuration decision and
+  later changes without blocking prompts, tool callbacks, or cancellation.
 - `agent.ts` — compatibility barrel. `runner.ts` owns session lifecycle,
   `model.ts` owns fixed-provider resolution and automatic thinking, and `event-translate.ts` owns Pi→protocol
   translation.
 - `protocol.ts` — `HostToSidecar`/`SidecarToHost` union types + line
-  codec (`encodeLine`/`createLineDecoder`). `title` variant is declared but
+  codec (`encodeLine`/`createLineDecoder`). Turn `done` events carry a
+  completed/cancelled/failed outcome. `title` variant is declared but
   not emitted by the sidecar (kept intentionally for now).
 - `tool-title.ts` — pure safe tool-title and short-error formatting shared by
   live events and session restoration; raw arguments/results never cross the

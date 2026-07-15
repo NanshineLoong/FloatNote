@@ -64,11 +64,47 @@ describe("translateEvent", () => {
     ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write_note", phase: "end", isError: false });
   });
 
-  it("maps agent_end to a done line", () => {
+  it("maps a completed agent_end to a completed done line", () => {
     expect(translateEvent("r1", "c1", ev({ type: "agent_end", messages: [], willRetry: false }))).toEqual({
       type: "done",
       requestId: "r1",
       conversationId: "c1",
+      outcome: "completed",
+    });
+  });
+
+  it("ignores an agent_end that the session will retry", () => {
+    expect(translateEvent("r1", "c1", ev({
+      type: "agent_end",
+      messages: [{ role: "assistant", stopReason: "error", errorMessage: "temporary", content: [] }],
+      willRetry: true,
+    }))).toBeNull();
+  });
+
+  it("preserves cancellation as a distinct done outcome", () => {
+    expect(translateEvent("r1", "c1", ev({
+      type: "agent_end",
+      messages: [{ role: "assistant", stopReason: "aborted", content: [] }],
+      willRetry: false,
+    }))).toEqual({
+      type: "done",
+      requestId: "r1",
+      conversationId: "c1",
+      outcome: "cancelled",
+    });
+  });
+
+  it("preserves a model failure and its message as a failed done outcome", () => {
+    expect(translateEvent("r1", "c1", ev({
+      type: "agent_end",
+      messages: [{ role: "assistant", stopReason: "error", errorMessage: "额度不足", content: [] }],
+      willRetry: false,
+    }))).toEqual({
+      type: "done",
+      requestId: "r1",
+      conversationId: "c1",
+      outcome: "failed",
+      error: "额度不足",
     });
   });
 });
@@ -239,7 +275,7 @@ describe("AgentRunner", () => {
       { type: "session_opened", conversationId: "c1", sessionFile: expect.any(String), messages: [] },
       { type: "delta", requestId: "r1", conversationId: "c1", text: "Hel" },
       { type: "delta", requestId: "r1", conversationId: "c1", text: "lo" },
-      { type: "done", requestId: "r1", conversationId: "c1" },
+      { type: "done", requestId: "r1", conversationId: "c1", outcome: "completed" },
       { type: "session_synced", conversationId: "c1", sessionFile: expect.any(String), messages: [] },
     ]);
   });
@@ -266,9 +302,66 @@ describe("AgentRunner", () => {
         conversationId: "c1",
         message: "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。",
       },
-      { type: "done", requestId: "r1", conversationId: "c1" },
+      { type: "done", requestId: "r1", conversationId: "c1", outcome: "completed" },
       { type: "session_synced", conversationId: "c1", sessionFile: expect.any(String), messages: [] },
     ]);
+  });
+
+  it("does not diagnose an empty response when the user cancelled before output", async () => {
+    const sent: SidecarToHost[] = [];
+    const { session } = fakeSession((emit) => {
+      emit(ev({
+        type: "agent_end",
+        messages: [{ role: "assistant", stopReason: "aborted", content: [] }],
+        willRetry: false,
+      }));
+    });
+    const runner = new AgentRunner({ send: (message) => sent.push(message), createSession: async () => session });
+    await runner.configure({ provider: "anthropic", model: "claude-opus-4-5", apiKey: "k" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+
+    await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "hi" });
+
+    expect(sent.filter((message) => message.type === "error")).toEqual([]);
+    expect(sent).toContainEqual({
+      type: "done",
+      requestId: "r1",
+      conversationId: "c1",
+      outcome: "cancelled",
+    });
+  });
+
+  it("surfaces the model error instead of diagnosing an empty response", async () => {
+    const sent: SidecarToHost[] = [];
+    const { session } = fakeSession((emit) => {
+      emit(ev({
+        type: "agent_end",
+        messages: [{ role: "assistant", stopReason: "error", errorMessage: "服务商额度不足", content: [] }],
+        willRetry: false,
+      }));
+    });
+    const runner = new AgentRunner({ send: (message) => sent.push(message), createSession: async () => session });
+    await runner.configure({ provider: "anthropic", model: "claude-opus-4-5", apiKey: "k" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+
+    await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "hi" });
+
+    expect(sent).toContainEqual({
+      type: "error",
+      requestId: "r1",
+      conversationId: "c1",
+      message: "服务商额度不足",
+    });
+    expect(sent.some((message) => message.type === "error" && message.message.startsWith("助手这次没有返回内容"))).toBe(false);
+  });
+
+  it("uses a Chinese error when a session is opened before configuration", async () => {
+    const runner = new AgentRunner({ send: () => {} });
+    await expect(runner.newSession({
+      conversationId: "c1",
+      cwd: process.cwd(),
+      sessionDir: "/tmp/floatnote-test-sessions",
+    })).rejects.toThrow("尚未配置或启用 AI 提供商");
   });
 
   it("emits apply_edit when the model writes, and resolves on the host result", async () => {

@@ -71,6 +71,9 @@ async function main(): Promise<void> {
           send({ type: "configure_result", callId: msg.callId, ok: false, error: safeError(err) });
         }
         break;
+      case "configuration_ready":
+        await configurationGate.initialize();
+        break;
       case "new_session":
         await configurationGate.wait();
         await runner.newSession(msg);
@@ -84,7 +87,7 @@ async function main(): Promise<void> {
           await runner.prompt(msg);
         } catch (err) {
           send({ type: "error", requestId: msg.requestId, conversationId: msg.conversationId, message: safeError(err) });
-          send({ type: "done", requestId: msg.requestId, conversationId: msg.conversationId });
+          send({ type: "done", requestId: msg.requestId, conversationId: msg.conversationId, outcome: "failed" });
         }
         break;
       case "rewind":
@@ -141,7 +144,7 @@ async function main(): Promise<void> {
   const initial = envConfig();
   if (initial) {
     try {
-      await runner.configure(initial);
+      await configurationGate.initialize(() => runner.configure(initial));
     } catch (err) {
       send({ type: "error", requestId: null, message: safeError(err) });
     }

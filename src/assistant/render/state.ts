@@ -24,7 +24,7 @@ export type ChatEvent =
   | { type: "session_synced"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "delta"; requestId: string; conversationId?: string; text: string }
   | { type: "tool"; requestId: string; conversationId?: string; callId?: string; name: string; label?: string; phase: "start" | "end"; error?: string; isError?: boolean }
-  | { type: "done"; requestId: string; conversationId?: string }
+  | { type: "done"; requestId: string; conversationId?: string; outcome?: "completed" | "cancelled" | "failed" }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }
   | { type: "user"; conversationId?: string; text: string; references?: ChatReference[] }
@@ -83,6 +83,7 @@ export type Block =
   | ThinkingBlock
   | ActionBlock
   | { id: string; kind: "process_group"; collapsed: boolean; items: ProcessItem[] }
+  | { id: string; kind: "status"; text: string }
   | { id: string; kind: "error"; text: string };
 
 export type ChatMessage =
@@ -137,12 +138,14 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
       return state;
 
     case "session_opened":
+      if (!acceptsConversation(state, event)) return state;
       if (
         state.activeConversationId === event.conversationId &&
         state.messages.length > 0 &&
-        event.messages.length === 0
+        event.messages.length === 0 &&
+        state.messages.some((message) => message.role === "user" || message.streaming)
       ) {
-        return state;
+        return removeConfigurationErrors(state);
       }
       return {
         activeConversationId: event.conversationId,
@@ -271,6 +274,23 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
 
     case "done": {
       if (!acceptsConversation(state, event)) return state;
+      if (event.outcome === "cancelled") {
+        const cleaned = finalizeStreaming(removePending(state));
+        const last = cleaned.messages[cleaned.messages.length - 1];
+        if (last && last.role === "assistant" && !last.streaming) {
+          const { pending: _pending, ...finished } = last;
+          return updateLast(cleaned, {
+            ...finished,
+            blocks: [...finished.blocks, { id: nextId("b"), kind: "status", text: "已中断" }],
+          });
+        }
+        return push(cleaned, {
+          id: nextId("m"),
+          role: "assistant",
+          blocks: [{ id: nextId("b"), kind: "status", text: "已中断" }],
+          streaming: false,
+        });
+      }
       if (hasPending(state)) {
         // 占位仍在 = 无任何真实输出 → 空响应错误。
         return push(removePending(state), {
@@ -441,6 +461,20 @@ function removePending(state: ChatState): ChatState {
 
 function hasPending(state: ChatState): boolean {
   return state.messages.some((m) => m.role === "assistant" && Boolean(m.pending));
+}
+
+function removeConfigurationErrors(state: ChatState): ChatState {
+  const messages = state.messages.flatMap((message): ChatMessage[] => {
+    if (message.role !== "assistant") return [message];
+    const blocks = message.blocks.filter((block) => !(
+      block.kind === "error" && (
+        block.text === "agent not configured" ||
+        block.text.includes("尚未配置或启用 AI 提供商")
+      )
+    ));
+    return blocks.length > 0 ? [{ ...message, blocks }] : [];
+  });
+  return { ...state, messages };
 }
 
 /**

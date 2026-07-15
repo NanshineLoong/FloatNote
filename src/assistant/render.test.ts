@@ -124,6 +124,23 @@ describe("reduceEvents", () => {
     ]);
   });
 
+  it("drops a stale configuration error when an empty session reopens", () => {
+    const failed = run([
+      { type: "session_opened", conversationId: "c1", sessionFile: "session.jsonl", messages: [] },
+      { type: "user", conversationId: "c1", text: "保留这条本地消息" },
+      { type: "error", requestId: null, conversationId: "c1", message: "agent not configured" },
+    ]);
+
+    const reopened = reduceEvents(failed, {
+      type: "session_opened",
+      conversationId: "c1",
+      sessionFile: "session.jsonl",
+      messages: [],
+    });
+
+    expect(norm(reopened.messages)).toEqual([{ role: "user", text: "保留这条本地消息" }]);
+  });
+
   it("surfaces an empty response when done arrives before any text", () => {
     const state = run([
       { type: "user", text: "你好" },
@@ -133,6 +150,36 @@ describe("reduceEvents", () => {
     expect(norm(state.messages)).toEqual([
       { role: "user", text: "你好" },
       { role: "assistant", streaming: false, blocks: [{ kind: "error", text: "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。" }] },
+    ]);
+  });
+
+  it("shows a neutral interrupted status when cancellation arrives before output", () => {
+    const state = run([
+      { type: "user", text: "你好" },
+      { type: "pending" },
+      { type: "done", requestId: "r1", outcome: "cancelled" },
+    ]);
+    expect(norm(state.messages)).toEqual([
+      { role: "user", text: "你好" },
+      { role: "assistant", streaming: false, blocks: [{ kind: "status", text: "已中断" }] },
+    ]);
+  });
+
+  it("keeps partial output and marks it interrupted", () => {
+    const state = run([
+      { type: "pending" },
+      { type: "delta", requestId: "r1", text: "部分内容" },
+      { type: "done", requestId: "r1", outcome: "cancelled" },
+    ]);
+    expect(norm(state.messages)).toEqual([
+      {
+        role: "assistant",
+        streaming: false,
+        blocks: [
+          { kind: "text", text: "部分内容", streaming: false },
+          { kind: "status", text: "已中断" },
+        ],
+      },
     ]);
   });
 
@@ -409,6 +456,19 @@ describe("reduceEvents", () => {
       { type: "delta", requestId: "r1", conversationId: "hidden", text: "wrong" },
     ]);
     expect(norm(state.messages)).toEqual([]);
+  });
+
+  it("ignores a stale session snapshot for a previously active conversation", () => {
+    const state = run([
+      { type: "session_opened", conversationId: "current", sessionFile: "/tmp/current.jsonl", messages: [
+        { role: "user", text: "当前对话", timestamp: 1 },
+      ] },
+      { type: "session_opened", conversationId: "old", sessionFile: "/tmp/old.jsonl", messages: [
+        { role: "user", text: "旧对话", timestamp: 1 },
+      ] },
+    ]);
+    expect(state.activeConversationId).toBe("current");
+    expect(norm(state.messages)).toEqual([{ role: "user", text: "当前对话" }]);
   });
 
   it("replaces pending only when the delta belongs to the active conversation", () => {

@@ -223,6 +223,7 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
                 }
                 // 从持久化配置自动恢复 AI 助手。
                 let config = state.config.lock().unwrap().clone();
+                let mut sent_configuration = false;
                 if let Some(provider) = config.ai_settings.active_provider_id {
                     if let Some(profile) = config
                         .ai_settings
@@ -239,7 +240,14 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
                                 api_key: Some(profile.api_key.clone()),
                                 base_url: profile.base_url.clone(),
                             });
+                            sent_configuration = true;
                         }
+                    }
+                }
+                if !sent_configuration {
+                    let mut guard = state.agent.lock().unwrap();
+                    if let Some(agent) = guard.as_mut() {
+                        let _ = agent.send(&HostToSidecar::ConfigurationReady);
                     }
                 }
             }
