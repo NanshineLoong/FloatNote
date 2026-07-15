@@ -136,6 +136,9 @@ export function createAssistantController(deps: AssistantControllerDeps): Assist
     navigationToken += 1;
     handle.setScope(currentScope());
   });
+  void listen<boolean>("agent://configuration-changed", (event) => {
+    if (event.payload) void handle.refreshConversation();
+  });
 
   async function toggleFromChrome() {
     const next = await invoke<{ open: boolean }>("toggle_assistant");

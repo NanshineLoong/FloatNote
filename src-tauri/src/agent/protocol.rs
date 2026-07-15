@@ -26,6 +26,7 @@ pub enum HostToSidecar {
     ClearConfiguration {
         call_id: String,
     },
+    ConfigurationReady,
     OpenSession {
         conversation_id: String,
         session_file: String,
@@ -191,6 +192,10 @@ pub enum SidecarToHost {
     Done {
         request_id: String,
         conversation_id: String,
+        #[serde(default)]
+        outcome: AgentOutcome,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     },
     Title {
         conversation_id: String,
@@ -207,6 +212,15 @@ pub enum SidecarToHost {
         call_id: String,
         skills: Vec<SkillSummary>,
     },
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentOutcome {
+    #[default]
+    Completed,
+    Cancelled,
+    Failed,
 }
 
 /// skill 摘要：name + description。与 sidecar `skills_list` 的元素同形。
@@ -534,6 +548,43 @@ mod tests {
         assert_eq!(
             value,
             serde_json::json!({"type":"clear_configuration","callId":"cfg2"})
+        );
+    }
+
+    #[test]
+    fn serializes_configuration_ready() {
+        assert_eq!(
+            serde_json::to_value(HostToSidecar::ConfigurationReady).unwrap(),
+            serde_json::json!({"type":"configuration_ready"})
+        );
+    }
+
+    #[test]
+    fn parses_cancelled_done_outcome() {
+        let line =
+            r#"{"type":"done","requestId":"r1","conversationId":"c1","outcome":"cancelled"}"#;
+        assert_eq!(
+            serde_json::from_str::<SidecarToHost>(line).unwrap(),
+            SidecarToHost::Done {
+                request_id: "r1".into(),
+                conversation_id: "c1".into(),
+                outcome: AgentOutcome::Cancelled,
+                error: None,
+            }
+        );
+    }
+
+    #[test]
+    fn defaults_legacy_done_outcome_to_completed() {
+        let line = r#"{"type":"done","requestId":"r1","conversationId":"c1"}"#;
+        assert_eq!(
+            serde_json::from_str::<SidecarToHost>(line).unwrap(),
+            SidecarToHost::Done {
+                request_id: "r1".into(),
+                conversation_id: "c1".into(),
+                outcome: AgentOutcome::Completed,
+                error: None,
+            }
         );
     }
 

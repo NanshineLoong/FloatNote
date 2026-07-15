@@ -160,7 +160,7 @@ export function renderMessage(message: ChatMessage, outputMode: AssistantOutputM
   const stack = document.createElement("div");
   stack.className = "chat-blocks";
   const visibleBlocks = outputMode === "compact"
-    ? message.blocks.filter((block) => block.kind === "text" || block.kind === "error")
+    ? message.blocks.filter((block) => block.kind === "text" || block.kind === "status" || block.kind === "error")
     : message.blocks;
   for (const block of visibleBlocks) {
     stack.appendChild(renderBlock(block, message.streaming));
@@ -275,6 +275,10 @@ export function renderBlock(block: Block, streaming: boolean): HTMLElement {
     }
     case "error":
       el.setAttribute("role", "alert");
+      el.textContent = block.text;
+      break;
+    case "status":
+      el.setAttribute("role", "status");
       el.textContent = block.text;
       break;
   }

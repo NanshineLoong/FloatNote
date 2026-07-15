@@ -70,6 +70,8 @@ export interface AssistantHandle {
   cancel: () => void;
   /** 开始新对话（连带展开气泡）。 */
   startNewConversation: () => void;
+  /** 配置恢复后重新打开当前对话。 */
+  refreshConversation: () => Promise<void>;
   /** 历史浮层是否打开。 */
   isHistoryPopoverOpen: () => boolean;
   /** 关闭历史浮层。 */
@@ -661,6 +663,22 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     },
     startNewConversation() {
       void startNewConversation();
+    },
+    async refreshConversation() {
+      if (!activeConversation) return;
+      const conversation = activeConversation;
+      const token = conversationToken;
+      try {
+        await deps.openConversation(conversation);
+      } catch (err) {
+        if (token !== conversationToken || activeConversation?.id !== conversation.id) return;
+        dispatch({
+          type: "error",
+          requestId: null,
+          conversationId: conversation.id,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     },
     isHistoryPopoverOpen() {
       return !historyPopover.hidden;

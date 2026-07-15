@@ -45,8 +45,23 @@ export function translateEvent(
         isError: event.isError,
         ...(error ? { error } : {}),
       };
-    case "agent_end":
-      return { type: "done", requestId, conversationId };
+    case "agent_end": {
+      if (event.willRetry) return null;
+      const assistant = [...event.messages].reverse().find(
+        (message) => "role" in message && message.role === "assistant",
+      );
+      const outcome = assistant && "stopReason" in assistant
+        ? assistant.stopReason === "aborted"
+          ? "cancelled"
+          : assistant.stopReason === "error"
+            ? "failed"
+            : "completed"
+        : "completed";
+      const error = outcome === "failed" && assistant && "errorMessage" in assistant
+        ? assistant.errorMessage
+        : undefined;
+      return { type: "done", requestId, conversationId, outcome, ...(error ? { error } : {}) };
+    }
     default:
       return null;
   }

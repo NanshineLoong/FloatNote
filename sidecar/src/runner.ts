@@ -16,7 +16,7 @@ import { createDefaultWebTools } from "./web-tools.js";
 import { TUTOR_SYSTEM_PROMPT } from "./tutor-prompt.js";
 import { listSkills as listSkillsState, readSkillBody, loadSkillPaths, formatSkillsForSystemPrompt } from "./skills.js";
 import type { ChatDisplayBlock, ChatDisplayMessage, EditPreview, HostToSidecar, NoteTarget, PromptRef, SidecarToHost } from "./protocol.js";
-import { buildAgentModel, resolveAgentConfig, type AgentConfig } from "./model.js";
+import { buildAgentModel, resolveAgentConfig, sanitizeAgentError, type AgentConfig } from "./model.js";
 import { translateEvent } from "./event-translate.js";
 import { composePromptText } from "./prompt-compose.js";
 import { formatToolTitle, sanitizeToolError } from "./tool-title.js";
@@ -163,12 +163,20 @@ export class AgentRunner {
       if (msg.type === "delta" || msg.type === "tool" || msg.type === "thinking_start") {
         sawVisibleOutput = true;
       }
-      if (msg.type === "done" && !sawVisibleOutput) {
+      if (msg.type === "done" && msg.outcome === "completed" && !sawVisibleOutput) {
         this.send({
           type: "error",
           requestId: req.requestId,
           conversationId: req.conversationId,
           message: EMPTY_RESPONSE_MESSAGE,
+        });
+      }
+      if (msg.type === "done" && msg.outcome === "failed") {
+        this.send({
+          type: "error",
+          requestId: req.requestId,
+          conversationId: req.conversationId,
+          message: sanitizeAgentError(msg.error ?? "助手运行失败，请稍后重试。", this.cfg?.apiKey ? [this.cfg.apiKey] : []),
         });
       }
       this.send(msg);
@@ -235,7 +243,7 @@ export class AgentRunner {
 
   private async installSession(conversationId: string, sessionManager: PiSessionManager): Promise<void> {
     if (!this.cfg) {
-      throw new Error("agent not configured");
+      throw new Error("尚未配置或启用 AI 提供商，请前往设置完成配置并启用。");
     }
     const session = await this.createConfiguredSession(this.cfg, conversationId, sessionManager);
     this.sessions.get(conversationId)?.dispose?.();

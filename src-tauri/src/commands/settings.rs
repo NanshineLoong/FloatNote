@@ -1,21 +1,26 @@
 use crate::config::{AiProviderConfig, AiProviderId, AssistantOutputMode, WindowShortcuts};
 use crate::state::AppState;
-use tauri::{Emitter, State};
+use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
 pub async fn save_ai_provider(
+    app: AppHandle,
     state: State<'_, AppState>,
     provider_id: AiProviderId,
     provider_config: AiProviderConfig,
 ) -> Result<(), String> {
-    save_ai_provider_inner(&state, provider_id, provider_config).await
+    let updates_runtime = save_ai_provider_inner(&state, provider_id, provider_config).await?;
+    if updates_runtime {
+        let _ = app.emit("agent://configuration-changed", true);
+    }
+    Ok(())
 }
 
 async fn save_ai_provider_inner(
     state: &AppState,
     provider_id: AiProviderId,
     provider_config: AiProviderConfig,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let _transaction = state.ai_settings_tx.lock().await;
     let normalized = provider_config.normalized_for(provider_id)?;
     let old = state.config.lock().unwrap().clone();
@@ -46,15 +51,18 @@ async fn save_ai_provider_inner(
         };
     }
     *state.config.lock().unwrap() = candidate;
-    Ok(())
+    Ok(updates_runtime)
 }
 
 #[tauri::command]
 pub async fn set_active_ai_provider(
+    app: AppHandle,
     state: State<'_, AppState>,
     provider_id: Option<AiProviderId>,
 ) -> Result<(), String> {
-    set_active_ai_provider_inner(&state, provider_id).await
+    set_active_ai_provider_inner(&state, provider_id).await?;
+    let _ = app.emit("agent://configuration-changed", provider_id.is_some());
+    Ok(())
 }
 
 async fn set_active_ai_provider_inner(
@@ -278,7 +286,7 @@ mod tests {
         let dir = crate::testutil::tempdir();
         let path = dir.path().join("config.json");
         let state = state_at(path.clone(), Config::default());
-        tauri::async_runtime::block_on(save_ai_provider_inner(
+        let updates_runtime = tauri::async_runtime::block_on(save_ai_provider_inner(
             &state,
             AiProviderId::Kimi,
             AiProviderConfig {
@@ -288,6 +296,7 @@ mod tests {
             },
         ))
         .unwrap();
+        assert!(!updates_runtime);
 
         let memory = state.config.lock().unwrap().clone();
         let disk = crate::config::load(&path);

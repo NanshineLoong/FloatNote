@@ -19,6 +19,7 @@ export type HostToSidecar =
       baseUrl?: string;
     }
   | { type: "clear_configuration"; callId: string }
+  | { type: "configuration_ready" }
   | {
       type: "open_session";
       conversationId: string;
@@ -144,7 +145,13 @@ export type SidecarToHost =
   | { type: "get_note_text"; callId: string; conversationId: string; target?: NoteTarget }
   | { type: "list_notes"; callId: string; conversationId: string }
   | { type: "create_note"; callId: string; conversationId: string; toolCallId: string; title: string; content: string; preview: EditPreview }
-  | { type: "done"; requestId: string; conversationId: string }
+  | {
+      type: "done";
+      requestId: string;
+      conversationId: string;
+      outcome: "completed" | "cancelled" | "failed";
+      error?: string;
+    }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }
   | {

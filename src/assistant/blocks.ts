@@ -75,7 +75,7 @@ export function reconcileMessages(
 
 function isVisibleMessage(message: ChatMessage, outputMode: AssistantOutputMode): boolean {
   if (message.role === "user" || outputMode === "detailed" || message.streaming) return true;
-  return message.blocks.some((block) => block.kind === "text" || block.kind === "error");
+  return message.blocks.some((block) => block.kind === "text" || block.kind === "status" || block.kind === "error");
 }
 
 /** 打开指定用户消息的临时编辑器，编辑状态仅保留在 DOM 内。 */
@@ -103,7 +103,7 @@ function reconcileBlocks(
   let cursor: HTMLElement | null = null;
 
   const visibleBlocks = outputMode === "compact"
-    ? message.blocks.filter((block) => block.kind === "text" || block.kind === "error")
+    ? message.blocks.filter((block) => block.kind === "text" || block.kind === "status" || block.kind === "error")
     : message.blocks;
   for (const block of visibleBlocks) {
     seen.add(block.id);
@@ -210,6 +210,9 @@ function updateBlockNode(node: HTMLElement, block: Block, streaming: boolean): v
       break;
     }
     case "error":
+      if (node.textContent !== block.text) node.textContent = block.text;
+      break;
+    case "status":
       if (node.textContent !== block.text) node.textContent = block.text;
       break;
   }
