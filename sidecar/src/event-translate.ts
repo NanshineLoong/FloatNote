@@ -5,9 +5,9 @@ import { formatToolTitle, sanitizeToolError } from "./tool-title.js";
 /**
  * Translate a Pi agent-session event into a single protocol line, or null when
  * the event is not relevant to the host. We forward text + thinking blocks
- * (streamed into the chat bubble) and tool execution start/end; toolcall_*
- * (the model emitting a tool-call block) is dropped — the action card's
- * structured detail arrives via the permission://request flow instead.
+ * (streamed into the chat bubble), tool-call preparation, and tool execution
+ * start/end. The preparation event opens an immediate generic placeholder;
+ * execution start later upgrades it with the structured tool label.
  */
 export function translateEvent(
   requestId: string,
@@ -28,6 +28,23 @@ export function translateEvent(
       }
       if (inner.type === "thinking_end") {
         return { type: "thinking_end", requestId, conversationId };
+      }
+      if (inner.type === "toolcall_start") {
+        const block = (inner.partial.content?.[inner.contentIndex] ?? {}) as {
+          id?: unknown;
+          name?: unknown;
+        };
+        if (typeof block.id === "string" && typeof block.name === "string") {
+          return {
+            type: "tool",
+            requestId,
+            conversationId,
+            callId: block.id,
+            name: block.name,
+            label: "正在准备工具调用…",
+            phase: "prepare",
+          };
+        }
       }
       return null;
     }

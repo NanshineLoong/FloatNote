@@ -125,7 +125,7 @@ export type SidecarToHost =
       conversationId: string;
       callId: string;
       name: string;
-      phase: "start" | "end";
+      phase: "prepare" | "start" | "end";
       label?: string;
       error?: string;
       isError?: boolean;

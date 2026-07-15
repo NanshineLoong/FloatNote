@@ -46,13 +46,25 @@ describe("translateEvent", () => {
     ).toEqual({ type: "thinking_end", requestId: "r1", conversationId: "c1" });
   });
 
-  it("still ignores toolcall/text boundary assistant message events", () => {
+  it("opens a generic tool placeholder when the model starts a tool call", () => {
     const out = translateEvent("r1", "c1", ev({
       type: "message_update",
       message: {},
-      assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, partial: {} },
+      assistantMessageEvent: {
+        type: "toolcall_start",
+        contentIndex: 0,
+        partial: { content: [{ type: "toolCall", id: "call-1", name: "read_note", arguments: {} }] },
+      },
     }));
-    expect(out).toBeNull();
+    expect(out).toEqual({
+      type: "tool",
+      requestId: "r1",
+      conversationId: "c1",
+      callId: "call-1",
+      name: "read_note",
+      label: "正在准备工具调用…",
+      phase: "prepare",
+    });
   });
 
   it("maps tool execution start/end to tool lines", () => {

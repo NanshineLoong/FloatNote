@@ -6,7 +6,7 @@ export type AgentEvent =
   | { type: "session_opened"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "session_synced"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "delta"; requestId: string; conversationId: string; text: string }
-  | { type: "tool"; requestId: string; conversationId: string; callId: string; name: string; label?: string; phase: "start" | "end"; error?: string; isError?: boolean }
+  | { type: "tool"; requestId: string; conversationId: string; callId: string; name: string; label?: string; phase: "prepare" | "start" | "end"; error?: string; isError?: boolean }
   | { type: "done"; requestId: string; conversationId: string; outcome?: "completed" | "cancelled" | "failed"; error?: string }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }

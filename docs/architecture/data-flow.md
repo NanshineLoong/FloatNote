@@ -26,7 +26,7 @@ Assistant UI → src/platform/agent → Tauri command → Rust agent host
                                               Node sidecar
 ```
 
-sidecar 将流式对话事件输出到 JSONL；Rust 解析并广播为 `agent://event`，由 `src/platform/agent.ts` 订阅。工具事件携带稳定 `callId`、安全显示标题、状态和可选短错误，使前端能按真实调用匹配交错执行；原始参数和工具返回正文不进入 UI 协议。写工具发起 `apply_edit` 时同时携带 Pi 的 `toolCallId`，Rust 将它透传到 `permission://request`，因此权限卡能原位升级正确的工具块。编辑不会立即落盘：Rust 先保存 pending edit，再广播权限请求；前端按 request id 排队，用户逐项 allow 或 deny 后，`resolve_permission` 才完成写入并向 sidecar 回传结果。若权限事件无法广播，Rust 会移除 pending 并主动返回失败，避免 sidecar 永久等待。
+sidecar 将流式对话事件输出到 JSONL；Rust 解析并广播为 `agent://event`，由 `src/platform/agent.ts` 订阅。工具事件携带稳定 `callId`、安全显示标题、状态和可选短错误，使前端能按真实调用匹配交错执行；原始参数和工具返回正文不进入 UI 协议。模型发出 `toolcall_start` 时，sidecar 先发送安全的通用 `prepare` 工具事件，详细模式立即显示“正在准备工具调用…”；同一 `callId` 的实际 `start` 事件会原位升级为具体工具标题，不重复添加步骤。写工具发起 `apply_edit` 时同时携带 Pi 的 `toolCallId`，Rust 将它透传到 `permission://request`，因此权限卡能原位升级正确的工具块。编辑不会立即落盘：Rust 先保存 pending edit，再广播权限请求；前端按 request id 排队，用户逐项 allow 或 deny 后，`resolve_permission` 才完成写入并向 sidecar 回传结果。若权限事件无法广播，Rust 会移除 pending 并主动返回失败，避免 sidecar 永久等待。
 
 turn 结束事件包含 `completed`、`cancelled` 或 `failed` outcome。取消时前端保留已有
 部分输出并显示“已中断”；无输出取消也不会进入空响应错误分支。模型失败显示清理

@@ -245,6 +245,41 @@ describe("reduceEvents", () => {
     ]);
   });
 
+  it("upgrades a preparing tool placeholder in place when execution starts", () => {
+    const preparing = run([{
+      type: "tool",
+      requestId: "r1",
+      callId: "call-1",
+      name: "read_note",
+      label: "正在准备工具调用…",
+      phase: "prepare",
+    }]);
+    const started = reduceEvents(preparing, {
+      type: "tool",
+      requestId: "r1",
+      callId: "call-1",
+      name: "read_note",
+      label: "读取 piece.md",
+      phase: "start",
+    });
+
+    expect(norm(started.messages)).toEqual([
+      {
+        role: "assistant",
+        streaming: true,
+        blocks: [{
+          kind: "action",
+          callId: "call-1",
+          tool: "read_note",
+          label: "读取 piece.md",
+          targets: [],
+          decision: "pending",
+          execution: "running",
+        }],
+      },
+    ]);
+  });
+
   it("matches interleaved tool results by call id instead of the most recent action", () => {
     let state = run([
       { type: "tool", requestId: "r1", callId: "read-1", name: "read_note", label: "读取 piece.md", phase: "start" },

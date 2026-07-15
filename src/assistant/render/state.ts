@@ -23,7 +23,7 @@ export type ChatEvent =
     }
   | { type: "session_synced"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "delta"; requestId: string; conversationId?: string; text: string }
-  | { type: "tool"; requestId: string; conversationId?: string; callId?: string; name: string; label?: string; phase: "start" | "end"; error?: string; isError?: boolean }
+  | { type: "tool"; requestId: string; conversationId?: string; callId?: string; name: string; label?: string; phase: "prepare" | "start" | "end"; error?: string; isError?: boolean }
   | { type: "done"; requestId: string; conversationId?: string; outcome?: "completed" | "cancelled" | "failed" }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }
@@ -305,10 +305,34 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
 
     case "tool": {
       if (!acceptsConversation(state, event)) return state;
-      if (event.phase === "start") {
+      if (event.phase === "prepare") {
         // 所有工具都产出流内块：写入/标签工具走完整 action 卡（detail 由
         // permission://request 填充），只读工具（read_note/list_tags/read_skill）
         // 走紧凑行（无 detail/requestId → action-card 渲染 header-only）。
+        const { state: s, msg } = ensureStreaming(state);
+        const action: ActionBlock = {
+          id: nextId("b"),
+          kind: "action",
+          callId: event.callId,
+          tool: event.name,
+          label: event.label,
+          targets: [],
+          decision: "pending",
+          execution: "running",
+        };
+        return updateLast(s, {
+          ...msg,
+          blocks: appendProcessItem(msg.blocks, action),
+        });
+      }
+      if (event.phase === "start") {
+        // toolcall_start 已经创建通用占位，执行实际开始时以同一 callId
+        // 原位更新标题，避免详细模式中出现两个工具行。
+        const upgraded = updateAction(state, (b) => b.callId === event.callId && b.execution === "running", (b) => ({
+          ...b,
+          ...(event.label ? { label: event.label } : {}),
+        }));
+        if (upgraded !== state) return upgraded;
         const { state: s, msg } = ensureStreaming(state);
         const action: ActionBlock = {
           id: nextId("b"),
