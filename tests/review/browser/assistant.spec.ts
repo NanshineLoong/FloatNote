@@ -70,3 +70,40 @@ describe("assistant input browser review", () => {
     assertVisibleChrome(await inputChrome());
   });
 });
+
+describe("permission review responsiveness", () => {
+  it("uses unified rows in a narrow paper and two columns in a wide paper", async () => {
+    await browser.setWindowSize(620, 600);
+    await browser.execute(() => {
+      const open = (window as typeof window & { openPermissionReview?: () => void }).openPermissionReview;
+      if (!open) throw new Error("permission review fixture is missing");
+      open();
+    });
+    await $(".perm-dialog:not([hidden])").waitForDisplayed();
+
+    const narrow = await browser.execute(() => {
+      const dialog = document.querySelector<HTMLElement>(".perm-dialog:not([hidden])")!;
+      const unified = dialog.querySelector<HTMLElement>(".perm-diff-unified")!;
+      const wide = dialog.querySelector<HTMLElement>(".perm-diff-wide")!;
+      const scroll = dialog.querySelector<HTMLElement>(".perm-diff-scroll")!;
+      return {
+        unified: getComputedStyle(unified).display,
+        wide: getComputedStyle(wide).display,
+        fits: scroll.scrollWidth <= scroll.clientWidth + 1,
+      };
+    });
+    assert.deepEqual(narrow, { unified: "block", wide: "none", fits: true });
+
+    await browser.setWindowSize(900, 600);
+    await browser.waitUntil(async () => {
+      const displays = await browser.execute(() => {
+        const dialog = document.querySelector<HTMLElement>(".perm-dialog:not([hidden])")!;
+        return {
+          unified: getComputedStyle(dialog.querySelector<HTMLElement>(".perm-diff-unified")!).display,
+          wide: getComputedStyle(dialog.querySelector<HTMLElement>(".perm-diff-wide")!).display,
+        };
+      });
+      return displays.unified === "none" && displays.wide === "grid";
+    });
+  });
+});

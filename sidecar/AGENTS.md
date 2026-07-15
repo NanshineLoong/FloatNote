@@ -28,7 +28,9 @@ Entry: `src/main.ts`.
   `edit_note`/`write_note`/`create_note`/`tag_text`/`tag_create`/`tag_update`/
   `tag_delete`/`read_skill`). Inbox reads expose clean Markdown; edits map v2
   annotations through exact changes, and whole-document overwrite is rejected
-  while annotations exist. Tag tools reject non-`inbox` targets explicitly.
+  while annotations exist. Tag tools reject non-`inbox` targets explicitly;
+  `tag_text` permission previews carry both an 80-character excerpt and the
+  complete exact target text.
 - `matching.ts` — sidecar-only unique string replacement; text annotation
   matching and transformations come from `@floatnote/note-logic`.
 - `skills.ts` — skill directory loading + `formatSkillsForSystemPrompt`.

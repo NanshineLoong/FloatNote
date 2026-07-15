@@ -41,16 +41,18 @@ describe("projectPermission", () => {
   it("projects tag operations without exposing raw markers", () => {
     const assign = projectPermission(request({
       tool_name: "tag_text",
-      preview: { tool: "tag_text", summary: "", detail: { kind: "tag_assign", textExcerpt: "文本摘要", annotationCount: 2, action: "add", tagName: "重点", tagColor: "#f00" } },
+      preview: { tool: "tag_text", summary: "", detail: { kind: "tag_assign", textExcerpt: "文本摘要", targetText: "完整的\n目标文本", annotationCount: 2, action: "add", tagName: "重点", tagColor: "#f00" } },
     }));
-    expect(assign.title).toBe("为「文本摘要」添加标签「重点」");
+    expect(assign.title).toBe("添加标签「重点」");
     expect(assign.colors).toEqual([{ label: "重点", color: "#f00" }]);
+    expect(assign.tagTarget).toEqual({ excerpt: "文本摘要", text: "完整的\n目标文本", availabilityLabel: "全文", tagName: "重点" });
 
     const clear = projectPermission(request({
       tool_name: "tag_text",
       preview: { tool: "tag_text", summary: "", detail: { kind: "tag_assign", textExcerpt: "文本摘要", annotationCount: 1, action: "remove", tagName: "重点", tagColor: "#f00" } },
     }));
-    expect(clear.title).toBe("为「文本摘要」移除标签「重点」");
+    expect(clear.title).toBe("移除标签「重点」");
+    expect(clear.tagTarget).toEqual({ excerpt: "文本摘要", text: "文本摘要", availabilityLabel: "可用文本", tagName: "重点" });
   });
 
   it("projects create, update, and delete tag titles with color cues", () => {

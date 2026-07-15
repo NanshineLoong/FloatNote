@@ -1,6 +1,6 @@
 export type EditPreviewDetail =
   | { kind: "diff"; hunks: string }
-  | { kind: "tag_assign"; textExcerpt: string; annotationCount: number; action: "add" | "remove"; tagName: string; tagColor: string }
+  | { kind: "tag_assign"; textExcerpt: string; targetText?: string; annotationCount: number; action: "add" | "remove"; tagName: string; tagColor: string }
   | { kind: "tag_create"; tagName: string; tagColor: string }
   | { kind: "tag_update"; tagId: string; oldName: string; oldColor: string; newName: string; newColor: string }
   | { kind: "note_create"; filename: string; contentPreview: string }
@@ -33,6 +33,8 @@ export interface PermissionPresentation {
   canView: boolean;
   canSnapshot: boolean;
   colors: Array<{ label: string; color: string }>;
+  tagOperation?: { action: "添加标签" | "移除标签"; tagName: string; tagColor: string };
+  tagTarget?: { excerpt: string; text: string; availabilityLabel: "全文" | "可用文本"; tagName: string };
 }
 
 function basename(path: string | undefined): string | undefined {
@@ -52,6 +54,8 @@ export function projectPermission(request: PermissionRequest): PermissionPresent
   const detail = request.preview.detail;
   const colors: PermissionPresentation["colors"] = [];
   let title: string;
+  let tagOperation: PermissionPresentation["tagOperation"];
+  let tagTarget: PermissionPresentation["tagTarget"];
   switch (request.tool_name) {
     case "create_note": title = `创建「${documentName(request)}」`; break;
     case "edit_note": title = `编辑「${documentName(request)}」`; break;
@@ -64,8 +68,17 @@ export function projectPermission(request: PermissionRequest): PermissionPresent
     }
     case "tag_text": {
       const d = detail.kind === "tag_assign" ? detail : null;
-      const action = d?.action === "remove" ? "移除" : "添加";
-      title = d ? `为「${d.textExcerpt}」${action}标签「${d.tagName}」` : "设置文本标签";
+      const action = d?.action === "remove" ? "移除标签" : "添加标签";
+      title = d ? `${action}「${d.tagName}」` : "设置文本标签";
+      if (d) {
+        tagOperation = { action, tagName: d.tagName, tagColor: d.tagColor };
+        tagTarget = {
+          excerpt: d.textExcerpt,
+          text: d.targetText ?? d.textExcerpt,
+          availabilityLabel: d.targetText === undefined ? "可用文本" : "全文",
+          tagName: d.tagName,
+        };
+      }
       if (d?.tagColor) colors.push({ label: d.tagName, color: d.tagColor });
       break;
     }
@@ -88,5 +101,7 @@ export function projectPermission(request: PermissionRequest): PermissionPresent
     canView: ["create_note", "edit_note", "write_note"].includes(request.tool_name),
     canSnapshot: request.tool_name === "write_note" && request.can_snapshot,
     colors,
+    tagOperation,
+    tagTarget,
   };
 }

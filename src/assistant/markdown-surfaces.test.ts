@@ -33,12 +33,18 @@ describe("Markdown surfaces", () => {
     const dialog = createPermissionDialog({ onResolve: vi.fn(), onClose: vi.fn() });
     dialog.open(req, projectPermission(req));
 
-    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("变更");
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("对比");
+    expect(document.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe(
+      document.querySelector('[role="tab"][aria-selected="true"]')?.id,
+    );
     expect(document.querySelector(".perm-diff")).not.toBeNull();
 
     document.querySelector<HTMLButtonElement>('[role="tab"]:last-child')!.click();
 
-    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("新版本预览");
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("新版本");
+    expect(document.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe(
+      document.querySelector('[role="tab"][aria-selected="true"]')?.id,
+    );
     expect(document.querySelector(".perm-dialog-markdown table")?.textContent).toContain("1");
     expect(document.querySelector(".perm-diff")).toBeNull();
   });
@@ -51,8 +57,9 @@ describe("Markdown surfaces", () => {
 
     diffTab.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
 
-    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("新版本预览");
-    expect(document.activeElement?.textContent).toBe("新版本预览");
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("新版本");
+    expect(document.activeElement?.textContent).toBe("新版本");
+    expect(document.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe(document.activeElement?.id);
   });
 
   it("renders create review directly without an empty tab row", () => {

@@ -99,6 +99,32 @@ describe("tag_text", () => {
     expect(writes[0].newContent).toContain("floatnote:ann:v2");
     expect(writes[0].preview.detail.kind).toBe("tag_assign");
   });
+
+  it("carries the complete exact target alongside the compact excerpt", async () => {
+    const exact = `目标第一行\n${"很长的目标文本".repeat(20)}`;
+    const note = `<!-- floatnote:tags:v2 review="复习"|c=#e5484d -->\n${exact}`;
+    const { deps, writes } = makeDups(note);
+    const set = createNoteTools(deps).find((tool) => tool.name === "tag_text")!;
+
+    await (set as any).execute("id", { exact, tagId: "review", action: "add" });
+
+    expect(writes[0].preview.detail).toMatchObject({
+      kind: "tag_assign",
+      textExcerpt: exact.slice(0, 80),
+      targetText: exact,
+    });
+  });
+
+  it("rejects an empty exact target before requesting permission", async () => {
+    const note = '<!-- floatnote:tags:v2 review="复习"|c=#e5484d -->\n正文';
+    const { deps, writes } = makeDups(note);
+    const set = createNoteTools(deps).find((tool) => tool.name === "tag_text")!;
+
+    const result = await (set as any).execute("id", { exact: "", tagId: "review", action: "add" });
+
+    expect(result.content[0].text).toContain("目标文本不能为空");
+    expect(writes).toHaveLength(0);
+  });
 });
 
 describe("tag_create", () => {

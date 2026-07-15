@@ -21,14 +21,16 @@ into a reconciled message list with incremental DOM updates.
 - `permission-bubble.ts` — FIFO pending-request controller and compact dock
   card; it is the only permission surface that initiates resolution. Concurrent
   requests are deduplicated by request id and advance only after the current
-  request resolves.
+  request resolves. `tag_text` cards keep action/tag identity separate from an
+  expandable, height-capped exact-target surface.
 - `permission-model.ts` — pure semantic title, filename, view, and snapshot
   projection. `EditPreviewDetail` and permission payload types live here and
   are re-exported by `permission-bubble.ts` for compatibility.
 - `permission-dialog.ts` — complete create-Markdown and edit/rewrite review
-  paper. Edit/rewrite review defaults to the aligned source diff and can switch
-  to a rendered new-version preview; `permission-diff.ts` supplies line rows
-  and context folding.
+  paper. Edit/rewrite review defaults to a container-responsive source diff
+  (unified below 680px, aligned two-column at and above 680px) and can switch to
+  a rendered new-version preview; `permission-diff.ts` supplies one shared line
+  row model and context folding for both layouts.
 - `permission-allow-button.ts` — normal/split approval control. Snapshot mode
   is an immediate menu action, not a stored select value.
 - `markdown.ts` — compatibility re-export of the safe GFM renderer in

@@ -84,7 +84,7 @@ export interface PromptRef {
 
 export type EditPreviewDetail =
   | { kind: "diff"; hunks: string }
-  | { kind: "tag_assign"; textExcerpt: string; annotationCount: number; action: "add" | "remove"; tagName: string; tagColor: string }
+  | { kind: "tag_assign"; textExcerpt: string; targetText: string; annotationCount: number; action: "add" | "remove"; tagName: string; tagColor: string }
   | { kind: "tag_create"; tagName: string; tagColor: string }
   | { kind: "tag_update"; tagId: string; oldName: string; oldColor: string; newName: string; newColor: string }
   | { kind: "note_create"; filename: string; contentPreview: string }

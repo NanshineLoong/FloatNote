@@ -681,6 +681,9 @@
 .chat-action-rejected .chat-action-icon {
   color: var(--color-warning);
 }
+.chat-action.chat-action-readonly.chat-action-rejected .chat-action-header {
+  color: var(--color-warning);
+}
 .chat-action-failed,
 .chat-action-incomplete {
   border-color: var(--color-danger);
@@ -1131,12 +1134,76 @@
   white-space: nowrap;
 }
 
+.perm-title-action { flex: 0 0 auto; }
+.perm-title-tag-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .perm-title-color {
   flex: 0 0 auto;
   width: 10px;
   height: 10px;
   border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
   border-radius: 50%;
+}
+
+.perm-tag-target {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.perm-tag-target-compact {
+  display: flex;
+  min-width: 0;
+  color: var(--color-text-muted);
+}
+
+.perm-tag-target-label { flex: 0 0 auto; }
+.perm-tag-target-excerpt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.perm-tag-target-heading {
+  grid-column: 1 / -1;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.perm-tag-target-full {
+  grid-column: 1 / -1;
+  box-sizing: border-box;
+  width: 100%;
+  max-height: calc(6 * 1.5em + 16px + 2px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.perm-tag-target-full:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.perm-tag-disclosure {
+  grid-column: 2;
+  justify-self: end;
 }
 
 .perm-footer,
@@ -1451,6 +1518,8 @@
   overflow: hidden;
 }
 
+.perm-review-container { container-type: inline-size; }
+
 .perm-dialog-markdown {
   box-sizing: border-box;
   width: min(680px, 100%);
@@ -1474,18 +1543,62 @@
 .perm-diff-scroll {
   width: 100%;
   height: 100%;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .perm-diff {
-  display: grid;
-  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
-  min-width: 640px;
   color: var(--color-text);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.55;
 }
+
+.perm-diff-wide {
+  display: none;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.perm-diff-unified {
+  display: block;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.perm-diff-unified-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.perm-diff-marker {
+  padding: 3px 0 3px 8px;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+.perm-diff-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.perm-diff-unified-content {
+  min-width: 0;
+  padding: 3px 12px 3px 4px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.perm-diff-unified-row.is-removed { background: var(--color-danger-fill-strong); }
+.perm-diff-unified-row.is-removed .perm-diff-unified-content { text-decoration: line-through; }
+.perm-diff-unified-row.is-added { background: var(--color-accent-fill); }
 
 .perm-diff-label {
   position: sticky;
@@ -1528,16 +1641,40 @@
   text-align: center;
 }
 
+.perm-diff-unified .perm-diff-collapsed { width: 100%; }
+
+.perm-diff-fallbacks {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .perm-diff-fallback {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(320px, 1fr));
-  min-width: 640px;
+  display: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   height: 100%;
   overflow: auto;
 }
 
 .perm-diff-fallback section { padding: 16px; }
 .perm-diff-fallback pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.perm-diff-fallback-unified {
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: 16px;
+}
+.perm-diff-fallback-unified pre {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+@container (min-width: 680px) {
+  .perm-diff-wide { display: grid; }
+  .perm-diff-unified { display: none; }
+  .perm-diff-fallback { display: grid; }
+  .perm-diff-fallback-unified { display: none; }
+}
 
 @keyframes fn-overlay-in {
   from { opacity: 0; }

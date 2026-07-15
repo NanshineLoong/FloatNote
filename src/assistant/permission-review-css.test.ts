@@ -13,9 +13,20 @@ describe("permission review CSS", () => {
     expect(css).toMatch(/\.perm-dialog-paper\s*\{[^}]*width:\s*min\(920px, calc\(100vw - 32px\)\);[^}]*height:\s*min\(720px, calc\(100vh - 64px\)\);/s);
   });
 
-  it("keeps narrow diffs side by side with horizontal scrolling", () => {
-    expect(css).toMatch(/\.perm-diff-scroll\s*\{[^}]*overflow:\s*auto;/s);
-    expect(css).toMatch(/\.perm-diff\s*\{[^}]*grid-template-columns:\s*minmax\(320px, 1fr\) minmax\(320px, 1fr\);[^}]*min-width:\s*640px;/s);
+  it("switches from unified to side-by-side diff at a 680px review-container width", () => {
+    expect(css).toMatch(/\.perm-review-container\s*\{[^}]*container-type:\s*inline-size;/s);
+    expect(css).toMatch(/@container\s*\(min-width:\s*680px\)/s);
+    expect(css).not.toMatch(/\.perm-diff\s*\{[^}]*min-width:\s*640px;/s);
+    expect(css).toMatch(/\.perm-diff-unified\s*\{[^}]*display:\s*block;/s);
+    expect(css).toMatch(/@container\s*\(min-width:\s*680px\)\s*\{[\s\S]*?\.perm-diff-wide\s*\{[^}]*display:\s*grid;/s);
+  });
+
+  it("caps expanded tag target text at six lines with contained vertical scrolling", () => {
+    expect(css).toMatch(/\.perm-tag-target-full\s*\{[^}]*max-height:\s*calc\(6 \* 1\.5em \+ 16px \+ 2px\);[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/s);
+  });
+
+  it("constrains responsive diff fallbacks to the review panel scrollport", () => {
+    expect(css).toMatch(/\.perm-diff-fallbacks\s*\{[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*overflow:\s*hidden;/s);
   });
 
   it("keeps review tabs fixed above one scrollable panel", () => {

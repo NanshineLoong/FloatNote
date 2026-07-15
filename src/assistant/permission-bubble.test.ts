@@ -44,6 +44,73 @@ describe("permission bubble", () => {
     expect(resolve).not.toHaveBeenCalled();
     expect(bubble.isOpen()).toBe(true);
   });
+
+  it("discloses the complete tag target without moving decision controls into the scroll surface", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const bubble = mountPermissionBubble(root, vi.fn());
+    const targetText = `第一行\n${"超过八十字符的完整目标".repeat(12)}`;
+    bubble.show(request({
+      tool_name: "tag_text",
+      preview: { tool: "tag_text", summary: "", detail: { kind: "tag_assign", textExcerpt: targetText.slice(0, 80), targetText, annotationCount: 1, action: "add", tagName: "重点", tagColor: "#e5484d" } },
+    }));
+
+    expect(root.querySelector(".perm-title")?.textContent).toBe("添加标签「重点」");
+    expect(root.querySelector(".perm-tag-target-compact")?.textContent).toContain(targetText.slice(0, 80));
+    const disclosure = root.querySelector<HTMLButtonElement>(".perm-tag-disclosure")!;
+    expect(disclosure.textContent).toBe("展开");
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+
+    disclosure.click();
+
+    const surface = root.querySelector<HTMLElement>(".perm-tag-target-full")!;
+    expect(surface.textContent).toBe(targetText);
+    expect(surface.getAttribute("aria-label")).toBe("标签“重点”的目标文本全文");
+    expect(disclosure.textContent).toBe("收起");
+    expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+    expect(surface.contains(root.querySelector(".perm-footer-actions"))).toBe(false);
+    expect(document.activeElement).toBe(disclosure);
+  });
+
+  it("labels a legacy tag target as available text instead of claiming it is complete", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const bubble = mountPermissionBubble(root, vi.fn());
+    bubble.show(request({
+      tool_name: "tag_text",
+      preview: { tool: "tag_text", summary: "", detail: { kind: "tag_assign", textExcerpt: "旧请求摘要", annotationCount: 1, action: "remove", tagName: "重点", tagColor: "#e5484d" } },
+    }));
+
+    root.querySelector<HTMLButtonElement>(".perm-tag-disclosure")!.click();
+
+    expect(root.querySelector(".perm-tag-target-heading")?.textContent).toBe("目标文本 · 可用文本");
+    expect(root.querySelector(".perm-tag-target-full")?.getAttribute("aria-label")).toContain("可用文本");
+  });
+
+  it("resets tag disclosure for the next request and disables it while resolving", async () => {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => { finish = resolve; });
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const bubble = mountPermissionBubble(root, vi.fn(() => pending));
+    const tagRequest = (id: string, tagName: string): PermissionRequest => request({
+      request_id: id,
+      tool_name: "tag_text",
+      preview: { tool: "tag_text", summary: "", detail: { kind: "tag_assign", textExcerpt: "摘要", targetText: "完整目标", annotationCount: 1, action: "add", tagName, tagColor: "#e5484d" } },
+    });
+    bubble.show(tagRequest("req-1", "重点"));
+    bubble.show(tagRequest("req-2", "复习"));
+    root.querySelector<HTMLButtonElement>(".perm-tag-disclosure")!.click();
+    root.querySelector<HTMLButtonElement>(".perm-allow-main")!.click();
+
+    expect(root.querySelector<HTMLButtonElement>(".perm-tag-disclosure")!.disabled).toBe(true);
+    finish();
+    await pending;
+    await Promise.resolve();
+    expect(root.querySelector(".perm-title")?.textContent).toBe("添加标签「复习」");
+    expect(root.querySelector(".perm-tag-target-full")).toBeNull();
+    expect(root.querySelector<HTMLButtonElement>(".perm-tag-disclosure")?.getAttribute("aria-expanded")).toBe("false");
+  });
   it("submits only the first decision and disables compact and dialog controls together", async () => {
     let finish!: () => void;
     const pending = new Promise<void>((resolve) => { finish = resolve; });

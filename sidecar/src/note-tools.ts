@@ -63,6 +63,7 @@ function inboxPreview(metadata: InboxMetadata, tagId: string, exact: string, act
   return {
     kind: "tag_assign" as const,
     textExcerpt: exact.slice(0, 80),
+    targetText: exact,
     annotationCount: metadata.annotations.filter((annotation) => annotation.tagId === tagId).length,
     action,
     tagName: tag?.name ?? tagId,
@@ -184,7 +185,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     label: "Tag text",
     description: "按 exact 与可选 prefix/suffix 唯一定位 Inbox 文本，并添加或移除标签。",
     parameters: Type.Object({
-      exact: Type.String(),
+      exact: Type.String({ minLength: 1 }),
       prefix: Type.Optional(Type.String()),
       suffix: Type.Optional(Type.String()),
       tagId: Type.String(),
@@ -196,6 +197,7 @@ export function createNoteTools(deps: NoteToolDeps): ToolDefinition[] {
     async execute(toolCallId, params: { exact: string; prefix?: string; suffix?: string; tagId: string; action: "add" | "remove"; target?: NoteTarget }) {
       const guarded = tagTarget("tag_text", params.target);
       if (!guarded.ok) return guarded.result;
+      if (params.exact.length === 0) return errorResult("目标文本不能为空");
       const raw = await deps.getNoteText(guarded.target);
       const decoded = decodeInbox(raw);
       if (!decoded.metadata.tags.some((tag) => tag.id === params.tagId)) return errorResult(`未知标签：${params.tagId}`);

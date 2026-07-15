@@ -32,11 +32,12 @@ describe("apply_edit protocol", () => {
       toolName: "tag_text",
       oldContent: "a",
       newContent: "b",
-      preview: { tool: "tag_text", summary: "打标签", detail: { kind: "tag_assign", textExcerpt: "文本", annotationCount: 1, action: "add", tagName: "review", tagColor: "#e5484d" } },
+      preview: { tool: "tag_text", summary: "打标签", detail: { kind: "tag_assign", textExcerpt: "文本", targetText: "文本全文", annotationCount: 1, action: "add", tagName: "review", tagColor: "#e5484d" } },
     };
     const line = encodeLine(msg);
     expect(line).toContain('"type":"apply_edit"');
     expect(line).toContain('"toolName":"tag_text"');
+    expect(line).toContain('"targetText":"文本全文"');
     expect(line.endsWith("\n")).toBe(true);
   });
   it("decodes apply_edit_result with denied", () => {

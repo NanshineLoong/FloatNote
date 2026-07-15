@@ -4,6 +4,8 @@ import "../../../src/styles.css";
 import "../../../src/assistant/styles.css";
 import "./assistant-fixture.css";
 import { mountAssistant } from "../../../src/assistant/assistant";
+import { createPermissionDialog } from "../../../src/assistant/permission-dialog";
+import { projectPermission, type PermissionRequest } from "../../../src/assistant/permission-model";
 import type { ChatConversation } from "../../../src/platform/chat-history";
 
 const root = document.querySelector<HTMLElement>("#assistant-region");
@@ -42,5 +44,20 @@ assistant.setScope({
   scopeLabel: "Browser review",
   cwd: "/review",
 });
+
+const permissionRequest: PermissionRequest = {
+  request_id: "browser-permission-review",
+  conversation_id: "browser-review",
+  tool_name: "edit_note",
+  old_content: `# 审查\n\n${"这是一段需要在窄窗口内正常换行的普通文本。".repeat(10)}\n\n${"unbreakable".repeat(80)}\n\n旧结论`,
+  new_content: `# 审查\n\n${"这是一段需要在窄窗口内正常换行的普通文本。".repeat(10)}\n\n${"unbreakable".repeat(80)}\n\n新结论`,
+  preview: { tool: "edit_note", summary: "", detail: { kind: "diff", hunks: "" } },
+  can_snapshot: false,
+  resolved_path: "/review/piece.md",
+};
+const permissionDialog = createPermissionDialog({ onResolve: () => {}, onClose: () => {} });
+(window as typeof window & { openPermissionReview: () => void }).openPermissionReview = () => {
+  permissionDialog.open(permissionRequest, projectPermission(permissionRequest));
+};
 
 document.body.dataset.reviewReady = "true";

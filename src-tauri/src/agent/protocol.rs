@@ -373,7 +373,7 @@ pub struct AgentNoteEntry {
 /// 变体名用 `rename_all = "snake_case"` 序列化为 `diff`/`tag_assign`/
 /// `tag_create`/`tag_delete`（与 TS 线格式一致）；字段名用
 /// `rename_all_fields = "camelCase"` 序列化为 `hunks`/`textExcerpt`/
-/// `tagName`/`tagColor`/`annotationCount`。
+/// `targetText`/`tagName`/`tagColor`/`annotationCount`。
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(
     tag = "kind",
@@ -386,6 +386,8 @@ pub enum EditPreviewDetail {
     },
     TagAssign {
         text_excerpt: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_text: Option<String>,
         annotation_count: u32,
         action: String,
         tag_name: String,
@@ -688,7 +690,7 @@ mod tests {
 
     #[test]
     fn parses_apply_edit_line() {
-        let line = r##"{"type":"apply_edit","callId":"w1","conversationId":"c1","target":{"kind":"inbox"},"toolName":"tag_text","oldContent":"a","newContent":"b","preview":{"tool":"tag_text","summary":"s","detail":{"kind":"tag_assign","textExcerpt":"文本","annotationCount":1,"action":"add","tagName":"review","tagColor":"#e5484d"}}}"##;
+        let line = r##"{"type":"apply_edit","callId":"w1","conversationId":"c1","target":{"kind":"inbox"},"toolName":"tag_text","oldContent":"a","newContent":"b","preview":{"tool":"tag_text","summary":"s","detail":{"kind":"tag_assign","textExcerpt":"文本","targetText":"文本全文","annotationCount":1,"action":"add","tagName":"review","tagColor":"#e5484d"}}}"##;
         let msg: SidecarToHost = serde_json::from_str(line).unwrap();
         match msg {
             SidecarToHost::ApplyEdit {
@@ -713,9 +715,25 @@ mod tests {
         assert!(json.contains("\"oldContent\":\"a\""), "{json}");
         assert!(json.contains("\"newContent\":\"b\""), "{json}");
         assert!(json.contains("\"textExcerpt\":\"文本\""), "{json}");
+        assert!(json.contains("\"targetText\":\"文本全文\""), "{json}");
         assert!(json.contains("\"annotationCount\":1"), "{json}");
         assert!(json.contains("\"tagName\":\"review\""), "{json}");
         assert!(json.contains("\"tagColor\":\"#e5484d\""), "{json}");
+    }
+
+    #[test]
+    fn parses_legacy_tag_assign_without_target_text() {
+        let detail: EditPreviewDetail = serde_json::from_str(
+            r##"{"kind":"tag_assign","textExcerpt":"可用文本","annotationCount":1,"action":"add","tagName":"review","tagColor":"#e5484d"}"##,
+        )
+        .unwrap();
+        assert!(matches!(
+            detail,
+            EditPreviewDetail::TagAssign {
+                target_text: None,
+                ..
+            }
+        ));
     }
 
     #[test]

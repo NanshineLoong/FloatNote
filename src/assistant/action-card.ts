@@ -158,6 +158,8 @@ export function updateActionCard(el: HTMLElement, block: Extract<Block, { kind: 
       ? "未完成"
       : block.execution === "failed"
       ? `执行失败${block.resultSummary ? `：${block.resultSummary}` : ""}`
+      : block.execution === "rejected"
+        ? "已拒绝"
       : block.execution === "succeeded" && block.resultSummary
         ? block.resultSummary
         : "";

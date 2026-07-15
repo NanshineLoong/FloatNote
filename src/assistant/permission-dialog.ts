@@ -31,7 +31,7 @@ export function createPermissionDialog(options: PermissionDialogOptions): Permis
     onEscape: () => handle.close(),
   });
 
-  function renderDiffRow(row: Exclude<DiffRow, { kind: "collapsed" }>): HTMLElement {
+  function renderWideDiffRow(row: Exclude<DiffRow, { kind: "collapsed" }>): HTMLElement {
     const element = document.createElement("div");
     element.className = `perm-diff-row is-${row.kind}`;
     element.setAttribute("aria-label", row.kind === "added" ? "新增行" : row.kind === "removed" ? "删除行" : row.kind === "replaced" ? "修改行" : "未修改行");
@@ -45,11 +45,40 @@ export function createPermissionDialog(options: PermissionDialogOptions): Permis
     return element;
   }
 
-  function renderDiff(request: PermissionRequest): HTMLElement {
-    const scroll = document.createElement("div");
-    scroll.className = "perm-diff-scroll";
+  function renderUnifiedContentRow(
+    kind: "unchanged" | "added" | "removed",
+    text: string,
+    ariaLabel = kind === "added" ? "新增行" : kind === "removed" ? "删除行" : "未修改行",
+  ): HTMLElement {
+    const element = document.createElement("div");
+    element.className = `perm-diff-unified-row is-${kind}`;
+    const status = document.createElement("span");
+    status.className = "perm-diff-status";
+    status.textContent = `${ariaLabel}：`;
+    const marker = document.createElement("span");
+    marker.className = "perm-diff-marker";
+    marker.setAttribute("aria-hidden", "true");
+    marker.textContent = kind === "added" ? "+" : kind === "removed" ? "−" : " ";
+    const content = document.createElement("span");
+    content.className = "perm-diff-unified-content";
+    content.textContent = text;
+    element.append(status, marker, content);
+    return element;
+  }
+
+  function renderCollapsedRow(row: Extract<DiffRow, { kind: "collapsed" }>, onExpand: () => void): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "perm-diff-collapsed";
+    button.textContent = `… 省略 ${row.rows.length} 行未修改内容`;
+    button.setAttribute("aria-label", `展开 ${row.rows.length} 行未修改内容`);
+    button.addEventListener("click", onExpand);
+    return button;
+  }
+
+  function renderWideDiff(rows: DiffRow[], onExpand: (row: Extract<DiffRow, { kind: "collapsed" }>) => void): HTMLElement {
     const grid = document.createElement("div");
-    grid.className = "perm-diff";
+    grid.className = "perm-diff perm-diff-wide";
     const oldLabel = document.createElement("div");
     oldLabel.className = "perm-diff-label perm-diff-old-label";
     oldLabel.textContent = "原版本";
@@ -57,21 +86,82 @@ export function createPermissionDialog(options: PermissionDialogOptions): Permis
     newLabel.className = "perm-diff-label perm-diff-new-label";
     newLabel.textContent = "新版本";
     grid.append(oldLabel, newLabel);
-    for (const row of foldDiffRows(buildDiffRows(request.old_content, request.new_content))) {
+    for (const row of rows) {
       if (row.kind !== "collapsed") {
-        grid.appendChild(renderDiffRow(row));
+        grid.appendChild(renderWideDiffRow(row));
         continue;
       }
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "perm-diff-collapsed";
-      button.textContent = `… 省略 ${row.rows.length} 行未修改内容`;
-      button.setAttribute("aria-label", `展开 ${row.rows.length} 行未修改内容`);
-      button.addEventListener("click", () => button.replaceWith(...row.rows.map(renderDiffRow)));
-      grid.appendChild(button);
+      grid.appendChild(renderCollapsedRow(row, () => onExpand(row)));
     }
-    scroll.appendChild(grid);
+    return grid;
+  }
+
+  function renderUnifiedDiff(rows: DiffRow[], onExpand: (row: Extract<DiffRow, { kind: "collapsed" }>) => void): HTMLElement {
+    const unified = document.createElement("div");
+    unified.className = "perm-diff-unified";
+    for (const row of rows) {
+      if (row.kind === "collapsed") {
+        unified.appendChild(renderCollapsedRow(row, () => onExpand(row)));
+      } else if (row.kind === "replaced") {
+        unified.append(
+          renderUnifiedContentRow("removed", row.oldText, "修改前行"),
+          renderUnifiedContentRow("added", row.newText, "修改后行"),
+        );
+      } else if (row.kind === "added") {
+        unified.appendChild(renderUnifiedContentRow("added", row.newText));
+      } else if (row.kind === "removed") {
+        unified.appendChild(renderUnifiedContentRow("removed", row.oldText));
+      } else {
+        unified.appendChild(renderUnifiedContentRow("unchanged", row.newText));
+      }
+    }
+    return unified;
+  }
+
+  function renderDiff(request: PermissionRequest): HTMLElement {
+    const scroll = document.createElement("div");
+    scroll.className = "perm-diff-scroll";
+    const foldedRows = foldDiffRows(buildDiffRows(request.old_content, request.new_content));
+    const expandedRows = new Set<Extract<DiffRow, { kind: "collapsed" }>>();
+    const visibleRows = () => foldedRows.flatMap((row) => row.kind === "collapsed" && expandedRows.has(row) ? row.rows : [row]);
+    const renderLayouts = () => {
+      const rows = visibleRows();
+      const expand = (row: Extract<DiffRow, { kind: "collapsed" }>) => {
+        expandedRows.add(row);
+        renderLayouts();
+      };
+      scroll.replaceChildren(renderWideDiff(rows, expand), renderUnifiedDiff(rows, expand));
+    };
+    renderLayouts();
     return scroll;
+  }
+
+  function renderDiffFallback(request: PermissionRequest): HTMLElement {
+    const container = document.createElement("div");
+    container.className = "perm-diff-fallbacks";
+    const wide = document.createElement("div");
+    wide.className = "perm-diff-fallback";
+    for (const [label, content] of [["原版本", request.old_content], ["新版本", request.new_content]] as const) {
+      const column = document.createElement("section");
+      const heading = document.createElement("h3");
+      heading.textContent = label;
+      const pre = document.createElement("pre");
+      pre.textContent = content;
+      column.append(heading, pre);
+      wide.appendChild(column);
+    }
+    const unified = document.createElement("section");
+    unified.className = "perm-diff-fallback-unified";
+    unified.setAttribute("aria-label", "统一文本对比");
+    const heading = document.createElement("h3");
+    heading.textContent = "文本对比";
+    const pre = document.createElement("pre");
+    const removed = request.old_content.split("\n").map((line) => `− ${line}`);
+    const added = request.new_content.split("\n").map((line) => `+ ${line}`);
+    pre.textContent = [...removed, ...added].join("\n");
+    unified.append(heading, pre);
+    container.append(wide, unified);
+    return container;
   }
 
   function renderBody(request: PermissionRequest): HTMLElement {
@@ -96,7 +186,7 @@ export function createPermissionDialog(options: PermissionDialogOptions): Permis
     tabs.setAttribute("role", "tablist");
     tabs.setAttribute("aria-label", "审查视图");
     const panel = document.createElement("div");
-    panel.className = "perm-review-panel";
+    panel.className = "perm-review-panel perm-review-container";
     panel.id = `perm-review-panel-${request.request_id}`;
     panel.setAttribute("role", "tabpanel");
     const diffTab = document.createElement("button");
@@ -104,46 +194,42 @@ export function createPermissionDialog(options: PermissionDialogOptions): Permis
     diffTab.className = "perm-review-tab";
     diffTab.setAttribute("role", "tab");
     diffTab.setAttribute("aria-controls", panel.id);
-    diffTab.textContent = "变更";
+    diffTab.id = `perm-review-diff-${request.request_id}`;
+    diffTab.textContent = "对比";
     const previewTab = document.createElement("button");
     previewTab.type = "button";
     previewTab.className = "perm-review-tab";
     previewTab.setAttribute("role", "tab");
     previewTab.setAttribute("aria-controls", panel.id);
-    previewTab.textContent = "新版本预览";
+    previewTab.id = `perm-review-preview-${request.request_id}`;
+    previewTab.textContent = "新版本";
+
+    let diffView: HTMLElement;
+    try {
+      diffView = renderDiff(request);
+    } catch {
+      diffView = renderDiffFallback(request);
+    }
+    const preview = document.createElement("article");
+    preview.className = "perm-dialog-markdown";
+    if (request.new_content) fillMarkdown(preview, request.new_content);
+    else preview.textContent = "空文档";
 
     const showDiff = () => {
       diffTab.setAttribute("aria-selected", "true");
       diffTab.tabIndex = 0;
       previewTab.setAttribute("aria-selected", "false");
       previewTab.tabIndex = -1;
-      try {
-        panel.replaceChildren(renderDiff(request));
-      } catch {
-        const fallback = document.createElement("div");
-        fallback.className = "perm-diff-fallback";
-        for (const [label, content] of [["原版本", request.old_content], ["新版本", request.new_content]] as const) {
-          const column = document.createElement("section");
-          const heading = document.createElement("h3");
-          heading.textContent = label;
-          const pre = document.createElement("pre");
-          pre.textContent = content;
-          column.append(heading, pre);
-          fallback.appendChild(column);
-        }
-        panel.replaceChildren(fallback);
-      }
+      panel.setAttribute("aria-labelledby", diffTab.id);
+      panel.replaceChildren(diffView);
     };
     const showPreview = () => {
       diffTab.setAttribute("aria-selected", "false");
       diffTab.tabIndex = -1;
       previewTab.setAttribute("aria-selected", "true");
       previewTab.tabIndex = 0;
-      const article = document.createElement("article");
-      article.className = "perm-dialog-markdown";
-      if (request.new_content) fillMarkdown(article, request.new_content);
-      else article.textContent = "空文档";
-      panel.replaceChildren(article);
+      panel.setAttribute("aria-labelledby", previewTab.id);
+      panel.replaceChildren(preview);
     };
     diffTab.addEventListener("click", showDiff);
     previewTab.addEventListener("click", showPreview);
