@@ -73,7 +73,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["resources/skills/**/*", "resources/sidecar/**/*"],
+    "resources": {
+      "resources/sidecar/": "sidecar/",
+      "resources/skills/": "skills/"
+    },
     "externalBin": ["binaries/floatnote-node"],
     "macOS": {
       "signingIdentity": "FloatNote Self Signed",

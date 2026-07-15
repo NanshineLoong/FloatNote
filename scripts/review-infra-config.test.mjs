@@ -45,3 +45,15 @@ test("review-only capability is excluded from the normal application config", as
   assert.deepEqual(reviewCapability.permissions, ["wdio:default"]);
   assert.deepEqual(reviewCapability.windows, ["main"]);
 });
+
+test("bundled agent resources map directly beneath Tauri's resource directory", async () => {
+  const config = await json("src-tauri/tauri.conf.json");
+  const runner = await readFile(new URL("src-tauri/src/agent/runner.rs", root), "utf8");
+
+  assert.deepEqual(config.bundle.resources, {
+    "resources/sidecar/": "sidecar/",
+    "resources/skills/": "skills/",
+  });
+  assert.match(runner, /resource_dir\(\)[\s\S]*?\.join\("sidecar"\)/);
+  assert.match(runner, /resource_dir\(\)[\s\S]*?\.join\("skills"\)/);
+});
