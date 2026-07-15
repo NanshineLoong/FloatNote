@@ -161,9 +161,15 @@ export class AgentRunner {
       throw new Error("conversation session not opened");
     }
     let sawVisibleOutput = false;
+    // Pi 的 contentIndex 会在一次工具调用后的新 assistant message 中重置，
+    // 因此不能直接把它当作整次请求内的 thinking 块唯一标识。
+    let thinkingBlockSeq = 0;
     const unsubscribe = session.subscribe((event) => {
-      const msg = translateEvent(req.requestId, req.conversationId, event);
+      let msg = translateEvent(req.requestId, req.conversationId, event);
       if (!msg) return;
+      if (msg.type === "thinking_start") {
+        msg = { ...msg, blockId: `${req.requestId}-t${thinkingBlockSeq++}` };
+      }
       if (msg.type === "delta" || msg.type === "tool" || msg.type === "thinking_start") {
         sawVisibleOutput = true;
       }

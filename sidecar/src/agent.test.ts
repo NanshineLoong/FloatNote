@@ -297,6 +297,26 @@ describe("AgentRunner", () => {
     ]);
   });
 
+  it("assigns distinct thinking block ids when Pi restarts content indices after a tool", async () => {
+    const sent: SidecarToHost[] = [];
+    const { session } = fakeSession((emit) => {
+      emit(ev({ type: "message_update", message: {}, assistantMessageEvent: { type: "thinking_start", contentIndex: 0, partial: {} } }));
+      emit(ev({ type: "message_update", message: {}, assistantMessageEvent: { type: "thinking_end", contentIndex: 0, partial: {} } }));
+      emit(ev({ type: "tool_execution_start", toolCallId: "c1", toolName: "read_note", args: {} }));
+      emit(ev({ type: "tool_execution_end", toolCallId: "c1", toolName: "read_note", result: {}, isError: false }));
+      emit(ev({ type: "message_update", message: {}, assistantMessageEvent: { type: "thinking_start", contentIndex: 0, partial: {} } }));
+      emit(ev({ type: "agent_end", messages: [], willRetry: false }));
+    });
+
+    const runner = new AgentRunner({ send: (message) => sent.push(message), createSession: async () => session });
+    await runner.configure({ provider: "anthropic", model: "claude-opus-4-5", apiKey: "k" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+    await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "hi" });
+
+    expect(sent.filter((message) => message.type === "thinking_start").map((message) => message.blockId))
+      .toEqual(["r1-t0", "r1-t1"]);
+  });
+
   it("emits a diagnostic error when a turn ends without visible output", async () => {
     const sent: SidecarToHost[] = [];
     const { session } = fakeSession((emit) => {
