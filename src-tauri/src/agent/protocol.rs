@@ -330,8 +330,8 @@ pub struct AgentNoteEntry {
 ///
 /// 变体名用 `rename_all = "snake_case"` 序列化为 `diff`/`tag_assign`/
 /// `tag_create`/`tag_delete`（与 TS 线格式一致）；字段名用
-/// `rename_all_fields = "camelCase"` 序列化为 `hunks`/`blockPreview`/
-/// `tagName`/`tagColor`/`markerCount`。
+/// `rename_all_fields = "camelCase"` 序列化为 `hunks`/`textExcerpt`/
+/// `tagName`/`tagColor`/`annotationCount`。
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(
     tag = "kind",
@@ -343,7 +343,9 @@ pub enum EditPreviewDetail {
         hunks: String,
     },
     TagAssign {
-        block_preview: String,
+        text_excerpt: String,
+        annotation_count: u32,
+        action: String,
         tag_name: String,
         tag_color: String,
     },
@@ -364,7 +366,7 @@ pub enum EditPreviewDetail {
     },
     TagDelete {
         tag_name: String,
-        marker_count: u32,
+        annotation_count: u32,
     },
 }
 
@@ -567,7 +569,7 @@ mod tests {
 
     #[test]
     fn parses_apply_edit_line() {
-        let line = r##"{"type":"apply_edit","callId":"w1","conversationId":"c1","target":{"kind":"inbox"},"toolName":"set_tag","oldContent":"a","newContent":"b","preview":{"tool":"set_tag","summary":"s","detail":{"kind":"tag_assign","blockPreview":"块","tagName":"review","tagColor":"#e5484d"}}}"##;
+        let line = r##"{"type":"apply_edit","callId":"w1","conversationId":"c1","target":{"kind":"inbox"},"toolName":"tag_text","oldContent":"a","newContent":"b","preview":{"tool":"tag_text","summary":"s","detail":{"kind":"tag_assign","textExcerpt":"文本","annotationCount":1,"action":"add","tagName":"review","tagColor":"#e5484d"}}}"##;
         let msg: SidecarToHost = serde_json::from_str(line).unwrap();
         match msg {
             SidecarToHost::ApplyEdit {
@@ -575,7 +577,7 @@ mod tests {
                 ref target,
                 ..
             } => {
-                assert_eq!(tool_name, "set_tag");
+                assert_eq!(tool_name, "tag_text");
                 let t = target.as_ref().expect("target present");
                 assert_eq!(t.kind, "inbox");
                 assert!(t.name.is_none());
@@ -588,10 +590,11 @@ mod tests {
         assert!(json.contains("\"type\":\"apply_edit\""), "{json}");
         assert!(json.contains("\"callId\":\"w1\""), "{json}");
         assert!(json.contains("\"conversationId\":\"c1\""), "{json}");
-        assert!(json.contains("\"toolName\":\"set_tag\""), "{json}");
+        assert!(json.contains("\"toolName\":\"tag_text\""), "{json}");
         assert!(json.contains("\"oldContent\":\"a\""), "{json}");
         assert!(json.contains("\"newContent\":\"b\""), "{json}");
-        assert!(json.contains("\"blockPreview\":\"块\""), "{json}");
+        assert!(json.contains("\"textExcerpt\":\"文本\""), "{json}");
+        assert!(json.contains("\"annotationCount\":1"), "{json}");
         assert!(json.contains("\"tagName\":\"review\""), "{json}");
         assert!(json.contains("\"tagColor\":\"#e5484d\""), "{json}");
     }
@@ -741,13 +744,13 @@ mod tests {
         // tag_delete
         let td = EditPreviewDetail::TagDelete {
             tag_name: "review".into(),
-            marker_count: 3,
+            annotation_count: 3,
         };
         let v: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&td).unwrap()).unwrap();
         assert_eq!(v["kind"], "tag_delete");
         assert_eq!(v["tagName"], "review");
-        assert_eq!(v["markerCount"], 3);
+        assert_eq!(v["annotationCount"], 3);
 
         let create: SidecarToHost = serde_json::from_str(r#"{"type":"create_note","callId":"c1","conversationId":"cv","toolCallId":"t1","title":"Ideas","content":"body","preview":{"tool":"create_note","summary":"create","detail":{"kind":"note_create","filename":"Ideas.md","contentPreview":"body"}}}"#).unwrap();
         assert!(matches!(create, SidecarToHost::CreateNote { .. }));

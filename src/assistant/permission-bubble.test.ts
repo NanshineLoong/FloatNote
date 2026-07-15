@@ -22,7 +22,7 @@ describe("renderPreviewCard", () => {
     expect(create.querySelector(".perm-markdown-panel h1")?.textContent).toBe("想法");
   });
   it("renders tag_assign card without raw marker", () => {
-    const el = renderPreviewCard({ tool: "set_tag", summary: "s", detail: { kind: "tag_assign", blockPreview: "第一块", tagName: "review", tagColor: "#e5484d" } }, false);
+    const el = renderPreviewCard({ tool: "tag_text", summary: "s", detail: { kind: "tag_assign", textExcerpt: "第一段", annotationCount: 1, action: "add", tagName: "review", tagColor: "#e5484d" } }, false);
     expect(el.textContent).toContain("review");
     expect(el.textContent).not.toContain("floatnote:tag");
   });

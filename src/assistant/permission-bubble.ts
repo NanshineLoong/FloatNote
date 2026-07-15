@@ -7,11 +7,11 @@ import { fillMarkdown } from "./markdown";
 // permission://request emit in handle_apply_edit.
 export type EditPreviewDetail =
   | { kind: "diff"; hunks: string }
-  | { kind: "tag_assign"; blockPreview: string; tagName: string; tagColor: string }
+  | { kind: "tag_assign"; textExcerpt: string; annotationCount: number; action: "add" | "remove"; tagName: string; tagColor: string }
   | { kind: "tag_create"; tagName: string; tagColor: string }
   | { kind: "tag_update"; tagId: string; oldName: string; oldColor: string; newName: string; newColor: string }
   | { kind: "note_create"; filename: string; contentPreview: string }
-  | { kind: "tag_delete"; tagName: string; markerCount: number };
+  | { kind: "tag_delete"; tagName: string; annotationCount: number };
 
 export interface EditPreview {
   tool: string;
@@ -45,7 +45,7 @@ export const TOOL_LABEL: Record<string, string> = {
   read_skill: "读取技能",
   edit_note: "编辑文本",
   write_note: "编辑文本",
-  set_tag: "设置标签",
+  tag_text: "设置文本标签",
   tag_create: "新建标签",
   tag_update: "修改标签",
   create_note: "创建文档",
@@ -83,7 +83,7 @@ export function renderPreviewCard(preview: EditPreview, canSnapshot: boolean, ne
       chip.className = "tag-chip";
       chip.style.background = preview.detail.tagColor;
       chip.textContent = preview.detail.tagName;
-      row.append("块「" + preview.detail.blockPreview + "」→ ", chip);
+      row.append(`${preview.detail.action === "add" ? "添加" : "移除"}「${preview.detail.textExcerpt}」→ `, chip, `（${preview.detail.annotationCount} 个标注）`);
       detail.appendChild(row);
       break;
     }
@@ -106,7 +106,7 @@ export function renderPreviewCard(preview: EditPreview, canSnapshot: boolean, ne
       break;
     }
     case "tag_delete": {
-      detail.textContent = `删除标签「${preview.detail.tagName}」，${preview.detail.markerCount} 处标记将清除`;
+      detail.textContent = `删除标签「${preview.detail.tagName}」，${preview.detail.annotationCount} 个标注将清除`;
       break;
     }
   }

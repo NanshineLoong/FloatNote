@@ -29,14 +29,14 @@ describe("apply_edit protocol", () => {
       callId: "w1",
       conversationId: "c1",
       target,
-      toolName: "set_tag",
+      toolName: "tag_text",
       oldContent: "a",
       newContent: "b",
-      preview: { tool: "set_tag", summary: "打标签", detail: { kind: "tag_assign", blockPreview: "块", tagName: "review", tagColor: "#e5484d" } },
+      preview: { tool: "tag_text", summary: "打标签", detail: { kind: "tag_assign", textExcerpt: "文本", annotationCount: 1, action: "add", tagName: "review", tagColor: "#e5484d" } },
     };
     const line = encodeLine(msg);
     expect(line).toContain('"type":"apply_edit"');
-    expect(line).toContain('"toolName":"set_tag"');
+    expect(line).toContain('"toolName":"tag_text"');
     expect(line.endsWith("\n")).toBe(true);
   });
   it("decodes apply_edit_result with denied", () => {

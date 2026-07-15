@@ -5,6 +5,8 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { onFileChanged, onNoteUpdated } from "./agent";
 import { EditorView, placeholder } from "@codemirror/view";
+import { Transaction } from "@codemirror/state";
+import { decodeInbox } from "@floatnote/note-logic";
 import {
   createEditor,
   replaceDocWithoutHistory,
@@ -12,15 +14,19 @@ import {
   setDoc,
   setEditorReadOnly,
 } from "./editor";
-import { blockHandleGutter, deleteBlock } from "./blocks/handle-gutter";
-import { cancelBlockDrag, scrollerPositionTheme } from "./blocks/drag";
 import { mountTagBar } from "./tags/bar";
 import { showToast } from "../shared/toast";
 import { createIcon } from "../shared/ui/icon";
 import { createMenu, type MenuHandle } from "../shared/ui/menu";
-import { tagDecorations } from "./tags/decoration";
-import { tagFilter, setTagFilter } from "./tags/filter";
-import { openBlockTagMenu } from "./tags/picker";
+import { activeTagFilter, tagFilter, setTagFilter } from "./tags/filter";
+import { annotationDecorations } from "./annotations/decoration";
+import { annotationContextMenu } from "./annotations/menu";
+import {
+  inboxMetadataExtension,
+  replaceInboxMetadata,
+} from "./annotations/state";
+import { mountAnnotationProjection } from "./annotations/projection";
+import { annotationAutosave } from "./annotations/autosave";
 import { createLayoutController } from "./layout-controller";
 import { createPieceHeader } from "./piece-switcher";
 import { actionTargetForTransition, createTasksPanel } from "./tasks-panel";
@@ -103,6 +109,7 @@ app.innerHTML = `
     <div id="left-col"></div>
     <div id="text-col">
       <div id="editor-root"></div>
+      <div id="annotation-projection-root" hidden></div>
     </div>
     <div id="piece-col">
       <div id="piece-scroll">
@@ -214,44 +221,43 @@ let menuAnchor: HTMLElement | null = null;
 let applyingRemote = false;
 
 const editorRoot = document.querySelector<HTMLElement>("#editor-root")!;
-// Inbox 是常驻、可直接编辑的 block 面（live preview）。每个 top-level block 在左侧
-// gutter 上有一个句柄：拖拽重排 / 单击弹菜单。无独立卡片视图、无源码切换。
-// 标签：句柄左键菜单直接分配/新建标签；decoration 隐藏注释+给块上底色；filter 折叠不匹配块。
-// tagBar 挂在正文网格顶行，updateListener 经由闭包变量迟到绑定。
-let tagBar: { el: HTMLElement; refresh: () => void } | null = null;
+// Inbox 编辑器只持有 clean Markdown；标签、文本标注与 quote 来源 metadata 位于
+// CodeMirror StateField，保存快照时才编码回 `_inbox.md`。
+let tagBar: ReturnType<typeof mountTagBar> | null = null;
+let annotationProjection: ReturnType<typeof mountAnnotationProjection> | null = null;
 const editor = createEditor(
   editorRoot,
-  (doc) => {
-    if (applyingRemote) return;
-    if (session.currentInbox) scheduleSave(session.currentInbox.entry.path, doc);
-  },
+  () => {},
   [
-    blockHandleGutter(
-      {
-        getPieceView: () => pieceEditor,
-        isSplitActive: () => layoutController?.isSplit() ?? false,
-        textColEl: document.querySelector<HTMLElement>("#text-col")!,
-        pieceColEl: document.querySelector<HTMLElement>("#piece-col")!,
+    ...inboxMetadataExtension(),
+    annotationAutosave(
+      (snapshot) => {
+        if (session.currentInbox) scheduleSave(session.currentInbox.entry.path, snapshot);
       },
-      (view, range, _index, x, y) => {
-        openBlockTagMenu(view, range, x, y, () => deleteBlock(view, range));
-      },
+      () => !applyingRemote,
     ),
-    tagDecorations(),
+    annotationDecorations(),
+    annotationContextMenu(),
     localSelectionPublisher(),
     ...tagFilter(),
     placeholder("在这里写点什么…"),
     EditorView.updateListener.of((u) => {
-      if (tagBar && (u.docChanged ||
+      const metadataChanged = u.transactions.some((transaction) => (
+        transaction.effects.some((effect) => effect.is(replaceInboxMetadata))
+      ));
+      if (tagBar && (u.docChanged || metadataChanged ||
         u.transactions.some((t) => t.effects.some((e) => e.is(setTagFilter))))) {
         tagBar.refresh();
+        annotationProjection?.refresh();
       }
     }),
   ],
   { noteDirProvider: () => session.currentProject?.path ?? session.currentStartDir },
 );
+const annotationProjectionRoot = document.querySelector<HTMLElement>("#annotation-projection-root")!;
+annotationProjection = mountAnnotationProjection(annotationProjectionRoot, editor, () => tagBar?.setActive(null));
 // 二级标签栏挂在采集区网格顶行（不在全局顶栏，也不受正文列宽限制）。
-tagBar = mountTagBar(editor);
+tagBar = mountTagBar(editor, (tagId) => annotationProjection?.setActive(tagId));
 document.querySelector<HTMLElement>("#tag-bar-root")!.appendChild(tagBar.el);
 requestAnimationFrame(() => initScrollbar(editorRoot));
 editor.contentDOM.addEventListener("focus", () => publishInboxActive());
@@ -283,7 +289,7 @@ const pieceEditor = createEditor(
     const f = activePieceFile();
     if (f) scheduleSave(f.path, doc);
   },
-  [scrollerPositionTheme, placeholder("开始写…"), localSelectionPublisher()],
+  [placeholder("开始写…"), localSelectionPublisher()],
   {
     grow: true,
     // pieceEditor is shared by project piece session.mode AND document session.mode. Branch on
@@ -571,7 +577,24 @@ function applyPreviewTo(view: EditorView, content: string) {
 }
 
 function applyRemoteDoc(content: string) {
-  applyRemoteTo(editor, content);
+  const decoded = decodeInbox(content);
+  applyingRemote = true;
+  try {
+    editor.dispatch({
+      changes: { from: 0, to: editor.state.doc.length, insert: decoded.markdown },
+      effects: replaceInboxMetadata.of(decoded.metadata),
+      annotations: Transaction.addToHistory.of(false),
+    });
+  } finally {
+    applyingRemote = false;
+  }
+  const activeFilter = activeTagFilter(editor.state);
+  if (activeFilter && !decoded.metadata.tags.some((tag) => tag.id === activeFilter)) {
+    tagBar?.setActive(null);
+  }
+  if (decoded.warnings.length > 0) {
+    showToast(`已忽略 ${decoded.warnings.length} 条无效的 Inbox 标注 metadata`);
+  }
 }
 
 const assistantController = createAssistantController({
@@ -612,14 +635,7 @@ void onNoteUpdated(async (payload) => {
 void onFileChanged(async (changedPath) => {
   if (isDirty(changedPath)) return;
 
-  // 拖拽进行中若目标文档被外部改写，落点偏移会失效 —— 直接中止拖拽不提交。
   const activeFile = activePieceFile();
-  if (
-    (session.currentInbox && changedPath === session.currentInbox.entry.path) ||
-    (activeFile && changedPath === activeFile.path)
-  ) {
-    cancelBlockDrag();
-  }
 
   // Inbox 被外部修改。
   if (session.currentInbox && changedPath === session.currentInbox.entry.path) {

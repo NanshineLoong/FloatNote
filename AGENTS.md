@@ -16,12 +16,13 @@ Four components; module-specific guidance exists where it is most needed:
   (note file ops + history), `chat_history.rs`, `paths.rs`, `watcher.rs`,
   `source.rs` (macOS), `testutil.rs`, and window/tray/shortcut wiring.
 - `shared/note-logic/` — workspace package `@floatnote/note-logic`: pure
-  logic shared by frontend + sidecar (`blocks/ranges`, `tags/model`,
-  `tags/palette`). See its `AGENTS.md`.
+  logic shared by frontend + sidecar (`annotations/codec`, range/context
+  transforms, `tags/model`, `tags/palette`). See its `AGENTS.md`.
 - `sidecar/` — Node AI-agent process over stdio JSONL. `bundle.mjs` produces
   the release ESM bundle and `prepare-tauri.mjs` stages its bundled runtime.
 - A **project space** is a subfolder inside the working directory holding up
-  to three Markdown kinds: `_inbox.md` (block drafts), `_tasks.md`
+  to three Markdown kinds: `_inbox.md` (continuous capture text with v2
+  range-annotation metadata), `_tasks.md`
   (checklist), and one or more **piece** files (any `.md` without a `_`
   prefix, defaulting to `piece.md`). The `_` prefix alone distinguishes
   system files from pieces. Loose root `.md` files are legacy flat notes.

@@ -1,9 +1,9 @@
 import { listen } from "@tauri-apps/api/event";
 import { EditorView } from "@codemirror/view";
 import { buildCaretInsert } from "./append";
-import { buildQuoteBlock, mergeQuoteBlock, resolveMergeTarget, type Source } from "./quote";
+import { buildQuoteAppendChange, buildQuoteBlock, resolveMergeTarget, type Source } from "./quote";
 import { htmlToMarkdown } from "./paste";
-import { insertAtPos } from "./editor";
+import { addQuoteSource, inboxMetadata } from "./annotations/state";
 
 type QuotePayload = { text: string; html: string | null; source: Source | null };
 
@@ -18,13 +18,13 @@ export function attachQuoteCapture(editor: EditorView) {
     const body = (html && htmlToMarkdown(html)) || text;
     const doc = editor.state.doc.toString();
     const caret = editor.state.selection.main.from;
-    const target = resolveMergeTarget(doc, caret, source);
+    const target = resolveMergeTarget(doc, caret, source, inboxMetadata(editor.state).quoteSources);
     if (target.kind === "merge") {
       const existing = doc.slice(target.range.from, target.range.to);
-      const merged = mergeQuoteBlock(existing, body);
+      const change = buildQuoteAppendChange(existing, target.range.from, target.range.to, body);
       editor.dispatch({
-        changes: { from: target.range.from, to: target.range.to, insert: merged },
-        selection: { anchor: target.range.from + merged.length },
+        changes: change,
+        selection: { anchor: change.from + change.insert.length },
         scrollIntoView: true,
       });
     } else {
@@ -34,8 +34,17 @@ export function attachQuoteCapture(editor: EditorView) {
       const at = target.at;
       const before = doc.slice(0, at);
       const after = doc.slice(at);
-      const insert = buildCaretInsert(before, after, buildQuoteBlock(body, source));
-      insertAtPos(editor, at, insert);
+      const block = buildQuoteBlock(body, source);
+      const insert = buildCaretInsert(before, after, block);
+      const effects = source?.bundleId
+        ? [addQuoteSource.of({ cardFrom: at + insert.indexOf(block), bundleId: source.bundleId })]
+        : [];
+      editor.dispatch({
+        changes: { from: at, insert },
+        effects,
+        selection: { anchor: at + insert.length },
+        scrollIntoView: true,
+      });
     }
     editor.focus();
   });

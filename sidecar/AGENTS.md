@@ -22,13 +22,12 @@ Entry: `src/main.ts`.
   live events and session restoration; raw arguments/results never cross the
   display protocol.
 - `note-tools.ts` — the note/project tools (`read_note`/`list_notes`/`list_tags`/
-  `edit_note`/`write_note`/`create_note`/`set_tag`/`tag_create`/`tag_update`/
-  `tag_delete`/`read_skill`). Tag tools
-  reject non-`inbox` targets explicitly. Imports `applyChange`/`applyChanges`/
-  `countMarkers`/`freeColors` from `@floatnote/note-logic` and
-  `replaceOnce`/`findBlockByAnchor` from `./matching`.
-- `matching.ts` — `replaceOnce`/`findBlockByAnchor` (migrated from shared;
-  sidecar-only). Uses shared `blockRanges`/`stripTagMarker`.
+  `edit_note`/`write_note`/`create_note`/`tag_text`/`tag_create`/`tag_update`/
+  `tag_delete`/`read_skill`). Inbox reads expose clean Markdown; edits map v2
+  annotations through exact changes, and whole-document overwrite is rejected
+  while annotations exist. Tag tools reject non-`inbox` targets explicitly.
+- `matching.ts` — sidecar-only unique string replacement; text annotation
+  matching and transformations come from `@floatnote/note-logic`.
 - `skills.ts` — skill directory loading + `formatSkillsForSystemPrompt`.
 - `tutor-prompt.ts` — `TUTOR_SYSTEM_PROMPT`.
 - `web-tools.ts` — bounded public-web search/fetch tools with redirect-aware

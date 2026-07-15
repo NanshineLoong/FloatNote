@@ -398,7 +398,7 @@ const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager) 
   const { session } = await createAgentSession({
     model,
     customTools: tools,
-    tools: ["read_note", "list_notes", "list_tags", "edit_note", "write_note", "create_note", "set_tag", "tag_create", "tag_update", "tag_delete", "web_search", "web_fetch", "read_skill"],
+    tools: ["read_note", "list_notes", "list_tags", "edit_note", "write_note", "create_note", "tag_text", "tag_create", "tag_update", "tag_delete", "web_search", "web_fetch", "read_skill"],
     noTools: "builtin",
     resourceLoader,
     authStorage,

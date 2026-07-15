@@ -65,16 +65,30 @@ describe("edit_note", () => {
     const r = await (edit as any).execute("id", { old_string: "a", new_string: "b" });
     expect(r.content[0].text).toContain("不唯一");
   });
+
+  it("treats explicit piece metadata-like text as ordinary Markdown", async () => {
+    const literal = "literal <!-- floatnote:ann:v2 id=a tag=b start --> text";
+    const { deps, writes } = makeDups(literal);
+    const tools = createNoteTools(deps);
+    const read = tools.find((t) => t.name === "read_note")!;
+    expect((await (read as any).execute("id", { target: { kind: "piece", name: "piece.md" } })).content[0].text)
+      .toBe(literal);
+    const edit = tools.find((t) => t.name === "edit_note")!;
+    await (edit as any).execute("id", {
+      target: { kind: "piece", name: "piece.md" }, old_string: "literal", new_string: "kept",
+    });
+    expect(writes[0].newContent).toContain("floatnote:ann:v2");
+  });
 });
 
-describe("set_tag", () => {
-  it("attaches tag marker to anchored block", async () => {
-    const note = "<!-- floatnote-tags: review=\"复习\"|c=#e5484d -->\n\n第一块\n\n第二块";
+describe("tag_text", () => {
+  it("annotates exact clean text and rejects ambiguity", async () => {
+    const note = "<!-- floatnote:tags:v2 review=\"复习\"|c=#e5484d -->\n第一块\n\n第二块";
     const { deps, writes } = makeDups(note);
     const tools = createNoteTools(deps);
-    const set = tools.find((t) => t.name === "set_tag")!;
-    await (set as any).execute("id", { anchor: "第二块", tagId: "review" });
-    expect(writes[0].newContent).toContain("<!-- floatnote:tag=review -->");
+    const set = tools.find((t) => t.name === "tag_text")!;
+    await (set as any).execute("id", { exact: "第二块", tagId: "review", action: "add" });
+    expect(writes[0].newContent).toContain("floatnote:ann:v2");
     expect(writes[0].preview.detail.kind).toBe("tag_assign");
   });
 });
@@ -96,7 +110,7 @@ describe("tag_create", () => {
     expect(writes.length).toBe(0);
   });
   it("rejects already-taken color", async () => {
-    const note = '<!-- floatnote-tags: review="复习"|c=#e5484d -->\n第一块';
+    const note = '<!-- floatnote:tags:v2 review="复习"|c=#e5484d -->\n第一块';
     const { deps, writes } = makeDups(note);
     const tools = createNoteTools(deps);
     const c = tools.find((t) => t.name === "tag_create")!;
@@ -104,11 +118,18 @@ describe("tag_create", () => {
     expect(r.content[0].text).toContain("不可用");
     expect(writes.length).toBe(0);
   });
+  it("rejects a multiline name", async () => {
+    const { deps, writes } = makeDups("第一块");
+    const c = createNoteTools(deps).find((t) => t.name === "tag_create")!;
+    const r = await (c as any).execute("id", { name: "bad\nname", color: "#e5484d" });
+    expect(r.content[0].text).toContain("不能换行");
+    expect(writes).toHaveLength(0);
+  });
 });
 
 describe("list_tags", () => {
   it("returns defs and free colors", async () => {
-    const note = "<!-- floatnote-tags: review=\"复习\"|c=#e5484d -->\n第一块";
+    const note = "<!-- floatnote:tags:v2 review=\"复习\"|c=#e5484d -->\n第一块";
     const { deps } = makeDups(note);
     const tools = createNoteTools(deps);
     const lt = tools.find((t) => t.name === "list_tags")!;
@@ -143,33 +164,68 @@ describe("read_skill", () => {
 });
 
 describe("tag_delete", () => {
-  it("removes defs entry and all block markers (multi-marker)", async () => {
+  it("removes a definition and all associated annotations", async () => {
     const note =
-      "<!-- floatnote-tags: review=\"复习\"|c=#e5484d -->\n\n" +
-      "<!-- floatnote:tag=review -->\n第一块\n\n" +
-      "<!-- floatnote:tag=review -->\n第二块\n";
+      "<!-- floatnote:tags:v2 review=\"复习\"|c=#e5484d -->\n" +
+      "<!-- floatnote:ann:v2 id=a tag=review start -->第一块<!-- floatnote:ann:v2 id=a end -->\n\n" +
+      "<!-- floatnote:ann:v2 id=b tag=review start -->第二块<!-- floatnote:ann:v2 id=b end -->\n";
     const { deps, writes } = makeDups(note);
     const tools = createNoteTools(deps);
     const del = tools.find((t) => t.name === "tag_delete")!;
     await (del as any).execute("id", { tagId: "review" });
-    expect(writes[0].newContent).not.toContain("floatnote:tag=review");
-    expect(writes[0].newContent).not.toContain("floatnote-tags: review");
+    expect(writes[0].newContent).not.toContain("floatnote:ann:v2");
+    expect(writes[0].newContent).not.toContain("floatnote:tags:v2 review");
     expect(writes[0].newContent).toContain("第一块");
     expect(writes[0].newContent).toContain("第二块");
     expect(writes[0].preview.detail.kind).toBe("tag_delete");
-    expect(writes[0].preview.detail.markerCount).toBe(2);
+    expect(writes[0].preview.detail.annotationCount).toBe(2);
   });
 });
 
 describe("tag_update", () => {
-  it("renames and recolors a definition without changing markers", async () => {
-    const note = '<!-- floatnote-tags: review="复习"|c=#e5484d -->\n正文<!-- floatnote:tag=review -->';
+  it("renames and recolors a definition without changing annotation ids", async () => {
+    const note = '<!-- floatnote:tags:v2 review="复习"|c=#e5484d -->\n<!-- floatnote:ann:v2 id=a tag=review start -->正文<!-- floatnote:ann:v2 id=a end -->';
     const { deps, writes } = makeDups(note);
     const tools = createNoteTools(deps);
     const update = tools.find((t) => t.name === "tag_update")!;
     await (update as any).execute("id", { tagId: "review", name: "重点", color: "#f5a623" });
     expect(writes[0].newContent).toContain('review="重点"|c=#f5a623');
-    expect(writes[0].newContent).toContain("floatnote:tag=review");
+    expect(writes[0].newContent).toContain("id=a tag=review start");
     expect(writes[0].preview.detail.kind).toBe("tag_update");
+  });
+  it("rejects a blank name", async () => {
+    const note = '<!-- floatnote:tags:v2 review="复习"|c=#e5484d -->\n正文';
+    const { deps, writes } = makeDups(note);
+    const update = createNoteTools(deps).find((t) => t.name === "tag_update")!;
+    const r = await (update as any).execute("id", { tagId: "review", name: "   " });
+    expect(r.content[0].text).toContain("不能为空");
+    expect(writes).toHaveLength(0);
+  });
+});
+
+describe("annotated Inbox safety", () => {
+  const note = '<!-- floatnote:tags:v2 review="复习"|c=#e5484d -->\n<!-- floatnote:ann:v2 id=a tag=review start -->hello<!-- floatnote:ann:v2 id=a end --> world';
+
+  it("read_note returns clean Markdown", async () => {
+    const { deps } = makeDups(note);
+    const read = createNoteTools(deps).find((tool) => tool.name === "read_note")!;
+    const result = await (read as any).execute("id", { target: { kind: "inbox" } });
+    expect(result.content[0].text).toBe("hello world");
+  });
+
+  it("edit_note maps annotations through a unique clean-text replacement", async () => {
+    const { deps, writes } = makeDups(note);
+    const edit = createNoteTools(deps).find((tool) => tool.name === "edit_note")!;
+    await (edit as any).execute("id", { target: { kind: "inbox" }, old_string: " world", new_string: " brave world" });
+    expect(writes[0].newContent).toContain("id=a tag=review start");
+    expect(writes[0].newContent).toContain("hello<!-- floatnote:ann:v2 id=a end --> brave world");
+  });
+
+  it("write_note rejects whole-document overwrite", async () => {
+    const { deps, writes } = makeDups(note);
+    const write = createNoteTools(deps).find((tool) => tool.name === "write_note")!;
+    const result = await (write as any).execute("id", { target: { kind: "inbox" }, content: "replacement" });
+    expect(result.content[0].text).toContain("edit_note");
+    expect(writes).toHaveLength(0);
   });
 });

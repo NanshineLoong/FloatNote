@@ -9,13 +9,14 @@ sidecar 是独立 Node 进程，入口为 `sidecar/src/main.ts`，通过 stdin/s
 - `runner.ts` 打开会话时遍历 Pi 当前活动分支，把 assistant 的 thinking/text/toolCall 按原顺序转换为结构化 blocks，并用后续 toolResult 的 `toolCallId` 恢复 succeeded/failed/incomplete；无法解析的单块会被跳过，原 session JSONL 不重写。
 - 用户从历史回合重试或编辑重发时，host 发送 `rewind`（该用户回合稳定的 session entry ID）。sidecar 通过 Pi `SessionManager` 将活动叶节点移动到该回合之前，并以关联的 `rewind_result` 确认结果；旧分支仍保留在 append-only session 文件中，但不再属于活动上下文。下一次 prompt 会写入新分支，随后 `session_synced` 让 Rust 刷新持久化对话索引而不重置前端草稿状态。
 - `configuration-gate.ts` 串行 provider 配置变更；新建或恢复会话会等待该栅栏，其他 prompt、工具回调和取消消息仍可并发处理。
-- `note-tools.ts` 提供动态项目笔记列表、读取、受控 piece 创建、编辑、写入、标签与技能工具；文件访问均通过 host 请求回到 Rust。Agent 不支持 loose root Markdown target。
+- `note-tools.ts` 提供动态项目笔记列表、读取、受控 piece 创建、编辑、写入、标签与技能工具；文件访问均通过 host 请求回到 Rust。Inbox 的 `read_note` 返回 clean Markdown，`tag_text` 以 exact + 可选 prefix/suffix 定位文本，`edit_note` 映射 v2 标注；存在标注时 `write_note` 拒绝整篇覆写。Agent 不支持 loose root Markdown target。
 - `web-tools.ts` 提供 `web_search` / `web_fetch`。网络结果作为不可信外部资料返回；fetch 会限制协议、重定向、响应大小和内容类型，并拒绝本机、私网与 link-local 地址。
 - `skills.ts` 只负责运行时加载 host 下发的技能目录；设置窗口的目录发现、来源
   标记和导入由 Rust host 拥有，不通过 sidecar 查询。`matching.ts` 提供 sidecar
   专用文本匹配。
 
-`agent.ts` 是兼容 barrel，不是运行逻辑的归属点。共享 Markdown/标签规则来自 `@floatnote/note-logic`；sidecar 专用逻辑保留在 sidecar 内。
+`agent.ts` 是兼容 barrel，不是运行逻辑的归属点。共享 Inbox codec、annotation
+变换与 Markdown/标签规则来自 `@floatnote/note-logic`；sidecar 专用逻辑保留在 sidecar 内。
 
 模型解析优先复用 PI 的 OpenAI、DeepSeek、Anthropic、Moonshot 中国区和 Z.AI
 元数据；智谱保留 Z.AI 兼容元数据但改用中国区通用地址。百炼与 PI 未收录的
