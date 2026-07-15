@@ -20,6 +20,38 @@ use super::handlers::{
 };
 use super::protocol::{HostToSidecar, SidecarToHost};
 
+type OneShotPending = std::sync::Mutex<
+    std::collections::HashMap<String, tokio::sync::oneshot::Sender<Result<String, String>>>,
+>;
+
+pub(crate) fn resolve_one_shot_pending(
+    pending: &OneShotPending,
+    call_id: &str,
+    result: Option<String>,
+    error: Option<String>,
+) -> bool {
+    let Some(sender) = pending.lock().unwrap().remove(call_id) else {
+        return false;
+    };
+    let outcome = match (result.filter(|value| !value.trim().is_empty()), error) {
+        (Some(value), _) => Ok(value),
+        (_, Some(message)) => Err(message),
+        _ => Err("翻译结果为空".into()),
+    };
+    let _ = sender.send(outcome);
+    true
+}
+
+pub(crate) fn expire_one_shot_pending(pending: &OneShotPending, call_id: &str) -> bool {
+    pending.lock().unwrap().remove(call_id).is_some()
+}
+
+fn fail_all_one_shots(pending: &OneShotPending, message: &str) {
+    for (_, sender) in pending.lock().unwrap().drain() {
+        let _ = sender.send(Err(message.into()));
+    }
+}
+
 /// 活的 sidecar 子进程句柄：持有子进程与其 stdin。
 pub struct AgentHandle {
     #[cfg(debug_assertions)]
@@ -203,6 +235,32 @@ fn handle_sidecar_line(app: &AppHandle, line: &str) {
 /// 分派单条 sidecar 消息。
 fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
     match msg {
+        SidecarToHost::OneShotResult {
+            call_id,
+            result,
+            error,
+        } => {
+            if let Some(state) = app.try_state::<AppState>() {
+                resolve_one_shot_pending(&state.pending_one_shots, &call_id, result, error);
+            }
+        }
+        SidecarToHost::NewSessionResult { call_id, ok, error } => {
+            if let Some(state) = app.try_state::<AppState>() {
+                if let Some(sender) = state
+                    .pending_agent_sessions
+                    .lock()
+                    .unwrap()
+                    .remove(&call_id)
+                {
+                    let result = if ok {
+                        Ok(())
+                    } else {
+                        Err(error.unwrap_or_else(|| "创建 AI 会话失败".into()))
+                    };
+                    let _ = sender.send(result);
+                }
+            }
+        }
         SidecarToHost::Ready => {
             if let Some(state) = app.try_state::<AppState>() {
                 *state.agent_ready.lock().unwrap() = true;
@@ -466,6 +524,10 @@ fn on_sidecar_exit(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
         *state.agent_ready.lock().unwrap() = false;
         *state.agent.lock().unwrap() = None;
+        fail_all_one_shots(&state.pending_one_shots, "AI 助手暂时不可用，请稍后重试");
+        for (_, sender) in state.pending_agent_sessions.lock().unwrap().drain() {
+            let _ = sender.send(Err("AI 助手暂时不可用，请稍后重试".into()));
+        }
     }
     let _ = app.emit(
         "agent://event",
@@ -512,4 +574,64 @@ pub fn skill_paths_for_app(app: &AppHandle) -> Vec<String> {
     }
 
     paths
+}
+
+#[cfg(test)]
+mod one_shot_pending_tests {
+    use super::*;
+
+    fn pending() -> OneShotPending {
+        std::sync::Mutex::new(std::collections::HashMap::new())
+    }
+
+    #[test]
+    fn success_and_error_resolve_and_remove_waiters() {
+        let pending = pending();
+        let (success_tx, mut success_rx) = tokio::sync::oneshot::channel();
+        pending.lock().unwrap().insert("ok".into(), success_tx);
+        assert!(resolve_one_shot_pending(
+            &pending,
+            "ok",
+            Some("译文".into()),
+            None
+        ));
+        assert_eq!(success_rx.try_recv().unwrap(), Ok("译文".into()));
+
+        let (error_tx, mut error_rx) = tokio::sync::oneshot::channel();
+        pending.lock().unwrap().insert("err".into(), error_tx);
+        assert!(resolve_one_shot_pending(
+            &pending,
+            "err",
+            None,
+            Some("失败".into())
+        ));
+        assert_eq!(error_rx.try_recv().unwrap(), Err("失败".into()));
+        assert!(pending.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn timeout_expiry_drops_the_waiter() {
+        let pending = pending();
+        let (tx, mut rx) = tokio::sync::oneshot::channel();
+        pending.lock().unwrap().insert("late".into(), tx);
+        assert!(expire_one_shot_pending(&pending, "late"));
+        assert!(matches!(
+            rx.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Closed)
+        ));
+        assert!(pending.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn disconnect_fails_and_drains_all_waiters() {
+        let pending = pending();
+        let (first_tx, mut first_rx) = tokio::sync::oneshot::channel();
+        let (second_tx, mut second_rx) = tokio::sync::oneshot::channel();
+        pending.lock().unwrap().insert("a".into(), first_tx);
+        pending.lock().unwrap().insert("b".into(), second_tx);
+        fail_all_one_shots(&pending, "断开");
+        assert_eq!(first_rx.try_recv().unwrap(), Err("断开".into()));
+        assert_eq!(second_rx.try_recv().unwrap(), Err("断开".into()));
+        assert!(pending.lock().unwrap().is_empty());
+    }
 }

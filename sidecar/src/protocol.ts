@@ -10,6 +10,8 @@ import type { AiProviderId } from "./model.js";
 
 /** Host → sidecar messages. */
 export type HostToSidecar =
+  | { type: "one_shot"; callId: string; task: "translate"; input: string }
+  | { type: "discard_session"; conversationId: string }
   | {
       type: "configure";
       callId: string;
@@ -27,6 +29,7 @@ export type HostToSidecar =
     }
   | {
       type: "new_session";
+      callId: string;
       conversationId: string;
       cwd: string;
       sessionDir: string;
@@ -95,8 +98,10 @@ export interface EditPreview {
 
 /** Sidecar → host messages. */
 export type SidecarToHost =
+  | { type: "one_shot_result"; callId: string; result?: string; error?: string }
   | { type: "ready" }
   | { type: "configure_result"; callId: string; ok: boolean; error?: string }
+  | { type: "new_session_result"; callId: string; ok: boolean; error?: string }
   | {
       type: "session_opened";
       conversationId: string;

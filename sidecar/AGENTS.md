@@ -19,6 +19,8 @@ Entry: `src/main.ts`.
   codec (`encodeLine`/`createLineDecoder`). Turn `done` events carry a
   completed/cancelled/failed outcome. `title` variant is declared but
   not emitted by the sidecar (kept intentionally for now).
+- `one-shot.ts` — restricted no-session/no-tool completion contexts. Only the
+  `translate` task is registered; unknown tasks must fail closed.
 - `tool-title.ts` — pure safe tool-title and short-error formatting shared by
   live events and session restoration; raw arguments/results never cross the
   display protocol.

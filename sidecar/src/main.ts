@@ -43,6 +43,17 @@ async function main(): Promise<void> {
 
   const handle = async (msg: HostToSidecar): Promise<void> => {
     switch (msg.type) {
+      case "one_shot":
+        try {
+          await configurationGate.wait();
+          send({ type: "one_shot_result", callId: msg.callId, result: await runner.oneShot(msg.task, msg.input) });
+        } catch (err) {
+          send({ type: "one_shot_result", callId: msg.callId, error: safeError(err) });
+        }
+        break;
+      case "discard_session":
+        runner.discardSession(msg.conversationId);
+        break;
       case "configure":
         try {
           await configurationGate.run(() => runner.configure({
@@ -75,8 +86,13 @@ async function main(): Promise<void> {
         await configurationGate.initialize();
         break;
       case "new_session":
-        await configurationGate.wait();
-        await runner.newSession(msg);
+        try {
+          await configurationGate.wait();
+          await runner.newSession(msg);
+          send({ type: "new_session_result", callId: msg.callId, ok: true });
+        } catch (err) {
+          send({ type: "new_session_result", callId: msg.callId, ok: false, error: safeError(err) });
+        }
         break;
       case "open_session":
         await configurationGate.wait();

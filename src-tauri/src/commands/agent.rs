@@ -170,21 +170,52 @@ pub async fn agent_rewind(
 }
 
 #[tauri::command]
-pub fn agent_new_session(
-    state: State<AppState>,
+pub async fn agent_new_session(
+    state: State<'_, AppState>,
     conversation_id: String,
     cwd: String,
     session_dir: String,
 ) -> Result<(), String> {
-    let mut guard = state.agent.lock().unwrap();
-    let agent = guard.as_mut().ok_or("助手未连接")?;
-    agent
-        .send(&HostToSidecar::NewSession {
+    let seq = state.agent_seq.fetch_add(1, Ordering::Relaxed) + 1;
+    let call_id = format!("ns{seq}");
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    state
+        .pending_agent_sessions
+        .lock()
+        .unwrap()
+        .insert(call_id.clone(), tx);
+    let sent = match state.agent.lock().unwrap().as_mut() {
+        Some(agent) => agent.send(&HostToSidecar::NewSession {
+            call_id: call_id.clone(),
             conversation_id,
             cwd,
             session_dir,
-        })
-        .map_err(|error| error.to_string())
+        }),
+        None => Err(std::io::Error::new(
+            std::io::ErrorKind::NotConnected,
+            "助手未连接",
+        )),
+    };
+    if let Err(error) = sent {
+        state
+            .pending_agent_sessions
+            .lock()
+            .unwrap()
+            .remove(&call_id);
+        return Err(error.to_string());
+    }
+    match tokio::time::timeout(std::time::Duration::from_secs(10), rx).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(_)) => Err("创建 AI 会话响应已丢弃".into()),
+        Err(_) => {
+            state
+                .pending_agent_sessions
+                .lock()
+                .unwrap()
+                .remove(&call_id);
+            Err("创建 AI 会话超时，请重试".into())
+        }
+    }
 }
 
 #[tauri::command]
@@ -201,6 +232,19 @@ pub fn agent_open_session(
             session_file,
         })
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn agent_discard_session(
+    state: State<AppState>,
+    conversation_id: String,
+) -> Result<(), String> {
+    if let Some(agent) = state.agent.lock().unwrap().as_mut() {
+        agent
+            .send(&HostToSidecar::DiscardSession { conversation_id })
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 #[derive(serde::Serialize)]

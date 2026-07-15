@@ -14,6 +14,14 @@ use serde::{Deserialize, Serialize};
     rename_all_fields = "camelCase"
 )]
 pub enum HostToSidecar {
+    OneShot {
+        call_id: String,
+        task: OneShotTask,
+        input: String,
+    },
+    DiscardSession {
+        conversation_id: String,
+    },
     Configure {
         call_id: String,
         provider: AiProviderId,
@@ -32,6 +40,7 @@ pub enum HostToSidecar {
         session_file: String,
     },
     NewSession {
+        call_id: String,
         conversation_id: String,
         cwd: String,
         session_dir: String,
@@ -104,8 +113,21 @@ pub enum HostToSidecar {
     rename_all_fields = "camelCase"
 )]
 pub enum SidecarToHost {
+    OneShotResult {
+        call_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        result: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     Ready,
     ConfigureResult {
+        call_id: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    NewSessionResult {
         call_id: String,
         ok: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -221,6 +243,12 @@ pub enum AgentOutcome {
     Completed,
     Cancelled,
     Failed,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OneShotTask {
+    Translate,
 }
 
 /// skill 摘要：name + description。与 sidecar `skills_list` 的元素同形。
@@ -407,6 +435,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn one_shot_protocol_round_trips() {
+        let request = HostToSidecar::OneShot {
+            call_id: "o1".into(),
+            task: OneShotTask::Translate,
+            input: "hello".into(),
+        };
+        let json = serde_json::to_string(&request).unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"one_shot","callId":"o1","task":"translate","input":"hello"}"#
+        );
+        assert_eq!(
+            serde_json::from_str::<HostToSidecar>(&json).unwrap(),
+            request
+        );
+        assert!(serde_json::from_str::<HostToSidecar>(
+            r#"{"type":"one_shot","callId":"o1","task":"unknown","input":"x"}"#
+        )
+        .is_err());
+    }
+
+    #[test]
     fn structured_assistant_history_round_trips() {
         let message = ChatDisplayMessage::Assistant {
             blocks: vec![
@@ -495,6 +545,7 @@ mod tests {
         assert_eq!(value["sessionFile"], "/tmp/c1.jsonl");
 
         let new_session = HostToSidecar::NewSession {
+            call_id: "ns1".into(),
             conversation_id: "c2".into(),
             cwd: "/tmp/project".into(),
             session_dir: "/tmp/sessions".into(),
@@ -502,8 +553,25 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&new_session).unwrap()).unwrap();
         assert_eq!(value["type"], "new_session");
+        assert_eq!(value["callId"], "ns1");
         assert_eq!(value["conversationId"], "c2");
         assert_eq!(value["sessionDir"], "/tmp/sessions");
+    }
+
+    #[test]
+    fn parses_new_session_result() {
+        let message: SidecarToHost = serde_json::from_str(
+            r#"{"type":"new_session_result","callId":"ns1","ok":false,"error":"failed"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            message,
+            SidecarToHost::NewSessionResult {
+                call_id: "ns1".into(),
+                ok: false,
+                error: Some("failed".into()),
+            }
+        );
     }
 
     #[test]

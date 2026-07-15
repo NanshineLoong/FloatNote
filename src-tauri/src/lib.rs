@@ -112,6 +112,8 @@ pub fn run() {
                 pending_skill_lists: Mutex::new(std::collections::HashMap::new()),
                 pending_agent_configs: Mutex::new(std::collections::HashMap::new()),
                 pending_agent_rewinds: Mutex::new(std::collections::HashMap::new()),
+                pending_agent_sessions: Mutex::new(std::collections::HashMap::new()),
+                pending_one_shots: Mutex::new(std::collections::HashMap::new()),
                 authorized_roots: state::AuthorizedRoots::default(),
             });
 
@@ -216,6 +218,7 @@ pub fn run() {
             commands::agent_rewind,
             commands::agent_new_session,
             commands::agent_open_session,
+            commands::agent_discard_session,
             commands::agent_cancel,
             commands::agent_list_skills,
             commands::agent_reload_skills,
@@ -232,6 +235,11 @@ pub fn run() {
             commands::open_url,
             source::app_icon,
             popup::submit_popup_capture,
+            popup::popup_selection_snapshot,
+            popup::popup_ai_selection_snapshot,
+            popup::complete_popup_question,
+            popup::translate_popup_selection,
+            popup::open_ai_settings,
             popup::dismiss_popup,
         ])
         .run(tauri::generate_context!())

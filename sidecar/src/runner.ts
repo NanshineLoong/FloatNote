@@ -1,5 +1,5 @@
 import { complete } from "@earendil-works/pi-ai/compat";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import type { Context } from "@earendil-works/pi-ai";
 import {
   AuthStorage,
@@ -21,6 +21,7 @@ import { buildAgentModel, resolveAgentConfig, sanitizeAgentError, type AgentConf
 import { translateEvent } from "./event-translate.js";
 import { composePromptText } from "./prompt-compose.js";
 import { formatToolTitle, sanitizeToolError } from "./tool-title.js";
+import { buildOneShotContext } from "./one-shot.js";
 
 /** Minimal surface of a Pi AgentSession the runner depends on (injectable for tests). */
 export interface SessionLike {
@@ -89,6 +90,7 @@ export class AgentRunner {
   private readonly sessions = new Map<string, SessionLike>();
   private readonly sessionManagers = new Map<string, PiSessionManager>();
   private readonly activeConversations = new Map<string, string>();
+  private readonly discardedConversations = new Set<string>();
   private writeSeq = 0;
   private textSeq = 0;
   private readonly pendingEdits = new Map<string, (r: WriteResult) => void>();
@@ -142,7 +144,23 @@ export class AgentRunner {
     return listSkillsState();
   }
 
+  async oneShot(task: string, input: string): Promise<string> {
+    if (!this.cfg) throw new Error("尚未配置或启用 AI 提供商");
+    const response = await complete(buildAgentModel(this.cfg), buildOneShotContext(task, input), {
+      apiKey: this.cfg.apiKey,
+      cacheRetention: "none",
+    });
+    const result = response.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("")
+      .trim();
+    if (!result) throw new Error("翻译结果为空");
+    return result;
+  }
+
   async newSession(req: NewSessionRequest): Promise<void> {
+    this.discardedConversations.delete(req.conversationId);
     const sessionManager = SessionManager.create(req.cwd, req.sessionDir, { id: req.conversationId });
     await this.installSession(req.conversationId, sessionManager);
   }
@@ -153,6 +171,16 @@ export class AgentRunner {
     }
     const sessionManager = SessionManager.open(req.sessionFile);
     await this.installSession(req.conversationId, sessionManager);
+  }
+
+  discardSession(conversationId: string): void {
+    this.discardedConversations.add(conversationId);
+    this.sessions.get(conversationId)?.dispose?.();
+    this.sessions.delete(conversationId);
+    this.sessionManagers.delete(conversationId);
+    for (const [requestId, activeConversationId] of this.activeConversations) {
+      if (activeConversationId === conversationId) this.activeConversations.delete(requestId);
+    }
   }
 
   async prompt(req: PromptRequest): Promise<void> {
@@ -256,6 +284,12 @@ export class AgentRunner {
       throw new Error("尚未配置或启用 AI 提供商，请前往设置完成配置并启用。");
     }
     const session = await this.createConfiguredSession(this.cfg, conversationId, sessionManager);
+    if (this.discardedConversations.has(conversationId)) {
+      session.dispose?.();
+      const orphan = session.sessionFile ?? session.sessionManager?.getSessionFile() ?? sessionManager.getSessionFile();
+      if (orphan) rmSync(orphan, { force: true });
+      throw new Error("conversation session discarded during installation");
+    }
     this.sessions.get(conversationId)?.dispose?.();
     this.sessionManagers.set(conversationId, sessionManager);
     this.sessions.set(conversationId, session);

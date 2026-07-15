@@ -3,6 +3,7 @@
 sidecar 是独立 Node 进程，入口为 `sidecar/src/main.ts`，通过 stdin/stdout JSONL 与 Rust host 通信。它运行 Pi coding-agent 会话，不直接打开或写入用户笔记文件。
 
 - `runner.ts` 管理会话、prompt 和取消。
+- `one-shot.ts` 为受限一次性任务构造上下文；当前只接受 `translate`，按中文占比决定中译英或其他语言译中。`runner.oneShot` 直接调用 completion，不创建 session、不加载历史且不暴露工具。
 - `model.ts` 把六个固定 profile 解析为 PI provider/model，并计算自动 thinking。
 - `event-translate.ts` 将 Pi 事件转换为 host protocol 事件；`tool-title.ts` 从参数生成安全短标题，wire 事件只携带 `callId`、标题、状态和清理后的短错误，不携带参数或工具返回正文。写权限请求仍通过独立受控通道携带对应的 `toolCallId`。
 - `protocol.ts` 定义 JSONL 消息和行编解码。
@@ -33,6 +34,13 @@ API Key、认证头、URL 凭据和敏感查询参数。模型元数据标记 `r
 选择 `high`，由 PI 的 qwen/deepseek/zai/原生 Anthropic/OpenAI 映射产生厂商参数；
 百炼托管的已知推理模型统一覆盖为 qwen thinking 格式；未知且无法可靠识别能力
 的模型不启用 thinking。
+
+`new_session` / `new_session_result` 通过 `callId` 关联，host 只会在 session 安装
+确认后发送首个 prompt。`one_shot` / `one_shot_result` 也通过 `callId` 关联，并等待同一个 configuration
+gate 完成启动决策；未知任务在协议或任务构造边界拒绝。失败结果只携带清理后的短
+错误。`discard_session` 用于首条 prompt 尚未被接受时的事务补偿，释放内存 session；
+安装与 discard 竞态时 tombstone 会销毁晚到 session 并清理其内部派生的文件路径；
+它不会出现在已经取得正式 request ID 的会话路径上。
 
 每个 turn 的 `done` 都携带 `completed`、`cancelled` 或 `failed` outcome。用户取消
 映射为 `cancelled`，不会触发空响应诊断；模型失败保留清理后的真实错误；只有正常

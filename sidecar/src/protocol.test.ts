@@ -164,13 +164,13 @@ describe("createLineDecoder", () => {
     const decode = createLineDecoder();
     const out = decode(
       [
-        '{"type":"new_session","conversationId":"c1","cwd":"/tmp/project","sessionDir":"/tmp/sessions"}',
+        '{"type":"new_session","callId":"ns1","conversationId":"c1","cwd":"/tmp/project","sessionDir":"/tmp/sessions"}',
         '{"type":"open_session","conversationId":"c2","sessionFile":"/tmp/sessions/c2.jsonl"}',
         "",
       ].join("\n"),
     );
     expect(out).toEqual([
-      { type: "new_session", conversationId: "c1", cwd: "/tmp/project", sessionDir: "/tmp/sessions" },
+      { type: "new_session", callId: "ns1", conversationId: "c1", cwd: "/tmp/project", sessionDir: "/tmp/sessions" },
       { type: "open_session", conversationId: "c2", sessionFile: "/tmp/sessions/c2.jsonl" },
     ]);
   });

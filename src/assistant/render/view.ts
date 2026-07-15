@@ -2,6 +2,8 @@ import { processGroupSummary, type Block, type ChatMessage } from "./state";
 import { buildActionCard } from "../action-card";
 import { fillMarkdown } from "../markdown";
 import { createIcon } from "../../shared/ui/icon";
+import { parseSelectionMessage } from "../../platform/selection-message";
+import { wireOpenUrlLink } from "../../platform/open-url";
 
 /**
  * 助手聊天的 DOM 渲染层：把 state.ts 产出的 `ChatMessage`/`Block` 投影成
@@ -148,9 +150,41 @@ export function renderMessage(message: ChatMessage, outputMode: AssistantOutputM
     if (message.text) {
       const text = document.createElement("div");
       text.className = "chat-user-message-text";
-      fillMarkdown(text, message.text);
+      const selection = parseSelectionMessage(message.text);
+      fillMarkdown(text, selection?.question ?? message.text);
       decorateCodeBlocks(text);
       body.appendChild(text);
+      if (selection) {
+        const card = document.createElement("div");
+        card.className = "chat-selection-card";
+        const lines = selection.selection.split("\n");
+        if (lines.length > 3) card.classList.add("is-collapsed");
+        const header = document.createElement("div");
+        header.className = "chat-selection-header";
+        const source = selection.source.url ? document.createElement("a") : document.createElement("span");
+        source.className = "chat-selection-source";
+        source.textContent = selection.source.label;
+        if (source instanceof HTMLAnchorElement) {
+          wireOpenUrlLink(source, selection.source.url!);
+        }
+        header.append(source);
+        const quote = document.createElement("div");
+        quote.className = "chat-selection-quote";
+        quote.textContent = selection.selection;
+        card.append(header, quote);
+        if (lines.length > 3) {
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "chat-selection-toggle";
+          toggle.textContent = "展开";
+          toggle.addEventListener("click", () => {
+            const collapsed = card.classList.toggle("is-collapsed");
+            toggle.textContent = collapsed ? "展开" : "收起";
+          });
+          card.append(toggle);
+        }
+        body.appendChild(card);
+      }
     }
     el.appendChild(body);
     attachUserAction(el, "chat-retry-btn", "重试", "ph ph-arrow-clockwise", message.id);

@@ -1651,6 +1651,12 @@
 .chat-reference-chip.skill { color: var(--color-accent); background: var(--color-accent-fill); }
 .chat-reference-chip.file { color: var(--color-text-muted); background: var(--color-surface-2); }
 .chat-user-message-text { min-width: 0; white-space: normal; }
+.chat-selection-card { margin-top: 8px; padding: 8px 10px; border: var(--fn-border-hair) solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-2); color: var(--color-text-muted); font-size: 11px; line-height: 1.5; }
+.chat-selection-header { display: flex; align-items: center; margin-bottom: 5px; font-weight: 600; }
+.chat-selection-source { overflow: hidden; color: inherit; text-overflow: ellipsis; white-space: nowrap; }
+.chat-selection-quote { white-space: pre-wrap; }
+.chat-selection-card.is-collapsed .chat-selection-quote { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.chat-selection-toggle { margin-top: 5px; padding: 0; border: 0; background: transparent; color: var(--color-accent); font: inherit; cursor: pointer; }
 
 /* Composer Markdown stays source-editable while conveying block hierarchy. */
 .fn-assistant-input .cm-md-heading-1 { font-size: 1.35em; font-weight: 700; line-height: 1.45; }

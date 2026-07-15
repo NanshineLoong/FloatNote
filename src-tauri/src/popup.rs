@@ -18,10 +18,12 @@ struct PopupSession {
     capture: Option<CachedCapture>,
 }
 
-struct CachedCapture {
-    text: String,
-    html: Option<String>,
-    source: Option<crate::source::Source>,
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedCapture {
+    pub text: String,
+    pub html: Option<String>,
+    pub source: Option<crate::source::Source>,
 }
 
 impl PopupCache {
@@ -71,6 +73,19 @@ impl PopupCache {
         Some((capture.text, capture.html, capture.source))
     }
 
+    pub fn snapshot(&self, generation_id: u64) -> Option<CachedCapture> {
+        let slot = self.session.lock().unwrap();
+        let session = slot.as_ref()?;
+        if session.generation_id != generation_id {
+            return None;
+        }
+        session.capture.clone()
+    }
+
+    pub fn complete(&self, generation_id: u64) -> bool {
+        self.clear_if(generation_id)
+    }
+
     pub fn clear(&self) {
         *self.session.lock().unwrap() = None;
     }
@@ -97,7 +112,119 @@ impl Default for PopupCache {
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::agent::{HostToSidecar, OneShotTask};
 use crate::state::AppState;
+use std::sync::atomic::Ordering as AtomicOrdering;
+
+const MAX_AI_SELECTION_CHARS: usize = 12_000;
+
+fn validate_ai_capture(capture: Option<CachedCapture>) -> Result<CachedCapture, String> {
+    let capture = capture.ok_or_else(|| "选区已失效，请重新选择".to_string())?;
+    if capture.text.chars().count() > MAX_AI_SELECTION_CHARS {
+        return Err("选中文字过长，请缩小选区后重试".into());
+    }
+    if capture.text.trim().is_empty() {
+        return Err("选区已失效，请重新选择".into());
+    }
+    Ok(capture)
+}
+
+fn ensure_ai_ready(state: &AppState) -> Result<(), String> {
+    let configured = {
+        let config = state.config.lock().unwrap();
+        config
+            .ai_settings
+            .active_provider_id
+            .and_then(|id| config.ai_settings.providers.get(&id))
+            .is_some_and(|profile| profile.is_configured())
+    };
+    if !configured {
+        return Err("尚未启用 AI 提供商".into());
+    }
+    if !*state.agent_ready.lock().unwrap() {
+        return Err("AI 助手暂时不可用，请稍后重试".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn popup_selection_snapshot(
+    generation_id: u64,
+    state: State<AppState>,
+) -> Result<CachedCapture, String> {
+    validate_ai_capture(state.popup_cache.snapshot(generation_id))
+}
+
+#[tauri::command]
+pub fn popup_ai_selection_snapshot(
+    generation_id: u64,
+    state: State<AppState>,
+) -> Result<CachedCapture, String> {
+    ensure_ai_ready(&state)?;
+    validate_ai_capture(state.popup_cache.snapshot(generation_id))
+}
+
+#[tauri::command]
+pub fn complete_popup_question(
+    generation_id: u64,
+    state: State<AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    state
+        .popup_cache
+        .complete(generation_id)
+        .then_some(())
+        .ok_or_else(|| "选区已失效，请重新选择".to_string())?;
+    if let Some(popup) = app.get_webview_window("selection-popup") {
+        let _ = popup.hide();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn translate_popup_selection(
+    generation_id: u64,
+    _popup_request_id: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let capture = validate_ai_capture(state.popup_cache.snapshot(generation_id))?;
+    ensure_ai_ready(&state)?;
+    let seq = state.agent_seq.fetch_add(1, AtomicOrdering::Relaxed) + 1;
+    let call_id = format!("one{seq}");
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    state
+        .pending_one_shots
+        .lock()
+        .unwrap()
+        .insert(call_id.clone(), tx);
+    let sent = match state.agent.lock().unwrap().as_mut() {
+        Some(agent) => agent
+            .send(&HostToSidecar::OneShot {
+                call_id: call_id.clone(),
+                task: OneShotTask::Translate,
+                input: capture.text,
+            })
+            .map_err(|error| error.to_string()),
+        None => Err("AI 助手暂时不可用，请稍后重试".into()),
+    };
+    if let Err(error) = sent {
+        crate::agent::expire_one_shot_pending(&state.pending_one_shots, &call_id);
+        return Err(error);
+    }
+    match tokio::time::timeout(std::time::Duration::from_secs(45), rx).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(_)) => Err("AI 助手暂时不可用，请稍后重试".into()),
+        Err(_) => {
+            crate::agent::expire_one_shot_pending(&state.pending_one_shots, &call_id);
+            Err("请求超时，请重试".into())
+        }
+    }
+}
+
+#[tauri::command]
+pub fn open_ai_settings(app: AppHandle) {
+    crate::windows::show_settings(&app);
+}
 
 /// Payload emitted to the `selection-popup` window on capture.
 #[derive(serde::Serialize, Clone)]
@@ -310,6 +437,28 @@ mod tests {
         let current = cache.set("b".to_string(), None, None);
         assert!(!cache.clear_if(stale));
         assert!(cache.take(current).is_some());
+    }
+
+    #[test]
+    fn snapshot_is_non_consuming_and_complete_is_generation_aware() {
+        let cache = PopupCache::new();
+        let generation = cache.set("hello".to_string(), Some("<b>hello</b>".to_string()), None);
+        let first = cache.snapshot(generation).unwrap();
+        let second = cache.snapshot(generation).unwrap();
+        assert_eq!(first.text, "hello");
+        assert_eq!(second.html.as_deref(), Some("<b>hello</b>"));
+        assert!(cache.complete(generation));
+        assert!(cache.snapshot(generation).is_none());
+    }
+
+    #[test]
+    fn stale_generation_cannot_snapshot_or_complete_new_capture() {
+        let cache = PopupCache::new();
+        let stale = cache.set("old".to_string(), None, None);
+        let current = cache.set("new".to_string(), None, None);
+        assert!(cache.snapshot(stale).is_none());
+        assert!(!cache.complete(stale));
+        assert_eq!(cache.snapshot(current).unwrap().text, "new");
     }
 
     #[test]

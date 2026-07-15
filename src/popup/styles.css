@@ -56,7 +56,8 @@ body {
 
 /* ── Pill ── */
 .popup-bar,
-.popup-empty {
+.popup-empty,
+.popup-panel {
   display: flex;
   align-items: center;
   gap: 0;
@@ -74,6 +75,93 @@ body {
     transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.popup-panel {
+  width: 348px;
+  max-width: 360px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px;
+  line-height: 1.45;
+  user-select: text;
+}
+
+.popup-summary {
+  overflow: hidden;
+  color: var(--popup-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popup-status,
+.popup-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 48px;
+  color: var(--popup-text);
+}
+
+.popup-status i { animation: popup-spin .9s linear infinite; }
+.popup-error { color: var(--color-danger); }
+
+.popup-result {
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--popup-text);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.popup-question {
+  min-height: 86px;
+  max-height: 180px;
+  resize: vertical;
+  padding: 8px 9px;
+  border: var(--fn-border-hair) solid var(--popup-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: var(--color-surface);
+  color: var(--popup-text);
+  font: inherit;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.popup-question:focus-visible,
+.popup-result:focus-visible {
+  box-shadow: 0 0 0 2px var(--popup-accent-fill);
+  border-color: var(--popup-accent);
+}
+
+.popup-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.popup-text-action {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--popup-accent);
+  cursor: pointer;
+}
+
+.popup-text-action:hover { background: var(--popup-hover); }
+.popup-text-action:disabled { opacity: .5; cursor: default; }
+
+@keyframes popup-spin { to { transform: rotate(360deg); } }
+
 .popup-empty {
   padding: 8px 14px;
   color: var(--popup-muted);
@@ -84,7 +172,8 @@ body {
 /* Visible state — toggled by the .is-visible class on .popup-root after the
    window is shown (transitioning out of [hidden] is unreliable in WebKit). */
 .popup-root.is-visible .popup-bar,
-.popup-root.is-visible .popup-empty {
+.popup-root.is-visible .popup-empty,
+.popup-root.is-visible .popup-panel {
   opacity: 1;
   transform: translateY(0) scale(1);
 }
@@ -96,15 +185,18 @@ body {
 }
 
 .popup-root.is-measuring .popup-bar,
-.popup-root.is-measuring .popup-empty {
+.popup-root.is-measuring .popup-empty,
+.popup-root.is-measuring .popup-panel {
   opacity: 0;
   transform: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .popup-bar,
-  .popup-empty {
+  .popup-empty,
+  .popup-panel {
     transition: none;
     transform: none;
   }
+  .popup-status i { animation: none; }
 }

@@ -27,6 +27,7 @@ async function mountWithDeps(overrides: Partial<AssistantDeps> = {}) {
     rewind: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn(),
     createConversation: vi.fn().mockResolvedValue(conversation),
+    rollbackConversation: vi.fn().mockResolvedValue(undefined),
     openConversation: vi.fn().mockResolvedValue(conversation),
     listConversations: vi.fn().mockResolvedValue([]),
     getLastConversation: vi.fn().mockResolvedValue(null),
@@ -43,6 +44,36 @@ async function mountWithDeps(overrides: Partial<AssistantDeps> = {}) {
 
 describe("assistant message actions", () => {
   afterEach(() => document.body.replaceChildren());
+
+  it("starts a fresh prompted conversation and exposes the accepted request id", async () => {
+    const send = vi.fn().mockResolvedValue("selection-r1");
+    const createConversation = vi.fn().mockResolvedValue({ ...conversation, id: "selection-c1" });
+    const { root, handle } = await mountWithDeps({
+      send,
+      createConversation,
+      updateTitle: vi.fn().mockResolvedValue({ ...conversation, id: "selection-c1" }),
+    });
+    const result = await handle.startConversationWithPrompt({
+      scopeType: "project", scopePath: "/notes", scopeLabel: "Notes", cwd: "/notes",
+    }, "Why?\n\n> [!selection] Source\n> Quote");
+
+    expect(result).toMatchObject({ requestId: "selection-r1", conversation: { id: "selection-c1" } });
+    expect(root.querySelector(".chat-user-message-text")?.textContent).toContain("Why?");
+    expect(send).toHaveBeenCalledWith({ userText: "Why?\n\n> [!selection] Source\n> Quote", references: [] }, "selection-c1");
+  });
+
+  it("rolls back a prompted conversation and restores the previous view before acceptance", async () => {
+    const rollbackConversation = vi.fn().mockResolvedValue(undefined);
+    const { root, handle } = await mountWithDeps({
+      send: vi.fn().mockRejectedValue(new Error("send failed")),
+      rollbackConversation,
+    });
+    await expect(handle.startConversationWithPrompt({
+      scopeType: "project", scopePath: "/notes", scopeLabel: "Notes", cwd: "/notes",
+    }, "question")).rejects.toThrow("send failed");
+    expect(rollbackConversation).toHaveBeenCalledWith(conversation);
+    expect(root.dataset.conversationId).toBe("c1");
+  });
 
   it("shows stop and cancels the active request while streaming", async () => {
     const cancel = vi.fn();

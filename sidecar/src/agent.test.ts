@@ -242,6 +242,44 @@ function fakeSession(script: (emit: (e: AgentSessionEvent) => void) => Promise<v
 }
 
 describe("AgentRunner", () => {
+  it("discards an unaccepted session during conversation rollback", async () => {
+    const disposed: string[] = [];
+    const runner = new AgentRunner({
+      send: () => {},
+      createSession: async () => {
+        const { session } = fakeSession(() => {});
+        session.dispose = () => disposed.push("c1");
+        return session;
+      },
+    });
+    await runner.configure({ provider: "openai", model: "gpt-5", apiKey: "test" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+    runner.discardSession("c1");
+    expect(disposed).toEqual(["c1"]);
+    await expect(runner.prompt({ requestId: "r1", conversationId: "c1", userText: "hi" }))
+      .rejects.toThrow("conversation session not opened");
+  });
+
+  it("does not resurrect a session when discard races a slow installation", async () => {
+    let resolveFactory!: (session: SessionLike) => void;
+    const disposed: string[] = [];
+    const runner = new AgentRunner({
+      send: () => {},
+      createSession: () => new Promise((resolve) => { resolveFactory = resolve; }),
+    });
+    await runner.configure({ provider: "openai", model: "gpt-5", apiKey: "test" });
+    const installing = runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+    await Promise.resolve();
+    runner.discardSession("c1");
+    const { session } = fakeSession(() => {});
+    session.dispose = () => disposed.push("c1");
+    resolveFactory(session);
+    await expect(installing).rejects.toThrow("discarded");
+    expect(disposed).toEqual(["c1"]);
+    await expect(runner.prompt({ requestId: "r1", conversationId: "c1", userText: "hi" }))
+      .rejects.toThrow("conversation session not opened");
+  });
+
   it("rebuilds existing sessions atomically when the provider changes", async () => {
     const configs: string[] = [];
     const disposed: string[] = [];

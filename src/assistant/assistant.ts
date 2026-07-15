@@ -34,6 +34,7 @@ export interface AssistantDeps {
   /** Rewind the persistent session before a user turn, so the next send forms a new branch. */
   rewind: (conversationId: string, userEntryId: string) => Promise<void>;
   createConversation: (scope: ChatScope) => Promise<ChatConversation>;
+  rollbackConversation: (conversation: ChatConversation) => Promise<void>;
   openConversation: (conversation: ChatConversation) => Promise<ChatConversation | null | void>;
   listConversations: (scope: ChatScope) => Promise<ChatConversation[]>;
   getLastConversation: (scope: ChatScope) => Promise<ChatConversation | null>;
@@ -70,6 +71,11 @@ export interface AssistantHandle {
   cancel: () => void;
   /** 开始新对话（连带展开气泡）。 */
   startNewConversation: () => void;
+  /** Create an isolated conversation, render its first user turn, and resolve once the agent accepts it. */
+  startConversationWithPrompt: (
+    scope: ChatScope,
+    prompt: string,
+  ) => Promise<{ conversation: ChatConversation; requestId: string }>;
   /** 配置恢复后重新打开当前对话。 */
   refreshConversation: () => Promise<void>;
   /** 历史浮层是否打开。 */
@@ -359,6 +365,34 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       dispatch({ type: "error", requestId: null, message });
+    }
+  }
+
+  async function startConversationWithPrompt(
+    scope: ChatScope,
+    prompt: string,
+  ): Promise<{ conversation: ChatConversation; requestId: string }> {
+    const previousConversation = activeConversation;
+    const previousState = state;
+    let created: ChatConversation | null = null;
+    try {
+      created = await deps.createConversation(scope);
+      setActiveConversation(created, true);
+      created = await updateConversationTitle(created, prompt.trim());
+      setInputOpen(true);
+      const requestId = await sendTurn(created, { userText: prompt, references: [] });
+      activeRequestId = requestId;
+      return { conversation: created, requestId };
+    } catch (error) {
+      if (created) {
+        try { await deps.rollbackConversation(created); } catch { /* best-effort compensation */ }
+      }
+      conversationToken += 1;
+      activeConversation = previousConversation;
+      root.dataset.conversationId = previousConversation?.id ?? "";
+      state = previousState;
+      rerender();
+      throw error;
     }
   }
 
@@ -670,6 +704,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
     startNewConversation() {
       void startNewConversation();
     },
+    startConversationWithPrompt,
     async refreshConversation() {
       if (!activeConversation) return;
       const conversation = activeConversation;

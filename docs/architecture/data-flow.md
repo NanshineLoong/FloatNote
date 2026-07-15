@@ -87,6 +87,21 @@ listen-only：按键和外部点击可异步关闭弹窗，但事件继续传给
 触发时不读 AX、不访问剪贴板、不显示空结果，也不发送 `quote-captured`。
 已从外部应用缓存的弹窗内容不受此限制，用户点击弹窗后仍可正常提交。
 
+弹窗出现本身不会调用模型。用户点击翻译后，Rust 对匹配 generation 做只读快照，
+经 `one_shot(callId, task=translate)` 交给 sidecar；该任务不创建 session、不注册工具，
+结果以 `one_shot_result` 关联返回，成功、错误、45 秒超时和 sidecar 断开都会移除
+host 等待项。翻译不消费 popup cache，新选区到达后旧 `popupRequestId` 的结果只会被
+丢弃。
+
+提问通过 `popup-question-request(generationId, popupRequestId)` 交给主窗口：note
+controller 读取当前 scope 与 popup 快照，用共享 codec 构造 selection callout，随后
+执行 `chatCreate → agentNewSession(callId/result) → optimistic user bubble → agentSend`。只有 sidecar
+确认 session 安装完成后才发送 prompt，且只有取得
+`agentRequestId` 后才完成 popup generation、显示并聚焦主窗口。此前任一步失败会
+删除历史索引、丢弃 sidecar session、best-effort 删除 session 文件并恢复旧会话；
+若 session 安装超时后才完成，sidecar 的 discard tombstone 会销毁并删除这份晚到资源；
+取得 request ID 后即不再回滚，后续窗口显示失败只提示用户从历史查看。
+
 ## 打包时的 AI 启动
 
 开发构建用 sidecar 的本地 `tsx` 启动 `src/main.ts`。发布构建由 Tauri 启动随应用打包的 Node external binary，并把 ESM sidecar bundle 作为第一个参数，因此运行时不依赖用户 PATH、全局 Node 或源码目录。

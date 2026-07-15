@@ -1,9 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { emit, listen } from "@tauri-apps/api/event";
+import { emit, emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { mountAssistant, type AssistantHandle } from "../assistant/assistant";
 import {
   agentCancel,
+  agentDiscardSession,
   agentRewind,
   agentListSkills,
   agentNewSession,
@@ -13,6 +14,7 @@ import {
 } from "./agent";
 import {
   chatCreate,
+  chatDelete,
   chatGetForScope,
   chatListForScope,
   chatOpen,
@@ -25,6 +27,13 @@ import { type NoteEntry, type ProjectEntry, listNotes, resolveDocuments, resolve
 import { NoteSession } from "./note-session";
 import { parentDir } from "./recent-projects";
 import { getAssistantOutputMode, onAssistantOutputModeChanged } from "../platform/assistant-output";
+import { buildSelectionMessage } from "../platform/selection-message";
+import {
+  completePopupQuestion,
+  popupAiSelectionSnapshot,
+  type PopupQuestionRequest,
+  type PopupQuestionResult,
+} from "../platform/selection-popup";
 
 export function chatScopeForSession(session: NoteSession): ChatScope | null {
   if (session.mode === "document") {
@@ -59,20 +68,58 @@ export interface AssistantController {
   toggleFromChrome: () => Promise<void>;
 }
 
+interface AgentConversationOperations {
+  create: (scope: ChatScope) => Promise<ChatConversation>;
+  newSession: (conversation: ChatConversation, scope: ChatScope) => Promise<void>;
+  discard: (conversation: ChatConversation) => Promise<void>;
+  delete: (conversation: ChatConversation) => Promise<unknown>;
+}
+
+async function compensateConversation(
+  conversation: ChatConversation,
+  operations: Pick<AgentConversationOperations, "discard" | "delete">,
+): Promise<void> {
+  await Promise.allSettled([
+    operations.discard(conversation),
+    operations.delete(conversation),
+  ]);
+}
+
+export async function createAgentConversation(
+  scope: ChatScope,
+  operations: AgentConversationOperations,
+): Promise<ChatConversation> {
+  const conversation = await operations.create(scope);
+  try {
+    await operations.newSession(conversation, scope);
+    return conversation;
+  } catch (error) {
+    await compensateConversation(conversation, operations);
+    throw error;
+  }
+}
+
 /** Owns the assistant panel, its agent session bridge, and history-open events. */
 export function createAssistantController(deps: AssistantControllerDeps): AssistantController {
   const currentScope = () => chatScopeForSession(deps.session);
+  const conversationOperations: AgentConversationOperations = {
+    create: chatCreate,
+    newSession: (conversation, scope) => agentNewSession({
+      conversationId: conversation.id,
+      cwd: scope.cwd,
+      sessionDir: sessionDirFromFile(conversation.sessionFile),
+    }),
+    discard: (conversation) => agentDiscardSession({
+      conversationId: conversation.id,
+    }),
+    delete: (conversation) => chatDelete(conversation.id),
+  };
   const handle = mountAssistant(deps.region, {
     send: (payload, conversationId) => agentSend({ conversationId, ...payload }),
     rewind: (conversationId, userTurnIndex) => agentRewind(conversationId, userTurnIndex),
-    createConversation: async (scope) => {
-      const conversation = await chatCreate(scope);
-      await agentNewSession({
-        conversationId: conversation.id,
-        cwd: scope.cwd,
-        sessionDir: sessionDirFromFile(conversation.sessionFile),
-      });
-      return conversation;
+    createConversation: (scope) => createAgentConversation(scope, conversationOperations),
+    rollbackConversation: async (conversation) => {
+      await compensateConversation(conversation, conversationOperations);
     },
     openConversation: async (conversation) => {
       const opened = await chatOpen(conversation.id);
@@ -138,6 +185,53 @@ export function createAssistantController(deps: AssistantControllerDeps): Assist
   });
   void listen<boolean>("agent://configuration-changed", (event) => {
     if (event.payload) void handle.refreshConversation();
+  });
+
+  void listen<PopupQuestionRequest>("popup-question-request", async (event) => {
+    const request = event.payload;
+    const reply = (result: Omit<PopupQuestionResult, "generationId" | "popupRequestId">) =>
+      emitTo("selection-popup", "popup-question-result", {
+        generationId: request.generationId,
+        popupRequestId: request.popupRequestId,
+        ...result,
+      });
+    if (!request.question.trim()) {
+      await reply({ ok: false, message: "请输入问题" });
+      return;
+    }
+    const scope = currentScope();
+    if (!scope) {
+      await reply({ ok: false, message: "请先在 FloatNote 中打开项目或文档" });
+      return;
+    }
+    let sent = false;
+    try {
+      const capture = await popupAiSelectionSnapshot(request.generationId);
+      const prompt = buildSelectionMessage({
+        question: request.question,
+        selection: capture.text,
+        source: capture.source,
+      });
+      await handle.startConversationWithPrompt(scope, prompt);
+      sent = true;
+      await completePopupQuestion(request.generationId);
+      const window = getCurrentWindow();
+      await window.show();
+      await window.setFocus();
+      const assistant = await invoke<{ open: boolean }>("get_assistant_state");
+      if (!assistant.open) {
+        const next = await invoke<{ open: boolean }>("toggle_assistant");
+        deps.onChromeStateChange(next.open);
+      }
+      handle.setInputOpen(true);
+      await reply({ ok: true, sent: true });
+    } catch (error) {
+      await reply({
+        ok: false,
+        sent,
+        message: sent ? "已发送，可在对话历史中查看" : error instanceof Error ? error.message : String(error),
+      });
+    }
   });
 
   async function toggleFromChrome() {

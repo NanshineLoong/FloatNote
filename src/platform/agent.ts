@@ -57,6 +57,10 @@ export function agentOpenSession(args: { conversationId: string; sessionFile: st
   return invoke<void>("agent_open_session", args);
 }
 
+export function agentDiscardSession(args: { conversationId: string }): Promise<void> {
+  return invoke<void>("agent_discard_session", args);
+}
+
 export function agentCancel(requestId: string): Promise<void> {
   return invoke<void>("agent_cancel", { requestId });
 }

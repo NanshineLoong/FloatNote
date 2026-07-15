@@ -6,7 +6,10 @@ into a reconciled message list with incremental DOM updates.
 ## Module map
 
 - `assistant.ts` — `AssistantHandle` connector: builds DOM, wires input/
-  submit/history/permission/skills/mentions, subscribes to agent events.
+  submit/history/permission/skills/mentions, subscribes to agent events. Its
+  `startConversationWithPrompt` public action always creates a fresh conversation,
+  renders the optimistic first turn, and compensates creation failures before a
+  request id is accepted.
 - `render/` — `state.ts` owns the reducer/state machine and `view.ts` owns DOM
   rendering; `index.ts` is the public feature API. Assistant state always keeps
   complete ordered text/thinking/tool blocks. Two or more consecutive process

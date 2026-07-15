@@ -77,6 +77,12 @@ pub struct AppState {
     /// Correlated rewind replies; the frontend only truncates once this resolves successfully.
     pub pending_agent_rewinds:
         Mutex<HashMap<String, tokio::sync::oneshot::Sender<Result<(), String>>>>,
+    /// Correlated new-session acknowledgements; prompt must not race installation.
+    pub pending_agent_sessions:
+        Mutex<HashMap<String, tokio::sync::oneshot::Sender<Result<(), String>>>>,
+    /// Correlated no-session AI task replies.
+    pub pending_one_shots:
+        Mutex<HashMap<String, tokio::sync::oneshot::Sender<Result<String, String>>>>,
     /// Roots authorised by opening/watching a project in this app instance.
     pub authorized_roots: AuthorizedRoots,
 }

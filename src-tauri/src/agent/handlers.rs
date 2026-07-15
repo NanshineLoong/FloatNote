@@ -449,6 +449,8 @@ mod tests {
             pending_skill_lists: Mutex::new(HashMap::new()),
             pending_agent_configs: Mutex::new(HashMap::new()),
             pending_agent_rewinds: Mutex::new(HashMap::new()),
+            pending_agent_sessions: Mutex::new(HashMap::new()),
+            pending_one_shots: Mutex::new(HashMap::new()),
             authorized_roots: crate::state::AuthorizedRoots::default(),
         };
         assert!(resolve_target(
@@ -492,6 +494,8 @@ mod tests {
                 pending_skill_lists: Mutex::new(HashMap::new()),
                 pending_agent_configs: Mutex::new(HashMap::new()),
                 pending_agent_rewinds: Mutex::new(HashMap::new()),
+                pending_agent_sessions: Mutex::new(HashMap::new()),
+                pending_one_shots: Mutex::new(HashMap::new()),
                 authorized_roots: crate::state::AuthorizedRoots::default(),
             }
         }
