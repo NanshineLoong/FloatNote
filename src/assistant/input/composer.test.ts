@@ -174,16 +174,34 @@ describe("composer", () => {
     expect(editor.classList.contains("fn-assistant-input")).toBe(true);
 
     handle.focus();
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    expect(editor.classList.contains("cm-focused")).toBe(true);
+    await vi.waitFor(() => expect(editor.classList.contains("cm-focused")).toBe(true));
+    expect(document.activeElement).toBe(content);
     expect(editor.classList.contains("fn-assistant-input")).toBe(true);
 
     content.blur();
     await new Promise((resolve) => requestAnimationFrame(resolve));
     handle.focus();
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    expect(editor.classList.contains("cm-focused")).toBe(true);
+    await vi.waitFor(() => expect(editor.classList.contains("cm-focused")).toBe(true));
+    expect(document.activeElement).toBe(content);
     expect(editor.classList.contains("fn-assistant-input")).toBe(true);
+  });
+
+  it("为 Markdown 标题、引用和行内代码提供轻量 live preview", async () => {
+    handle.insertText("# 标题\n\n> 引用\n\n`code`");
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    expect(document.querySelector(".cm-md-heading-1")?.textContent).toContain("标题");
+    expect(document.querySelector(".cm-md-blockquote")?.textContent).toContain("引用");
+    expect(document.querySelector(".cm-md-inline-code")?.textContent).toBe("`code`");
+  });
+
+  it("解析 GFM 表格和任务列表而不替换可编辑源码", async () => {
+    handle.insertText("- [ ] task\n\n| A | B |\n| --- | --- |\n| 1 | 2 |");
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    expect(document.querySelector(".cm-md-task-list")?.textContent).toContain("[ ] task");
+    expect(document.querySelector(".cm-md-table")?.textContent).toContain("| A | B |");
+    expect(handle.getDoc()).toContain("| --- | --- |");
   });
 
   it("仅在常规输入区长到最大高度时允许放大", () => {

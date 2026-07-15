@@ -146,9 +146,10 @@ export function renderMessage(message: ChatMessage, outputMode: AssistantOutputM
       body.appendChild(refs);
     }
     if (message.text) {
-      const text = document.createElement("span");
+      const text = document.createElement("div");
       text.className = "chat-user-message-text";
-      text.textContent = message.text;
+      fillMarkdown(text, message.text);
+      decorateCodeBlocks(text);
       body.appendChild(text);
     }
     el.appendChild(body);

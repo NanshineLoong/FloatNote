@@ -23,11 +23,15 @@ into a reconciled message list with incremental DOM updates.
   projection. `EditPreviewDetail` and permission payload types live here and
   are re-exported by `permission-bubble.ts` for compatibility.
 - `permission-dialog.ts` — complete create-Markdown and edit/rewrite review
-  paper; `permission-diff.ts` supplies aligned line rows and context folding.
+  paper. Edit/rewrite review defaults to the aligned source diff and can switch
+  to a rendered new-version preview; `permission-diff.ts` supplies line rows
+  and context folding.
 - `permission-allow-button.ts` — normal/split approval control. Snapshot mode
   is an immediate menu action, not a stored select value.
-- `markdown.ts` — minimal block markdown renderer using shared Markdown
-  primitives, never note internals.
+- `markdown.ts` — compatibility re-export of the safe GFM renderer in
+  `src/shared/markdown/render.ts`. Assistant and user bubbles plus permission
+  previews all use the shared `.fn-markdown` surface; never import note
+  internals for read-only rendering.
 - `input/` — the CM6 assistant composer: atomic file/skill chips, unified
   caret-following candidate popover, structured clipboard/send payload, and
   the body-level focused-paper portal. Its modal lifecycle is shared with the
@@ -41,7 +45,9 @@ into a reconciled message list with incremental DOM updates.
   draft wins and is not cleared by the older completion. `mention-picker.ts`
   and `skill-picker.ts` remain the data-type sources
   for the composer; their legacy textarea menus are no longer mounted by
-  `assistant.ts`.
+  `assistant.ts`. The editor uses the shared GFM language contract and
+  lightweight source-preserving decorations from `src/shared/markdown/editor.ts`;
+  tables and task lists stay editable Markdown rather than becoming widgets.
 - `styles.css` — assistant card/bubble/diff/picker styling.
 
 Tool rows use the sidecar-provided safe `label` and stable `callId`; never render

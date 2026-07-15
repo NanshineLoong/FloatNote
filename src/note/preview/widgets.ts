@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { EditorView, WidgetType } from "@codemirror/view";
 import { parseChips, type Source } from "../quote";
 import { renderInline } from "../inline";
@@ -6,18 +5,7 @@ import { parseGfmTableOffsets, type Align, type CellRange } from "../table";
 import { parseImage, type ImageAlign } from "../image-attrs";
 import { imageSrc } from "../image-fs";
 import { ensureIcon } from "./icons";
-
-/** Wire an `<a>` to open `url` via the `open_url` Tauri command: set the real
- *  href (for status-bar/aria) and intercept click so the webview doesn't try
- *  (it blocks external navigation by default). Caller sets class/text/title. */
-function wireOpenUrlLink(a: HTMLAnchorElement, url: string): void {
-  a.href = url;
-  a.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    void invoke("open_url", { url });
-  });
-}
+import { wireOpenUrlLink } from "../../platform/open-url";
 
 class BulletWidget extends WidgetType {
   toDOM(): HTMLElement {

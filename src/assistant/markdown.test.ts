@@ -15,9 +15,10 @@ describe("renderMarkdown", () => {
   });
 
   it("renders a safe https link and drops javascript: links", () => {
-    expect(renderMarkdown("[ok](https://ex.com) [bad](javascript:alert(1))")).toBe(
-      `<p><a href="https://ex.com">ok</a> <a href="">bad</a></p>`,
-    );
+    const out = renderMarkdown("[ok](https://ex.com) [bad](javascript:alert(1))");
+    expect(out).toContain(`<a href="https://ex.com">ok</a>`);
+    expect(out).toContain("bad");
+    expect(out).not.toContain("javascript:");
   });
 
   it("renders headings h1..h3", () => {
@@ -34,7 +35,7 @@ describe("renderMarkdown", () => {
   it("renders a fenced code block with escaped content (no highlight)", () => {
     const out = renderMarkdown("```js\nconst a = \"<b>\";\n```");
     expect(out).toBe(
-      `<pre class="chat-codeblock"><code>const a = &quot;&lt;b&gt;&quot;;</code></pre>`,
+      `<pre class="chat-codeblock"><code class="language-js">const a = &quot;&lt;b&gt;&quot;;</code></pre>`,
     );
   });
 
@@ -52,7 +53,7 @@ describe("renderMarkdown", () => {
   });
 
   it("renders blockquote", () => {
-    expect(renderMarkdown("> quoted")).toBe(`<blockquote>quoted</blockquote>`);
+    expect(renderMarkdown("> quoted")).toBe(`<blockquote><p>quoted</p></blockquote>`);
   });
 
   it("renders three hyphens as a horizontal rule", () => {

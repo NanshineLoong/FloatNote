@@ -27,6 +27,7 @@ import { clipboardPayload, docFromClipboard, REF_CLIPBOARD_MIME } from "./model"
 import type { ChatScope } from "../../platform/chat-history";
 import type { MentionFile } from "../mention-picker";
 import type { SkillSummary } from "../skill-picker";
+import { markdownEditorExtensions } from "../../shared/markdown/editor";
 
 export interface ComposerOptions {
   /** EditorView 挂载点（取代原 textarea）。 */
@@ -99,6 +100,7 @@ export function mountComposer(opts: ComposerOptions): ComposerHandle {
         EditorView.lineWrapping,
         drawSelection(),
         placeholder(opts.placeholder),
+        ...markdownEditorExtensions(),
         refExtension(),
         keymap.of([
           {

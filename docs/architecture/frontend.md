@@ -5,7 +5,7 @@ FloatNote 使用 Vite 多页面应用：根目录 HTML 是各 WebView 入口。`
 ## 边界
 
 - `src/platform/` 是共享 agent/chat invoke/event gateway 与跨 feature DTO 所在处。feature 自己的窗口命令仍在相应 feature 内调用；跨 feature 合同应放在这里。
-- `src/shared/` 放跨 feature 的 UI、Markdown、escape、快捷键和 toast；不能包含 feature 状态。`src/shared/ui/modal-paper.ts` 统一管理 body-level 纸张弹窗的 inert、焦点边界、Escape、portal 注册和焦点恢复。
+- `src/shared/` 放跨 feature 的 UI、Markdown、escape、快捷键和 toast；不能包含 feature 状态。`src/shared/markdown/render.ts` 是气泡与审查预览共用的安全 GFM renderer，`editor.ts` 提供主笔记与助手输入器共用的 Lezer 方言配置和源码保留型轻量 preview；完整笔记 widget 仍留在 `src/note/`。`src/shared/ui/modal-paper.ts` 统一管理 body-level 纸张弹窗的 inert、焦点边界、Escape、portal 注册和焦点恢复。
 - `src/styles/` 是设计系统 token 层（`primitives` → `semantic` → `base`/`components`，由 `index.css` 聚合并被四个窗口链入）；`src/shared/ui/` 放跨窗口共享组件（Button/Icon/Menu/Scrollbar/EmptyState）。详见 `docs/development/design-system.md`。
 - `src/note/` 管理 CodeMirror 编辑、项目空间、任务、文本标注、图片与笔记窗口布局。
   Markdown 编辑器使用测量式选区层；live preview 只把独占整行的图片替换为
@@ -16,7 +16,7 @@ FloatNote 使用 Vite 多页面应用：根目录 HTML 是各 WebView 入口。`
   metadata 变化后编码 v2 磁盘快照。右键菜单只作用于 Lezer 识别的可见正文，
   tag filter 使用独立只读分段 projection，不折叠或改写 live editor。
   `piece-switcher.ts` 同时管理版本菜单与预览操作条；`version-preview.ts` 只保存预览前正文的状态语义，CodeMirror 的只读切换由 `editor.ts` 提供。版本列表用主标题与小号时间元信息分层显示，普通版本不显示“手动”来源，AI 快照保留低调标识。
-- `src/assistant/` 管理流式聊天、消息 reducer、渲染、技能和 mention 选择器；不得导入 `src/note/` 内部模块。assistant turn 是严格有序的 block 流，连续两个以上 thinking/tool 过程项组成 `process_group`，只有正式 text 会切断过程段；工具状态用稳定 `callId` 更新，不能用“最近一个工具”推断。完整 block 状态与输出显示模式解耦：默认 `compact` 只投影正文、中性状态、错误和流式光标，`detailed` 投影可展开过程段并以流光表示运行项，运行时事件切换只重投影现有状态。取消 turn 会结束 streaming、保留已有部分内容并追加“已中断”状态，不得复用错误块。写权限审批保留在 dock 卡片：`permission-model.ts` 产生语义标题，`permission-dialog.ts` 展示完整创建预览或由 `permission-diff.ts` 生成的双栏行 diff，`permission-allow-button.ts` 处理直接/快照分段写入；`permission-bubble.ts` 按 request id 去重并以 FIFO 顺序逐项审批，完成一个请求只能清除该请求，不能覆盖或清除后来到达的请求；对话 action 行仍只读。长输入通过 `input/overlay.ts` 把现有 `.assistant-input-wrap` 移入 `body` 下的聚焦纸张 portal；Floating 与 Inline 共用同一层级和响应式几何，且始终只保留一个 `EditorView`。普通态 Enter 发送、Shift+Enter 换行；聚焦纸张中 Enter 换行且只能点击发送按钮提交。收起或销毁时宿主回到当前 dock，发送仅在 sidecar 返回 request id 后清空并收起，失败则保留草稿；若握手期间文档继续变化，旧完成回调不得清空或收起这份新草稿。scope 或会话 generation 改变后，旧异步提交也不得更新当前 UI。
+- `src/assistant/` 管理流式聊天、消息 reducer、渲染、技能和 mention 选择器；不得导入 `src/note/` 内部模块。assistant turn 是严格有序的 block 流，连续两个以上 thinking/tool 过程项组成 `process_group`，只有正式 text 会切断过程段；工具状态用稳定 `callId` 更新，不能用“最近一个工具”推断。完整 block 状态与输出显示模式解耦：默认 `compact` 只投影正文、中性状态、错误和流式光标，`detailed` 投影可展开过程段并以流光表示运行项，运行时事件切换只重投影现有状态。AI 与用户气泡使用共享安全 GFM renderer；用户消息进入编辑态后仍编辑原始 Markdown。取消 turn 会结束 streaming、保留已有部分内容并追加“已中断”状态，不得复用错误块。写权限审批保留在 dock 卡片：`permission-model.ts` 产生语义标题，`permission-dialog.ts` 对创建展示完整 Markdown，对 edit/write 默认展示 `permission-diff.ts` 生成的双栏源码 diff，并可切换到完整新版本 Markdown 预览；`permission-allow-button.ts` 处理直接/快照分段写入；`permission-bubble.ts` 按 request id 去重并以 FIFO 顺序逐项审批，完成一个请求只能清除该请求，不能覆盖或清除后来到达的请求；对话 action 行仍只读。长输入通过 `input/overlay.ts` 把现有 `.assistant-input-wrap` 移入 `body` 下的聚焦纸张 portal；Floating 与 Inline 共用同一层级和响应式几何，且始终只保留一个 `EditorView`。普通态 Enter 发送、Shift+Enter 换行；聚焦纸张中 Enter 换行且只能点击发送按钮提交。输入器使用共享 GFM parser 与轻量源码 preview，表格和任务列表不替换成 widget。收起或销毁时宿主回到当前 dock，发送仅在 sidecar 返回 request id 后清空并收起，失败则保留草稿；若握手期间文档继续变化，旧完成回调不得清空或收起这份新草稿。scope 或会话 generation 改变后，旧异步提交也不得更新当前 UI。
 - `src/history/`、`src/popup/`、`src/settings/` 分别是历史、选中文本弹窗和设置窗口的 UI。
 
 设置窗口由 `src/settings/main.ts` 装配，`shell.ts` 管理原生标题栏下的侧栏与分类

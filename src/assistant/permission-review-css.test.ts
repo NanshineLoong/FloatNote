@@ -17,4 +17,14 @@ describe("permission review CSS", () => {
     expect(css).toMatch(/\.perm-diff-scroll\s*\{[^}]*overflow:\s*auto;/s);
     expect(css).toMatch(/\.perm-diff\s*\{[^}]*grid-template-columns:\s*minmax\(320px, 1fr\) minmax\(320px, 1fr\);[^}]*min-width:\s*640px;/s);
   });
+
+  it("keeps review tabs fixed above one scrollable panel", () => {
+    expect(css).toMatch(/\.perm-dialog-body\.has-tabs\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\);/s);
+    expect(css).toMatch(/\.perm-review-panel\s*\{[^}]*overflow:\s*hidden;/s);
+  });
+
+  it("makes Markdown tables and code blocks scroll without widening their surface", () => {
+    expect(css).toMatch(/\.fn-markdown table\s*\{[^}]*min-width:\s*100%;/s);
+    expect(css).toMatch(/\.fn-markdown pre\s*\{[^}]*overflow-x:\s*auto;/s);
+  });
 });

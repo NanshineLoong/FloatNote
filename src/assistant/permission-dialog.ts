@@ -22,6 +22,7 @@ export function createPermissionDialog(options: PermissionDialogOptions): Permis
   let allow: PermissionAllowButtonHandle | null = null;
   let deny: HTMLButtonElement | null = null;
   let closeButton: HTMLButtonElement | null = null;
+  let tabButtons: HTMLButtonElement[] = [];
   const modal = createModalPaper({
     ariaLabel: "写入审查",
     layerClass: "perm-dialog",
@@ -89,22 +90,79 @@ export function createPermissionDialog(options: PermissionDialogOptions): Permis
       body.appendChild(article);
       return body;
     }
-    try {
-      body.appendChild(renderDiff(request));
-    } catch {
-      const fallback = document.createElement("div");
-      fallback.className = "perm-diff-fallback";
-      for (const [label, content] of [["原版本", request.old_content], ["新版本", request.new_content]] as const) {
-        const column = document.createElement("section");
-        const heading = document.createElement("h3");
-        heading.textContent = label;
-        const pre = document.createElement("pre");
-        pre.textContent = content;
-        column.append(heading, pre);
-        fallback.appendChild(column);
+    const tabs = document.createElement("div");
+    body.classList.add("has-tabs");
+    tabs.className = "perm-review-tabs";
+    tabs.setAttribute("role", "tablist");
+    tabs.setAttribute("aria-label", "审查视图");
+    const panel = document.createElement("div");
+    panel.className = "perm-review-panel";
+    panel.id = `perm-review-panel-${request.request_id}`;
+    panel.setAttribute("role", "tabpanel");
+    const diffTab = document.createElement("button");
+    diffTab.type = "button";
+    diffTab.className = "perm-review-tab";
+    diffTab.setAttribute("role", "tab");
+    diffTab.setAttribute("aria-controls", panel.id);
+    diffTab.textContent = "变更";
+    const previewTab = document.createElement("button");
+    previewTab.type = "button";
+    previewTab.className = "perm-review-tab";
+    previewTab.setAttribute("role", "tab");
+    previewTab.setAttribute("aria-controls", panel.id);
+    previewTab.textContent = "新版本预览";
+
+    const showDiff = () => {
+      diffTab.setAttribute("aria-selected", "true");
+      diffTab.tabIndex = 0;
+      previewTab.setAttribute("aria-selected", "false");
+      previewTab.tabIndex = -1;
+      try {
+        panel.replaceChildren(renderDiff(request));
+      } catch {
+        const fallback = document.createElement("div");
+        fallback.className = "perm-diff-fallback";
+        for (const [label, content] of [["原版本", request.old_content], ["新版本", request.new_content]] as const) {
+          const column = document.createElement("section");
+          const heading = document.createElement("h3");
+          heading.textContent = label;
+          const pre = document.createElement("pre");
+          pre.textContent = content;
+          column.append(heading, pre);
+          fallback.appendChild(column);
+        }
+        panel.replaceChildren(fallback);
       }
-      body.appendChild(fallback);
-    }
+    };
+    const showPreview = () => {
+      diffTab.setAttribute("aria-selected", "false");
+      diffTab.tabIndex = -1;
+      previewTab.setAttribute("aria-selected", "true");
+      previewTab.tabIndex = 0;
+      const article = document.createElement("article");
+      article.className = "perm-dialog-markdown";
+      if (request.new_content) fillMarkdown(article, request.new_content);
+      else article.textContent = "空文档";
+      panel.replaceChildren(article);
+    };
+    diffTab.addEventListener("click", showDiff);
+    previewTab.addEventListener("click", showPreview);
+    diffTab.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+      event.preventDefault();
+      showPreview();
+      previewTab.focus();
+    });
+    previewTab.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+      event.preventDefault();
+      showDiff();
+      diffTab.focus();
+    });
+    tabs.append(diffTab, previewTab);
+    tabButtons = [diffTab, previewTab];
+    body.append(tabs, panel);
+    showDiff();
     return body;
   }
 
@@ -113,6 +171,7 @@ export function createPermissionDialog(options: PermissionDialogOptions): Permis
       if (modal.isOpen()) handle.close(false);
       allow?.destroy();
       allow = null;
+      tabButtons = [];
       const header = document.createElement("header");
       header.className = "perm-dialog-header";
       const title = document.createElement("h2");
@@ -152,6 +211,7 @@ export function createPermissionDialog(options: PermissionDialogOptions): Permis
       allow?.setDisabled(disabled);
       if (deny) deny.disabled = disabled;
       if (closeButton) closeButton.disabled = disabled;
+      for (const tab of tabButtons) tab.disabled = disabled;
     },
     destroy() {
       allow?.destroy();

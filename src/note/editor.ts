@@ -1,6 +1,5 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { Autolink, Strikethrough, Table, TaskList } from "@lezer/markdown";
 import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import { Compartment, EditorState, Transaction, type Extension } from "@codemirror/state";
 import { EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
@@ -15,6 +14,7 @@ import { imageDropHandler } from "./image-drop";
 import { markdownInputKeymap } from "./markdown-keymap";
 import { preciseSelectionRendering } from "./selection-render";
 import { hardBreakSpacing } from "./hard-break-spacing";
+import { sharedMarkdownExtensions } from "../shared/markdown/editor";
 
 const highlight = HighlightStyle.define([
   { tag: tags.heading, fontWeight: "600" },
@@ -163,7 +163,7 @@ export function createEditor(
       preciseSelectionRendering,
       hardBreakSpacing,
       keymap.of([...defaultKeymap, ...historyKeymap]),
-      markdown({ extensions: [Autolink, Table, Strikethrough, TaskList], codeLanguages }),
+      markdown({ extensions: sharedMarkdownExtensions, codeLanguages }),
       syntaxHighlighting(highlight),
       // Refresh the image-widget noteDir map BEFORE the preview plugin rebuilds
       // decorations, so a setDoc (project/document switch) renders images with the

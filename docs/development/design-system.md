@@ -66,6 +66,19 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 候选 popover 位于聚焦层之上，toast 再位于两者之上；动画遵循
 `prefers-reduced-motion`。
 
+## Markdown 表面
+
+AI/用户消息气泡、`create_note` 审查正文和 edit/write 的“新版本预览”统一使用
+`.fn-markdown` 排版层。标题、列表、嵌套引用、只读任务项、代码块和表格只消费
+语义颜色、边框与字体 token；宽表格和代码块在自身表面横向滚动，不扩大气泡或
+纸张。原始 HTML 与自动图片加载关闭，外部链接通过 Rust `open_url` allowlist
+打开，不能导航当前 WebView。
+
+助手紧凑输入器和聚焦纸张继续共享一个 CodeMirror `EditorView`。它们使用
+`src/shared/markdown/editor.ts` 的 GFM 方言和轻量源码装饰：块层级与内联强调有
+预览样式，但表格、任务列表及 Markdown 标记仍可直接编辑；笔记窗口的图片、引用
+卡和可交互表格 widget 不进入共享层。
+
 ## 共享组件（`src/shared/ui/`，`fn-` 前缀）
 
 | 组件 | 文件 | 类名 | 合并的旧重复 |
