@@ -9,6 +9,7 @@ import { createButton } from "../shared/ui/button";
 import { initializeAppearance } from "../shared/appearance";
 import { createPopupState, reducePopupState, type PopupState } from "./state";
 import { createLatestTaskQueue } from "./latest-task";
+import { shouldSendPopupQuestion } from "./keyboard";
 import {
   popupSelectionSnapshot,
   translatePopupSelection,
@@ -60,6 +61,16 @@ function requestId(): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function setInteractionMode(generationId: number, interactive: boolean): Promise<boolean> {
+  try {
+    await invoke("set_popup_interaction_mode", { generationId, interactive });
+    return true;
+  } catch (error) {
+    if (state?.generationId === generationId) showToast(errorMessage(error));
+    return false;
+  }
 }
 
 function clearHideTimer(): void {
@@ -161,11 +172,7 @@ function render(): void {
 }
 
 function wirePanelActions(): void {
-  panelEl.querySelector<HTMLButtonElement>(".back")?.addEventListener("click", () => {
-    if (!state) return;
-    state = reducePopupState(state, { type: "back" });
-    render();
-  });
+  panelEl.querySelector<HTMLButtonElement>(".back")?.addEventListener("click", () => void backToActions());
   panelEl.querySelector<HTMLButtonElement>(".close")?.addEventListener("click", () => void dismiss());
   panelEl.querySelector<HTMLButtonElement>(".open-settings")?.addEventListener("click", () => void invoke("open_ai_settings"));
   panelEl.querySelector<HTMLButtonElement>(".copy")?.addEventListener("click", async () => {
@@ -186,7 +193,7 @@ function wirePanelActions(): void {
     if (send) send.disabled = !textarea.value.trim();
   });
   textarea?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (shouldSendPopupQuestion(event)) {
       event.preventDefault();
       void sendQuestion();
     }
@@ -235,9 +242,21 @@ async function startTranslation(): Promise<void> {
 async function editQuestion(): Promise<void> {
   if (!state || state.view.kind !== "actions") return;
   const generationId = state.generationId;
+  if (!(await setInteractionMode(generationId, true))) return;
+  if (!state || state.generationId !== generationId || state.view.kind !== "actions") return;
   state = reducePopupState(state, { type: "question-edit" });
   render();
   if (await loadSummary(generationId)) render();
+}
+
+async function backToActions(): Promise<void> {
+  if (!state) return;
+  const generationId = state.generationId;
+  const leavingQuestion = state.view.kind === "question-editing" || state.view.kind === "question-error";
+  if (leavingQuestion && !(await setInteractionMode(generationId, false))) return;
+  if (!state || state.generationId !== generationId) return;
+  state = reducePopupState(state, { type: "back" });
+  render();
 }
 
 async function sendQuestion(): Promise<void> {
@@ -277,7 +296,7 @@ async function showAt(payload: PopupPayload): Promise<void> {
 
 async function setupListeners(): Promise<void> {
   await listen<PopupPayload>("popup-payload", (event) => void showAt(event.payload));
-  await listen<PopupQuestionResult>("popup-question-result", (event) => {
+  await listen<PopupQuestionResult>("popup-question-result", async (event) => {
     if (!state || state.view.kind !== "question-sending") return;
     const result = event.payload;
     if (result.generationId !== state.generationId || result.popupRequestId !== state.view.popupRequestId) return;
@@ -298,6 +317,10 @@ async function setupListeners(): Promise<void> {
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || !state) return;
     event.preventDefault();
+    if (state.view.kind === "question-editing" || state.view.kind === "question-error") {
+      void backToActions();
+      return;
+    }
     state = reducePopupState(state, { type: "escape" });
     render();
   });

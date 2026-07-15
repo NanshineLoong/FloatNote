@@ -28,6 +28,10 @@ fn point_in_rect(point: Point, rect: LogicalRect) -> bool {
         && point.y <= rect.y + rect.height
 }
 
+fn should_dismiss_for_key(popup_visible: bool, popup_interactive: bool) -> bool {
+    popup_visible && !popup_interactive
+}
+
 #[cfg(target_os = "macos")]
 mod cg {
     use std::ffi::c_void;
@@ -205,7 +209,10 @@ fn worker_loop(app: AppHandle, receiver: mpsc::Receiver<GlobalEvent>) {
     while let Ok(event) = receiver.recv() {
         if event.event_type == cg::KCG_KEY_DOWN {
             let _ = event.key_code;
-            if crate::popup::is_visible(&app) {
+            if should_dismiss_for_key(
+                crate::popup::is_visible(&app),
+                crate::popup::is_interactive(&app),
+            ) {
                 crate::popup::dismiss_active(&app);
             }
             continue;
@@ -370,5 +377,12 @@ mod tests {
         assert!(point_in_rect(Point { x: 180.0, y: 240.0 }, rect));
         assert!(!point_in_rect(Point { x: 99.0, y: 220.0 }, rect));
         assert!(!point_in_rect(Point { x: 140.0, y: 241.0 }, rect));
+    }
+
+    #[test]
+    fn global_key_dismissal_only_applies_to_passive_popups() {
+        assert!(!should_dismiss_for_key(false, false));
+        assert!(should_dismiss_for_key(true, false));
+        assert!(!should_dismiss_for_key(true, true));
     }
 }

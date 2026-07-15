@@ -16,6 +16,7 @@ pub struct PopupCache {
 struct PopupSession {
     generation_id: u64,
     capture: Option<CachedCapture>,
+    interactive: bool,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -48,6 +49,7 @@ impl PopupCache {
         *self.session.lock().unwrap() = Some(PopupSession {
             generation_id,
             capture: Some(CachedCapture { text, html, source }),
+            interactive: false,
         });
         generation_id
     }
@@ -57,6 +59,7 @@ impl PopupCache {
         *self.session.lock().unwrap() = Some(PopupSession {
             generation_id,
             capture: None,
+            interactive: false,
         });
         generation_id
     }
@@ -80,6 +83,26 @@ impl PopupCache {
             return None;
         }
         session.capture.clone()
+    }
+
+    pub fn set_interactive(&self, generation_id: u64, interactive: bool) -> bool {
+        let mut slot = self.session.lock().unwrap();
+        let Some(session) = slot.as_mut() else {
+            return false;
+        };
+        if session.generation_id != generation_id {
+            return false;
+        }
+        session.interactive = interactive;
+        true
+    }
+
+    pub fn is_interactive(&self) -> bool {
+        self.session
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(|session| session.interactive)
     }
 
     pub fn complete(&self, generation_id: u64) -> bool {
@@ -147,6 +170,10 @@ fn ensure_ai_ready(state: &AppState) -> Result<(), String> {
     Ok(())
 }
 
+fn should_accept_interaction_mode_update(interactive: bool, matched_generation: bool) -> bool {
+    matched_generation || !interactive
+}
+
 #[tauri::command]
 pub fn popup_selection_snapshot(
     generation_id: u64,
@@ -162,6 +189,20 @@ pub fn popup_ai_selection_snapshot(
 ) -> Result<CachedCapture, String> {
     ensure_ai_ready(&state)?;
     validate_ai_capture(state.popup_cache.snapshot(generation_id))
+}
+
+#[tauri::command]
+pub fn set_popup_interaction_mode(
+    generation_id: u64,
+    interactive: bool,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let matched_generation = state
+        .popup_cache
+        .set_interactive(generation_id, interactive);
+    should_accept_interaction_mode_update(interactive, matched_generation)
+        .then_some(())
+        .ok_or_else(|| "选区已失效，请重新选择".to_string())
 }
 
 #[tauri::command]
@@ -398,6 +439,11 @@ pub fn is_visible(app: &AppHandle) -> bool {
         .unwrap_or(false)
 }
 
+pub fn is_interactive(app: &AppHandle) -> bool {
+    app.try_state::<AppState>()
+        .is_some_and(|state| state.popup_cache.is_interactive())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -467,6 +513,28 @@ mod tests {
         let generation = cache.begin_empty();
         assert!(cache.clear_if(generation));
         assert!(!cache.clear_if(generation));
+    }
+
+    #[test]
+    fn popup_interaction_mode_is_generation_aware() {
+        let cache = PopupCache::new();
+        let stale = cache.set("old".to_string(), None, None);
+        let current = cache.set("new".to_string(), None, None);
+
+        assert!(!cache.is_interactive());
+        assert!(!cache.set_interactive(stale, true));
+        assert!(!cache.is_interactive());
+        assert!(cache.set_interactive(current, true));
+        assert!(cache.is_interactive());
+        assert!(cache.set_interactive(current, false));
+        assert!(!cache.is_interactive());
+    }
+
+    #[test]
+    fn deactivation_is_idempotent_after_the_popup_session_completes() {
+        assert!(should_accept_interaction_mode_update(false, false));
+        assert!(!should_accept_interaction_mode_update(true, false));
+        assert!(should_accept_interaction_mode_update(true, true));
     }
 
     #[test]

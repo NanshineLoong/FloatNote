@@ -237,6 +237,7 @@ pub fn run() {
             popup::submit_popup_capture,
             popup::popup_selection_snapshot,
             popup::popup_ai_selection_snapshot,
+            popup::set_popup_interaction_mode,
             popup::complete_popup_question,
             popup::translate_popup_selection,
             popup::open_ai_settings,

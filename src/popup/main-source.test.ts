@@ -23,4 +23,18 @@ describe("selection popup window lifecycle", () => {
   it("defensively suppresses empty automatic payloads", () => {
     expect(source).toContain('payload.origin === "auto" && !payload.hasText');
   });
+
+  it("synchronizes the question input interaction mode with the backend", () => {
+    expect(source).toContain('invoke("set_popup_interaction_mode"');
+    expect(source).toContain("if (state?.generationId === generationId) showToast");
+  });
+
+  it("uses the popup keyboard policy before sending a question from Enter", () => {
+    expect(source).toContain("shouldSendPopupQuestion");
+  });
+
+  it("does not deactivate an already-completed session before showing a sent warning", () => {
+    const sentBranch = source.match(/if \(result\.sent\) \{([\s\S]*?)\n    \}/)?.[1] ?? "";
+    expect(sentBranch).not.toContain("setInteractionMode");
+  });
 });
