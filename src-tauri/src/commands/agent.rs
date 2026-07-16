@@ -828,7 +828,7 @@ mod skill_catalog_tests {
             vec![
                 ("organize".into(), "梳理材料".into()),
                 ("plan-actions".into(), "行动规划".into()),
-                ("tutor".into(), "拷问学习".into()),
+                ("tutor".into(), "问到真懂".into()),
                 ("write".into(), "文章写作".into()),
             ]
         );
