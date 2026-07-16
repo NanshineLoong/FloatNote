@@ -16,7 +16,7 @@
 4. `read_note`、`list_notes`、`create_note`、`edit_note`、`write_note` 和 `read_skill` 与 Pi 的 `ls/read/find/grep/edit/write` 形成两套相似但不兼容的文件操作概念；
 5. Inbox 的磁盘文件含有标签定义、文本标注和引用来源 marker。直接开放本地文件工具会暴露存储协议，并使读取、搜索、编辑看到不同的文档；
 6. 当前写入确认发生在工具实现内部。若迁移到 Pi `tool_call` hook，必须保留结构化 diff、快照、陈旧内容检查和原子写入，而不能退化成普通 `confirm(title, message)`；
-7. 工具更名会影响前端工具标题、权限卡、会话历史恢复和动作状态，不能只修改 sidecar。
+7. 工具更名会影响前端工具标题、权限卡和动作状态，不能只修改 sidecar。
 
 因此，本设计把目标从“缩短 system prompt”扩展为“建立同源、可达、受限的 Agent 运行时”。薄 prompt 仍是其中一部分，但不再单独承担工具与 Skills 聚合。
 
@@ -41,6 +41,7 @@
 - 不在本次实现通用 `ExtensionUIContext` 的 `confirm/select/input/notify` 前端桥；
 - 不修改 Inbox v2 磁盘编码，也不删除共享 codec；
 - 不修改 Web 搜索提供者、网页提取提供者、设置项或网络策略；
+- 不兼容改造前的 Agent 会话、旧工具名或旧 tool-call 展示数据；开发期测试会话在实施前直接清除，不增加迁移代码；
 - 不新增 Agent 层级、自动模式路由或新的笔记种类。
 
 ## 3. 总体架构
@@ -385,7 +386,7 @@ mutation_commit_result → 工具结果
 - `write_note`、`create_note` → `write`；
 - 新增 `grep`、`find` 的标题和图标语义。
 
-涉及 `permission-bubble.ts`、`action-card.ts`、`permission-model.ts`、`tool-title.ts` 以及会话恢复 reducer 中的只读/写入工具判断。只读工具继续显示紧凑动作行；写入审核仍只在 dock 权限卡和完整 dialog 中交互。
+涉及 `permission-bubble.ts`、`action-card.ts`、`permission-model.ts`、`tool-title.ts` 以及 reducer 中的只读/写入工具判断。只读工具继续显示紧凑动作行；写入审核仍只在 dock 权限卡和完整 dialog 中交互。
 
 ### 11.2 权限卡
 
@@ -403,7 +404,9 @@ mutation_commit_result → 工具结果
 - `permission_resolve` 只表示用户决定，不提前表示磁盘提交成功；
 - 允许后进入“正在写入”，收到 commit result 后才进入 succeeded/failed；
 - deny 后即使 Pi hook 产生 blocked tool result，动作状态仍保持 rejected；
-- 会话历史恢复需识别新工具名，并对旧会话中的旧名称保持只读兼容，不重写历史文件。
+- 新会话和历史记录只识别新工具名；不保留旧名称别名、旧 action block 分支或旧 session 数据迁移。
+
+本设计确认时，本机 `~/.floatnote/chat-history` 中的开发期测试会话已直接删除。实现代码不需要检测或清理旧格式；其他开发环境若保留了测试会话，应在切换工具注册表前手工清空同一目录。
 
 本次不增加 Web 设置 UI，也不增加通用 Pi extension 对话 UI。
 
@@ -431,7 +434,7 @@ mutation_commit_result → 工具结果
 3. 注册只读 Pi 风格工具，删除 `read_note/list_notes/read_skill` 的模型接口；
 4. 将现有笔记与标签变换重构为 `prepareMutation`，实现 Pi `edit/write` schema；
 5. 增加 permission extension、review/lease/commit 协议与 Rust 状态机；
-6. 更新前端标题、权限卡、动作 reducer 和旧会话兼容；
+6. 更新前端标题、权限卡和动作 reducer，只支持新工具名；
 7. 将现有 Web tools 以不改变实现的方式接入内联 extension；
 8. 替换薄 system prompt，删除手工 Skill formatter 和旧工具说明；
 9. 更新架构文档、sidecar/backend AGENTS 模块图并运行完整验证。
@@ -473,7 +476,7 @@ Skills：
 
 前端：
 
-- 新旧工具名均能恢复为正确历史标题；
+- 新工具名能生成并恢复为正确历史标题，代码中不存在旧工具名兼容分支；
 - `write` 创建/覆写、`edit` 和标签工具呈现正确审核内容；
 - allow、deny、commit failure 的 reducer 状态不互相覆盖；
 - 只读工具和 Web 工具保持紧凑展示。
@@ -520,7 +523,7 @@ Windows 无法在当前 macOS 环境执行原生 UI 流时，至少以 Rust/Type
 - **Hook 审核与工具执行脱节**：使用 Rust 生成的一次性 lease，提交时再次校验 tool call、会话和旧内容。
 - **多工具并发产生过期预览**：变更工具串行执行，提交仍做内容等值检查。
 - **Skills 热重载产生目录/读取竞态**：完整注册表原子替换，活动 session 延迟 reload，白名单与目录始终取同一版本。
-- **工具更名破坏历史 UI**：新 reducer 支持旧名称只读恢复，不迁移既有 session 文件。
+- **工具更名残留双轨代码**：实施前清除开发期测试会话，前端与 sidecar 只注册、解析和展示新工具名。
 - **薄 prompt 导致领域语义丢失**：保留最小 `<floatnote_workspace>`，其余通过 tool descriptions、实际 `ls` 结果和 Skills 提供。
 - **默认文件工具误注册**：测试最终 active tools 与执行来源，确保不存在 Pi 本地 read/write/edit/grep 实现。
 - **Web 行为意外变化**：对 `web-tools.ts` 保留现有测试，并把实现不变列为验收项。
@@ -534,7 +537,7 @@ Windows 无法在当前 macOS 环境执行原生 UI 流时，至少以 Rust/Type
 - 六个工具不能访问 project space 和启用 Skill 资源范围之外的文件；
 - Inbox 读取和搜索不暴露 marker，Agent 能获得语义化标签、标注片段与引用来源；
 - `edit/write` 和标签工具全部经过 hook、结构化审核、一次性 lease、陈旧检查与原子提交；
-- 现有 diff、标签预览、拒绝和快照体验保留，前端能正确展示新工具名和旧会话；
+- 现有 diff、标签预览、拒绝和快照体验保留，前端只使用新工具名生成和恢复会话；
 - `web_search` 与 `web_fetch` 的底层实现、网络策略和用户可见行为不变；
 - TypeScript、sidecar、Rust 和 UI 回归测试通过，macOS 原生流程通过，并完成规定的 Windows 兼容验证；
 - 相关稳定架构文档与最终代码保持一致。
