@@ -1,122 +1,89 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import {
-  loadSkillPaths,
-  listSkills,
-  readSkillBody,
-  formatSkillsForSystemPrompt,
-} from "./skills.js";
+import path from "node:path";
+import { SessionSkillView, SkillRegistry } from "./skills.js";
 
-/** Materialize a skill directory with SKILL.md (frontmatter + body). */
-function writeSkill(root: string, name: string, frontmatter: string, body: string): string {
-  const dir = join(root, name);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "SKILL.md"), `---\n${frontmatter}\n---\n${body}`);
+const roots: string[] = [];
+
+function tempRoot(): string {
+  const root = mkdtempSync(path.join(tmpdir(), "floatnote-skills-"));
+  roots.push(root);
+  return root;
+}
+
+function writeSkill(root: string, name: string, description = "追问"): string {
+  const dir = path.join(root, name);
+  mkdirSync(path.join(dir, "references"), { recursive: true });
+  writeFileSync(
+    path.join(dir, "SKILL.md"),
+    `---\nname: ${name}\ndescription: ${description}\n---\n正文`,
+  );
+  writeFileSync(path.join(dir, "references", "guide.md"), "guide");
   return dir;
 }
 
-function tempRoot(): string {
-  return mkdtempSync(join(tmpdir(), "floatnote-skills-"));
-}
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
 
-describe("skills module", () => {
-  let root: string;
-  beforeEach(() => {
-    root = tempRoot();
-    // reset module state to empty before each test
-    loadSkillPaths([]);
+describe("SkillRegistry", () => {
+  it("returns Pi Skill objects from one atomic snapshot", () => {
+    const root = tempRoot();
+    writeSkill(root, "socratic-review");
+    const registry = new SkillRegistry();
+    const snapshot = registry.replace([root], []);
+    expect(snapshot.skills().map((skill) => skill.name)).toEqual(["socratic-review"]);
+    expect(snapshot.summaries()).toEqual([{ name: "socratic-review", description: "追问" }]);
   });
 
-  it("enumerates loaded skills with name + description", () => {
-    writeSkill(root, "socratic-review", 'name: socratic-review\ndescription: 苏格拉底式追问当前 piece', "正文指南");
-    loadSkillPaths([root]);
-    expect(listSkills()).toEqual([{ name: "socratic-review", description: "苏格拉底式追问当前 piece" }]);
+  it("allows referenced text files only inside an enabled skill baseDir", () => {
+    const root = tempRoot();
+    const skillDir = writeSkill(root, "socratic-review");
+    const outside = tempRoot();
+    writeFileSync(path.join(outside, "secret.md"), "secret");
+    const registry = new SkillRegistry();
+    const snapshot = registry.replace([root], []);
+    const skill = snapshot.skills()[0];
+    expect(snapshot.resolveReadableFile(skill.filePath)).toBe(skill.filePath);
+    expect(snapshot.resolveReadableFile(path.join(skill.baseDir, "references", "guide.md")))
+      .toBe(path.join(skill.baseDir, "references", "guide.md"));
+    expect(snapshot.resolveReadableFile(path.join(skill.baseDir, "..", "secret.md"))).toBeNull();
+    symlinkSync(path.join(outside, "secret.md"), path.join(skillDir, "references", "escape.md"));
+    expect(snapshot.resolveReadableFile(path.join(skillDir, "references", "escape.md"))).toBeNull();
   });
 
-  it("skips skills missing a description (Pi standard behavior)", () => {
-    writeSkill(root, "no-desc", "name: no-desc", "正文");
-    writeSkill(root, "with-desc", 'name: with-desc\ndescription: 有描述', "正文");
-    loadSkillPaths([root]);
-    expect(listSkills().map((s) => s.name)).toEqual(["with-desc"]);
+  it("keeps an active session on one complete snapshot until it swaps", () => {
+    const root = tempRoot();
+    writeSkill(root, "socratic-review");
+    const registry = new SkillRegistry();
+    const first = registry.replace([root], []);
+    const view = new SessionSkillView(first);
+    const file = first.skills()[0].filePath;
+    const second = registry.replace([root], ["socratic-review"]);
+    expect(view.resolveReadableFile(file)).toBe(file);
+    view.replace(second);
+    expect(view.resolveReadableFile(file)).toBeNull();
   });
 
-  it("readSkillBody returns full SKILL.md text for a known name", () => {
-    writeSkill(root, "structure-piece", 'name: structure-piece\ndescription: 组织 piece 结构', "# 指南\n做这件事");
-    loadSkillPaths([root]);
-    const body = readSkillBody("structure-piece");
-    expect(body).toContain("---");
-    expect(body).toContain("name: structure-piece");
-    expect(body).toContain("# 指南");
-  });
-
-  it("readSkillBody returns null for an unknown name", () => {
-    loadSkillPaths([root]);
-    expect(readSkillBody("does-not-exist")).toBeNull();
-  });
-
-  it("readSkillBody accepts a name, not a path (no traversal)", () => {
-    writeSkill(root, "real", 'name: real\ndescription: real', "正文");
-    loadSkillPaths([root]);
-    // a path-like string is just an unknown name → null, never reads the file
-    expect(readSkillBody(join(root, "real", "SKILL.md"))).toBeNull();
-  });
-
-  it("formatSkillsForSystemPrompt contains each skill description (XML)", () => {
-    writeSkill(root, "socratic-review", 'name: socratic-review\ndescription: 追问薄弱处', "正文");
-    writeSkill(root, "inbox-to-actions", 'name: inbox-to-actions\ndescription: 提炼行动项', "正文");
-    loadSkillPaths([root]);
-    const out = formatSkillsForSystemPrompt();
-    expect(out).toContain("available_skills");
-    expect(out).toContain("追问薄弱处");
-    expect(out).toContain("提炼行动项");
-  });
-
-  it("formatSkillsForSystemPrompt is empty when no skills loaded", () => {
-    loadSkillPaths([root]);
-    expect(formatSkillsForSystemPrompt()).toBe("");
-  });
-
-  it("aggregates across multiple directories", () => {
+  it("aggregates directories, filters disabled skills, and keeps the first duplicate", () => {
     const rootA = tempRoot();
     const rootB = tempRoot();
-    writeSkill(rootA, "skill-a", 'name: skill-a\ndescription: A', "正文");
-    writeSkill(rootB, "skill-b", 'name: skill-b\ndescription: B', "正文");
-    loadSkillPaths([rootA, rootB]);
-    expect(listSkills().map((s) => s.name).sort()).toEqual(["skill-a", "skill-b"]);
-    rmSync(rootA, { recursive: true, force: true });
-    rmSync(rootB, { recursive: true, force: true });
+    writeSkill(rootA, "dup", "first");
+    writeSkill(rootA, "disabled", "disabled");
+    writeSkill(rootB, "dup", "second");
+    writeSkill(rootB, "other", "other");
+    const snapshot = new SkillRegistry().replace([rootA, rootB], ["disabled"]);
+    expect(snapshot.summaries()).toEqual([
+      { name: "dup", description: "first" },
+      { name: "other", description: "other" },
+    ]);
   });
 
-  it("dedupes by name keeping the first occurrence", () => {
-    const rootA = tempRoot();
-    const rootB = tempRoot();
-    writeSkill(rootA, "dup", 'name: dup\ndescription: 来自 A', "正文 A");
-    writeSkill(rootB, "dup", 'name: dup\ndescription: 来自 B', "正文 B");
-    loadSkillPaths([rootA, rootB]);
-    expect(listSkills()).toEqual([{ name: "dup", description: "来自 A" }]);
-    expect(readSkillBody("dup")).toContain("正文 A");
-    rmSync(rootA, { recursive: true, force: true });
-    rmSync(rootB, { recursive: true, force: true });
+  it("treats missing and empty paths as empty inputs", () => {
+    const root = tempRoot();
+    const registry = new SkillRegistry();
+    expect(() => registry.replace([path.join(root, "missing"), ""], [])).not.toThrow();
+    expect(registry.snapshot().skills()).toEqual([]);
   });
-
-  it("missing/empty directories contribute no skills and do not throw", () => {
-    expect(() => loadSkillPaths([join(root, "does-not-exist"), ""])).not.toThrow();
-    expect(listSkills()).toEqual([]);
-  });
-
-  it("excludes disable-model-invocation skills from the prompt but keeps them listed", () => {
-    // Pi excludes disableModelInvocation skills from formatSkillsForPrompt.
-    writeSkill(root, "explicit-only", 'name: explicit-only\ndescription: 仅显式\ndisable-model-invocation: true', "正文");
-    writeSkill(root, "auto", 'name: auto\ndescription: 自动', "正文");
-    loadSkillPaths([root]);
-    const prompt = formatSkillsForSystemPrompt();
-    expect(prompt).toContain("自动");
-    expect(prompt).not.toContain("仅显式");
-    // but listSkills still surfaces it for the picker
-    expect(listSkills().map((s) => s.name)).toContain("explicit-only");
-  });
-
-  if (existsSync(root)) rmSync(root, { recursive: true, force: true });
 });

@@ -1,5 +1,5 @@
 import { complete } from "@earendil-works/pi-ai/compat";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import type { Context } from "@earendil-works/pi-ai";
 import {
   AuthStorage,
@@ -15,7 +15,7 @@ import {
 import { createNoteTools, type CreateNoteResult, type NoteListEntry, type WriteResult } from "./note-tools.js";
 import { createDefaultWebTools } from "./web-tools.js";
 import { TUTOR_SYSTEM_PROMPT } from "./tutor-prompt.js";
-import { listSkills as listSkillsState, readSkillBody, loadSkillPaths, formatSkillsForSystemPrompt } from "./skills.js";
+import { SessionSkillView, SkillRegistry, type SkillSnapshot } from "./skills.js";
 import type { ChatDisplayBlock, ChatDisplayMessage, EditPreview, HostToSidecar, NoteTarget, PromptRef, SidecarToHost } from "./protocol.js";
 import { buildAgentModel, resolveAgentConfig, sanitizeAgentError, type AgentConfig } from "./model.js";
 import { translateEvent } from "./event-translate.js";
@@ -29,6 +29,7 @@ export interface SessionLike {
   sessionManager?: Pick<PiSessionManager, "getBranch" | "getSessionFile">;
   subscribe(listener: (event: AgentSessionEvent) => void): () => void;
   prompt(text: string): Promise<void>;
+  reload(): Promise<void>;
   /** Navigate through the session tree and rebuild Pi's in-memory model context. */
   navigateTree(targetId: string, options?: { summarize?: boolean }): Promise<{ cancelled: boolean }>;
   abort(): Promise<void>;
@@ -39,7 +40,12 @@ export type SessionFactory = (
   cfg: AgentConfig,
   tools: ToolDefinition[],
   sessionManager: PiSessionManager,
+  resources: SessionResources,
 ) => Promise<SessionLike>;
+
+export interface SessionResources {
+  skillView: SessionSkillView;
+}
 
 export interface AgentRunnerOptions {
   /** Emit a protocol line to the host. */
@@ -79,6 +85,9 @@ export class AgentRunner {
   private cfg?: AgentConfig;
   private readonly sessions = new Map<string, SessionLike>();
   private readonly sessionManagers = new Map<string, PiSessionManager>();
+  private readonly skillRegistry = new SkillRegistry();
+  private readonly skillViews = new Map<string, SessionSkillView>();
+  private readonly dirtySkillSessions = new Map<string, SkillSnapshot>();
   private readonly activeConversations = new Map<string, string>();
   private readonly discardedConversations = new Set<string>();
   private writeSeq = 0;
@@ -98,18 +107,19 @@ export class AgentRunner {
       throw new Error("请等待当前回复完成后再切换 AI 提供商");
     }
     const resolved = resolveAgentConfig(cfg);
-    const replacements = new Map<string, SessionLike>();
+    const replacements = new Map<string, { session: SessionLike; skillView: SessionSkillView }>();
     try {
       for (const [conversationId, sessionManager] of this.sessionManagers) {
         replacements.set(conversationId, await this.createConfiguredSession(resolved, conversationId, sessionManager));
       }
     } catch (error) {
-      for (const session of replacements.values()) session.dispose?.();
+      for (const replacement of replacements.values()) replacement.session.dispose?.();
       throw error;
     }
-    for (const [conversationId, replacement] of replacements) {
+    for (const [conversationId, { session: replacement, skillView }] of replacements) {
       this.sessions.get(conversationId)?.dispose?.();
       this.sessions.set(conversationId, replacement);
+      this.skillViews.set(conversationId, skillView);
     }
     this.cfg = resolved;
   }
@@ -121,17 +131,30 @@ export class AgentRunner {
     for (const session of this.sessions.values()) session.dispose?.();
     this.sessions.clear();
     this.sessionManagers.clear();
+    this.skillViews.clear();
+    this.dirtySkillSessions.clear();
     this.cfg = undefined;
   }
 
-  /** Deliver skill directories from the host; loads them into memory once. */
+  /** Deliver one trusted Skill generation and reload sessions without partial views. */
   async setSkillPaths(paths: string[], disabledSkillNames: string[] = []): Promise<void> {
-    loadSkillPaths(paths, disabledSkillNames);
+    const next = this.skillRegistry.replace(paths, disabledSkillNames);
+    const activeConversationIds = new Set(this.activeConversations.values());
+    for (const [conversationId, session] of this.sessions) {
+      if (activeConversationIds.has(conversationId)) {
+        this.dirtySkillSessions.set(conversationId, next);
+        continue;
+      }
+      const view = this.skillViews.get(conversationId);
+      if (!view) continue;
+      view.replace(next);
+      await session.reload();
+    }
   }
 
   /** Synchronous enumeration of loaded skills (no host round-trip). */
   listSkills(): { name: string; description: string }[] {
-    return listSkillsState();
+    return this.skillRegistry.snapshot().summaries();
   }
 
   async oneShot(task: string, input: string): Promise<string> {
@@ -168,6 +191,8 @@ export class AgentRunner {
     this.sessions.get(conversationId)?.dispose?.();
     this.sessions.delete(conversationId);
     this.sessionManagers.delete(conversationId);
+    this.skillViews.delete(conversationId);
+    this.dirtySkillSessions.delete(conversationId);
     for (const [requestId, activeConversationId] of this.activeConversations) {
       if (activeConversationId === conversationId) this.activeConversations.delete(requestId);
     }
@@ -219,6 +244,16 @@ export class AgentRunner {
     } finally {
       unsubscribe();
       this.activeConversations.delete(req.requestId);
+      const stillActive = [...this.activeConversations.values()].includes(req.conversationId);
+      const next = this.dirtySkillSessions.get(req.conversationId);
+      if (!stillActive && next) {
+        const view = this.skillViews.get(req.conversationId);
+        if (view) {
+          view.replace(next);
+          await session.reload();
+        }
+        this.dirtySkillSessions.delete(req.conversationId);
+      }
     }
   }
 
@@ -276,7 +311,11 @@ export class AgentRunner {
     if (!this.cfg) {
       throw new Error("尚未配置或启用 AI 提供商，请前往设置完成配置并启用。");
     }
-    const session = await this.createConfiguredSession(this.cfg, conversationId, sessionManager);
+    const { session, skillView } = await this.createConfiguredSession(
+      this.cfg,
+      conversationId,
+      sessionManager,
+    );
     if (this.discardedConversations.has(conversationId)) {
       session.dispose?.();
       const orphan = session.sessionFile ?? session.sessionManager?.getSessionFile() ?? sessionManager.getSessionFile();
@@ -286,6 +325,7 @@ export class AgentRunner {
     this.sessions.get(conversationId)?.dispose?.();
     this.sessionManagers.set(conversationId, sessionManager);
     this.sessions.set(conversationId, session);
+    this.skillViews.set(conversationId, skillView);
     const sessionFile = session.sessionFile ?? session.sessionManager?.getSessionFile() ?? sessionManager.getSessionFile();
     if (!sessionFile) {
       throw new Error("persistent session file unavailable");
@@ -315,16 +355,29 @@ export class AgentRunner {
     cfg: AgentConfig,
     conversationId: string,
     sessionManager: PiSessionManager,
-  ): Promise<SessionLike> {
+  ): Promise<{ session: SessionLike; skillView: SessionSkillView }> {
+    const skillView = this.skillViews.get(conversationId)
+      ?? new SessionSkillView(this.skillRegistry.snapshot());
     const noteTools = createNoteTools({
       getNoteText: (target) => this.getNoteText(conversationId, target),
       listNotes: () => this.listNotes(conversationId),
       requestCreateNote: (args) => this.requestCreateNote(conversationId, args),
       requestWrite: (args) => this.requestWrite(conversationId, args),
-      readSkillBody,
+      readSkillBody: (name) => {
+        const skill = skillView.skills().find((candidate) => candidate.name === name);
+        if (!skill) return null;
+        const file = skillView.resolveReadableFile(skill.filePath);
+        if (!file) return null;
+        try {
+          return readFileSync(file, "utf8");
+        } catch {
+          return null;
+        }
+      },
     });
     const tools = [...noteTools, ...createDefaultWebTools()];
-    return this.factory(cfg, tools, sessionManager);
+    const session = await this.factory(cfg, tools, sessionManager, { skillView });
+    return { session, skillView };
   }
 
   private async generateTitle(conversationId: string, userText: string): Promise<void> {
@@ -418,7 +471,7 @@ export class AgentRunner {
 }
 
 /** Build a real Pi tutor session from config. */
-const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager) => {
+const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager, resources) => {
   const authStorage = AuthStorage.inMemory();
   if (cfg.apiKey) {
     authStorage.setRuntimeApiKey(buildAgentModel(cfg).provider, cfg.apiKey);
@@ -434,7 +487,8 @@ const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager) 
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: true,
-    systemPromptOverride: () => TUTOR_SYSTEM_PROMPT + "\n\n" + formatSkillsForSystemPrompt(),
+    skillsOverride: () => ({ skills: resources.skillView.skills(), diagnostics: [] }),
+    systemPromptOverride: () => TUTOR_SYSTEM_PROMPT,
   });
   await resourceLoader.reload();
 

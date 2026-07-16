@@ -8,7 +8,7 @@ import type { SidecarToHost } from "./protocol.js";
 import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { formatSkillsForSystemPrompt } from "./skills.js";
+import type { SessionSkillView } from "./skills.js";
 
 const ev = (e: unknown): AgentSessionEvent => e as AgentSessionEvent;
 
@@ -217,6 +217,7 @@ function fakeSession(script: (emit: (e: AgentSessionEvent) => void) => Promise<v
       await script((e) => listener?.(e));
     },
     async abort() {},
+    async reload() {},
     async navigateTree() {
       return { cancelled: false };
     },
@@ -579,6 +580,69 @@ describe("AgentRunner skills", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  it("reloads an idle session after atomically swapping its Skill view", async () => {
+    const root = mkdtempSync(join(tmpdir(), "floatnote-agent-skills-"));
+    writeSkill(root, "socratic-review", "追问");
+    let view: SessionSkillView | undefined;
+    let reloads = 0;
+    const { session } = fakeSession(async () => {});
+    session.reload = async () => { reloads += 1; };
+    const runner = new AgentRunner({
+      send: () => {},
+      createSession: async (_cfg, _tools, _manager, resources) => {
+        view = resources.skillView;
+        return session;
+      },
+    });
+    await runner.configure({ provider: "anthropic", model: "x" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+
+    await runner.setSkillPaths([root]);
+
+    expect(view?.skills().map((skill) => skill.name)).toEqual(["socratic-review"]);
+    expect(reloads).toBe(1);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("keeps an active session on its old snapshot until the turn settles", async () => {
+    const firstRoot = mkdtempSync(join(tmpdir(), "floatnote-agent-skills-"));
+    const secondRoot = mkdtempSync(join(tmpdir(), "floatnote-agent-skills-"));
+    writeSkill(firstRoot, "first", "first");
+    writeSkill(secondRoot, "second", "second");
+    let view: SessionSkillView | undefined;
+    let releasePrompt: (() => void) | undefined;
+    let reloads = 0;
+    const { session } = fakeSession(async () => {
+      await new Promise<void>((resolve) => { releasePrompt = resolve; });
+    });
+    session.reload = async () => { reloads += 1; };
+    const runner = new AgentRunner({
+      send: () => {},
+      createSession: async (_cfg, _tools, _manager, resources) => {
+        view = resources.skillView;
+        return session;
+      },
+    });
+    await runner.setSkillPaths([firstRoot]);
+    await runner.configure({ provider: "anthropic", model: "x" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+    const prompting = runner.prompt({ requestId: "r1", conversationId: "c1", userText: "hi" });
+    await Promise.resolve();
+
+    await runner.setSkillPaths([secondRoot]);
+    expect(view?.skills().map((skill) => skill.name)).toEqual(["first"]);
+    expect(view?.resolveReadableFile(join(firstRoot, "first", "SKILL.md"))).not.toBeNull();
+    expect(reloads).toBe(0);
+
+    releasePrompt?.();
+    await prompting;
+    expect(view?.skills().map((skill) => skill.name)).toEqual(["second"]);
+    expect(view?.resolveReadableFile(join(firstRoot, "first", "SKILL.md"))).toBeNull();
+    expect(reloads).toBe(1);
+    rmSync(firstRoot, { recursive: true, force: true });
+    rmSync(secondRoot, { recursive: true, force: true });
+  });
+
   it("passes /skill:name args verbatim to session.prompt (native expansion)", async () => {
     const sent: SidecarToHost[] = [];
     let prompted: string | undefined;
@@ -594,17 +658,5 @@ describe("AgentRunner skills", () => {
     await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
     await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "/skill:socratic-review 帮我审一下这篇" });
     expect(prompted).toBe("/skill:socratic-review 帮我审一下这篇");
-  });
-});
-
-describe("defaultCreateSession wiring", () => {
-  it("formatSkillsForSystemPrompt surfaces a loaded skill's description", async () => {
-    const root = mkdtempSync(join(tmpdir(), "floatnote-agent-skills-"));
-    mkdirSync(join(root, "x"), { recursive: true });
-    writeFileSync(join(root, "x", "SKILL.md"), "---\nname: x\ndescription: 描述X\n---\n正文");
-    const runner = new AgentRunner({ send: () => {}, createSession: async () => fakeSession(async () => {}).session });
-    await runner.setSkillPaths([root]);
-    expect(formatSkillsForSystemPrompt()).toContain("描述X");
-    rmSync(root, { recursive: true, force: true });
   });
 });

@@ -1,82 +1,117 @@
 /**
- * Single source of truth for Skills (同源原则).
+ * Atomic registry for the trusted Skills supplied by the Rust host.
  *
- * The skill *descriptions* injected into the system prompt (via
- * `formatSkillsForPrompt`) and the skill *full text* returned by the
- * `read_skill` tool both come from the same in-memory `Skill[]` / body map
- * built here — so a skill advertised in the prompt is always retrievable.
- *
- * Skill directories are resolved by the Rust host (bundled + user-global) and
- * delivered via the `set_skill_paths` protocol message. We load once into
- * memory at delivery time; runtime `readSkillBody` does zero filesystem access.
+ * A session keeps one SkillSnapshot for both Pi's ResourceLoader and Skill
+ * resource reads. Replacing the global registry therefore cannot expose a
+ * catalog from one generation with a read allow-list from another.
  */
-import { existsSync, readFileSync } from "node:fs";
-import {
-  formatSkillsForPrompt,
-  loadSkillsFromDir,
-  type Skill,
-} from "@earendil-works/pi-coding-agent";
+import { realpathSync, statSync } from "node:fs";
+import path from "node:path";
+import { loadSkillsFromDir, type Skill } from "@earendil-works/pi-coding-agent";
 
 export interface SkillSummary {
   name: string;
   description: string;
 }
 
-let skills: Skill[] = [];
-const bodies = new Map<string, string>();
+export class SkillSnapshot {
+  private readonly value: readonly Skill[];
 
-/**
- * Load skills from the given directories, replacing any previous set.
- * Missing/empty directories contribute no skills and never throw. Skills with
- * duplicate names keep the first occurrence (mirrors Pi's collision behavior).
- */
-export function loadSkillPaths(paths: string[], disabledSkillNames: string[] = []): void {
-  const aggregated: Skill[] = [];
-  const seen = new Set<string>();
-  for (const dir of paths) {
-    if (!dir) continue;
-    const result = loadSkillsFromDir({ dir, source: "floatnote" });
-    for (const skill of result.skills) {
-      if (seen.has(skill.name)) {
-        // duplicate name — keep first, warn to stderr
-        console.error(`[skills] duplicate skill name "${skill.name}" in ${dir}; keeping first`);
+  constructor(value: readonly Skill[]) {
+    this.value = value.map((skill) => ({ ...skill }));
+  }
+
+  skills(): Skill[] {
+    return this.value.map((skill) => ({ ...skill }));
+  }
+
+  summaries(): SkillSummary[] {
+    return this.value.map(({ name, description }) => ({ name, description }));
+  }
+
+  resolveReadableFile(candidate: string): string | null {
+    let realCandidate: string;
+    try {
+      realCandidate = realpathSync(candidate);
+      if (!statSync(realCandidate).isFile()) return null;
+    } catch {
+      return null;
+    }
+
+    for (const skill of this.value) {
+      let base: string;
+      try {
+        base = realpathSync(skill.baseDir);
+      } catch {
         continue;
       }
-      seen.add(skill.name);
-      aggregated.push(skill);
-    }
-  }
-
-  const enabled = aggregated.filter((skill) => !disabledSkillNames.includes(skill.name));
-  // Read each skill's full SKILL.md text into memory once (zero FS at runtime).
-  bodies.clear();
-  for (const skill of enabled) {
-    try {
-      if (existsSync(skill.filePath)) {
-        bodies.set(skill.name, readFileSync(skill.filePath, "utf8"));
+      const relative = path.relative(base, realCandidate);
+      if (
+        relative === ""
+        || (!relative.startsWith(`..${path.sep}`)
+          && relative !== ".."
+          && !path.isAbsolute(relative))
+      ) {
+        return realCandidate;
       }
-    } catch {
-      // unreadable file — leave body absent; read_skill will report unknown
     }
+    return null;
   }
-  skills = enabled;
 }
 
-/** Enumerate loaded skills as {name, description}. */
-export function listSkills(): SkillSummary[] {
-  return skills.map((s) => ({ name: s.name, description: s.description }));
+export class SkillRegistry {
+  private current = new SkillSnapshot([]);
+
+  replace(paths: string[], disabledNames: string[]): SkillSnapshot {
+    const next: Skill[] = [];
+    const seen = new Set<string>();
+    for (const dir of paths) {
+      if (!dir) continue;
+      const result = loadSkillsFromDir({ dir, source: "floatnote" });
+      for (const skill of result.skills) {
+        if (seen.has(skill.name)) {
+          console.error(`[skills] duplicate skill name "${skill.name}" in ${dir}; keeping first`);
+          continue;
+        }
+        seen.add(skill.name);
+        if (!disabledNames.includes(skill.name)) {
+          try {
+            next.push({
+              ...skill,
+              filePath: realpathSync(skill.filePath),
+              baseDir: realpathSync(skill.baseDir),
+            });
+          } catch {
+            // Rust supplies trusted paths, but a resource may disappear while reloading.
+          }
+        }
+      }
+    }
+    this.current = new SkillSnapshot(next);
+    return this.current;
+  }
+
+  snapshot(): SkillSnapshot {
+    return this.current;
+  }
 }
 
-/**
- * Return the full SKILL.md text for a loaded skill, or null if the name is not
- * known. Accepts a skill *name* only — never a path — so it cannot be used to
- * traverse the filesystem.
- */
-export function readSkillBody(name: string): string | null {
-  return bodies.get(name) ?? null;
-}
+export class SessionSkillView {
+  constructor(private current: SkillSnapshot) {}
 
-/** Format the loaded skills' descriptions for the system prompt (XML block). */
-export function formatSkillsForSystemPrompt(): string {
-  return formatSkillsForPrompt(skills);
+  replace(next: SkillSnapshot): void {
+    this.current = next;
+  }
+
+  skills(): Skill[] {
+    return this.current.skills();
+  }
+
+  summaries(): SkillSummary[] {
+    return this.current.summaries();
+  }
+
+  resolveReadableFile(candidate: string): string | null {
+    return this.current.resolveReadableFile(candidate);
+  }
 }
