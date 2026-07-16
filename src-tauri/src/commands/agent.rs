@@ -1,4 +1,6 @@
-use crate::agent::{ActiveNote, HostToSidecar, NoteUpdated, PromptRef, PromptSkill};
+use crate::agent::{
+    ActiveNote, HostToSidecar, MutationOperation, NoteUpdated, PromptRef, PromptSkill, WriteMode,
+};
 use crate::{
     config::{AiProviderConfig, AiProviderId},
     state::AppState,
@@ -239,6 +241,11 @@ pub fn agent_discard_session(
     state: State<AppState>,
     conversation_id: String,
 ) -> Result<(), String> {
+    state
+        .mutations
+        .lock()
+        .unwrap()
+        .clear_conversation(&conversation_id);
     if let Some(agent) = state.agent.lock().unwrap().as_mut() {
         agent
             .send(&HostToSidecar::DiscardSession { conversation_id })
@@ -891,6 +898,90 @@ pub fn resolve_permission(
     decision: String,
     write_mode: String,
 ) -> Result<(), String> {
+    let mutation = state.mutations.lock().unwrap().pending(&request_id);
+    if let Some(mutation) = mutation {
+        if decision != "allow" {
+            state.mutations.lock().unwrap().deny(&request_id);
+            let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
+                agent.send(&HostToSidecar::MutationReviewResult {
+                    call_id: mutation.call_id,
+                    allowed: false,
+                    lease: None,
+                    write_mode: None,
+                    error: None,
+                })
+            });
+            return Ok(());
+        }
+        let selected_mode = match write_mode.as_str() {
+            "direct" => WriteMode::Direct,
+            "snapshot"
+                if mutation.can_snapshot
+                    && mutation.operation == MutationOperation::Rewrite
+                    && !mutation.create_only =>
+            {
+                WriteMode::Snapshot
+            }
+            "snapshot" => {
+                state.mutations.lock().unwrap().deny(&request_id);
+                let message = "该操作不允许保存快照".to_string();
+                let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
+                    agent.send(&HostToSidecar::MutationReviewResult {
+                        call_id: mutation.call_id,
+                        allowed: false,
+                        lease: None,
+                        write_mode: None,
+                        error: Some(message.clone()),
+                    })
+                });
+                return Err(message);
+            }
+            _ => {
+                state.mutations.lock().unwrap().deny(&request_id);
+                let message = "不支持的写入模式".to_string();
+                let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
+                    agent.send(&HostToSidecar::MutationReviewResult {
+                        call_id: mutation.call_id,
+                        allowed: false,
+                        lease: None,
+                        write_mode: None,
+                        error: Some(message.clone()),
+                    })
+                });
+                return Err(message);
+            }
+        };
+        let lease = match state.mutations.lock().unwrap().approve(
+            &request_id,
+            &write_mode,
+            std::time::Instant::now(),
+        ) {
+            Ok(lease) => lease,
+            Err(message) => {
+                let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
+                    agent.send(&HostToSidecar::MutationReviewResult {
+                        call_id: mutation.call_id,
+                        allowed: false,
+                        lease: None,
+                        write_mode: None,
+                        error: Some(message.clone()),
+                    })
+                });
+                return Err(message);
+            }
+        };
+        let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
+            agent.send(&HostToSidecar::MutationReviewResult {
+                call_id: mutation.call_id,
+                allowed: true,
+                lease: Some(lease),
+                write_mode: Some(selected_mode),
+                error: None,
+            })
+        });
+        return Ok(());
+    }
+
     let pending = state.pending_edits.lock().unwrap().remove(&request_id);
     let Some(p) = pending else {
         return Ok(());

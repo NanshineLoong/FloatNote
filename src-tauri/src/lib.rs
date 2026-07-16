@@ -109,6 +109,7 @@ pub fn run() {
                 write_suppress,
                 popup_cache: crate::popup::PopupCache::new(),
                 pending_edits: Mutex::new(std::collections::HashMap::new()),
+                mutations: Mutex::new(agent::MutationStore::default()),
                 pending_skill_lists: Mutex::new(std::collections::HashMap::new()),
                 pending_agent_configs: Mutex::new(std::collections::HashMap::new()),
                 pending_agent_rewinds: Mutex::new(std::collections::HashMap::new()),

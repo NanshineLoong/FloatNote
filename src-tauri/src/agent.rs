@@ -18,3 +18,4 @@ pub(crate) mod workspace;
 pub use handlers::*;
 pub use protocol::*;
 pub use runner::*;
+pub(crate) use workspace::*;

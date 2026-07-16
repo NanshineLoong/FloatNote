@@ -127,6 +127,35 @@ pub fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Atomically publish a brand-new file without ever replacing an existing one.
+/// The completed bytes are fsynced in a same-directory temporary file, then a
+/// hard link claims the final name with create-only semantics on macOS/Windows.
+pub fn write_new_atomic(path: &Path, content: &str) -> std::io::Result<()> {
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "note.md".into());
+    let sequence = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let tmp = dir.join(format!(
+        ".{file_name}.{}.{sequence}.tmp",
+        std::process::id()
+    ));
+
+    let write_result = (|| -> std::io::Result<()> {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?;
+        std::fs::hard_link(&tmp, path)?;
+        Ok(())
+    })();
+    let _ = std::fs::remove_file(&tmp);
+    write_result
+}
+
 #[cfg(not(windows))]
 fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
     std::fs::rename(source, destination)
@@ -422,6 +451,23 @@ mod tests {
     fn write_atomic_errors_when_parent_missing() {
         let path = std::path::Path::new("/nonexistent-dir-xyz-aaa/note.md");
         assert!(write_atomic(path, "x").is_err());
+    }
+
+    #[test]
+    fn write_new_atomic_never_replaces_an_existing_file_and_cleans_up() {
+        let dir = tempdir();
+        let path = dir.path().join("fresh.md");
+        write_new_atomic(&path, "first").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "first");
+        assert!(write_new_atomic(&path, "second").is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "first");
+        let leftovers = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".tmp"))
+            .collect::<Vec<_>>();
+        assert!(leftovers.is_empty(), "tmp leftovers: {leftovers:?}");
     }
 
     #[test]

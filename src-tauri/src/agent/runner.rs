@@ -18,7 +18,9 @@ use super::handlers::{
     handle_apply_edit, handle_create_note, handle_get_note_text, handle_list_notes,
 };
 use super::protocol::{HostToSidecar, SidecarToHost};
-use super::workspace::{handle_workspace_list, handle_workspace_read};
+use super::workspace::{
+    handle_commit_mutation, handle_review_mutation, handle_workspace_list, handle_workspace_read,
+};
 
 type OneShotPending = std::sync::Mutex<
     std::collections::HashMap<String, tokio::sync::oneshot::Sender<Result<String, String>>>,
@@ -383,6 +385,36 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
         SidecarToHost::WorkspaceRead { call_id, path, .. } => {
             handle_workspace_read(app, call_id, path)
         }
+        SidecarToHost::ReviewMutation {
+            call_id,
+            conversation_id,
+            tool_call_id,
+            tool_name,
+            operation,
+            path,
+            old_content,
+            new_content,
+            create_only,
+            preview,
+        } => handle_review_mutation(
+            app,
+            call_id,
+            conversation_id,
+            tool_call_id,
+            tool_name,
+            operation,
+            path,
+            old_content,
+            new_content,
+            create_only,
+            preview,
+        ),
+        SidecarToHost::CommitMutation {
+            call_id,
+            conversation_id,
+            tool_call_id,
+            lease,
+        } => handle_commit_mutation(app, call_id, conversation_id, tool_call_id, lease),
         SidecarToHost::CreateNote {
             call_id,
             conversation_id,
@@ -528,6 +560,7 @@ fn on_sidecar_exit(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
         *state.agent_ready.lock().unwrap() = false;
         *state.agent.lock().unwrap() = None;
+        state.mutations.lock().unwrap().clear();
         fail_all_one_shots(&state.pending_one_shots, "AI 助手暂时不可用，请稍后重试");
         for (_, sender) in state.pending_agent_sessions.lock().unwrap().drain() {
             let _ = sender.send(Err("AI 助手暂时不可用，请稍后重试".into()));

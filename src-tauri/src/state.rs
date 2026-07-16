@@ -3,7 +3,7 @@
 //! and the selection monitor. Pulled out of `commands.rs` so the command file
 //! is a thin handler layer and the state root has its own home.
 
-use crate::agent::{ActiveNote, AgentHandle, PendingEdit, SkillSummary};
+use crate::agent::{ActiveNote, AgentHandle, MutationStore, PendingEdit, SkillSummary};
 use crate::config::Config;
 use crate::popup::PopupCache;
 use crate::watcher::{FileWatcher, SuppressList};
@@ -67,6 +67,8 @@ pub struct AppState {
     /// apply_edit 待裁决表：request_id → PendingEdit。
     /// `handle_apply_edit` 暂存，`resolve_permission` 取出落盘并回 sidecar。
     pub pending_edits: Mutex<HashMap<String, PendingEdit>>,
+    /// Structured mutation reviews and one-use approval leases.
+    pub mutations: Mutex<MutationStore>,
     /// `agent_list_skills` 的 host 侧一次性等待表：call_id → oneshot sender。
     /// reader 线程收到 `SkillsList` 时取出 sender 解除等待。
     pub pending_skill_lists:
