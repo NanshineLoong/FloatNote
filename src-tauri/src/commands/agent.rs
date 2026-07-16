@@ -818,6 +818,22 @@ mod skill_catalog_tests {
             .find(|skill| skill.name == "organize")
             .unwrap();
         assert_eq!(organize.display_description, "理清主题和脉络");
+        let plan_actions = skills
+            .iter()
+            .find(|skill| skill.name == "plan-actions")
+            .unwrap();
+        assert_eq!(
+            plan_actions.display_description,
+            "理清方向，定下眼前真正能做的事"
+        );
+        let write = skills
+            .iter()
+            .find(|skill| skill.name == "write")
+            .unwrap();
+        assert_eq!(
+            write.display_description,
+            "边说边想，把真正属于你的内容写成文章"
+        );
         let summaries = skills
             .into_iter()
             .map(|skill| (skill.name, skill.display_name))
@@ -827,9 +843,9 @@ mod skill_catalog_tests {
             summaries,
             vec![
                 ("organize".into(), "梳理材料".into()),
-                ("plan-actions".into(), "行动规划".into()),
+                ("plan-actions".into(), "下一步".into()),
                 ("tutor".into(), "问到真懂".into()),
-                ("write".into(), "文章写作".into()),
+                ("write".into(), "写出所想".into()),
             ]
         );
     }
