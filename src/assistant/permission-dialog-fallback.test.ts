@@ -19,10 +19,11 @@ describe("permission dialog diff fallback", () => {
     const request: PermissionRequest = {
       request_id: "fallback",
       conversation_id: "conversation",
-      tool_name: "write_note",
+      tool_name: "write",
+      operation: "rewrite",
       old_content: "<old>\nline two",
       new_content: "<new>\nline two",
-      preview: { tool: "write_note", summary: "", detail: { kind: "diff", hunks: "" } },
+      preview: { tool: "write", summary: "", detail: { kind: "diff", hunks: "" } },
       can_snapshot: false,
     };
     const dialog = createPermissionDialog({ onResolve: vi.fn(), onClose: vi.fn() });

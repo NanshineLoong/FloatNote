@@ -20,6 +20,7 @@ export interface PermissionRequest {
   tool_call_id?: string;
   target?: { kind: string; name?: string };
   tool_name: string;
+  operation: "create" | "edit" | "rewrite" | "tag";
   old_content: string;
   new_content: string;
   preview: EditPreview;
@@ -57,9 +58,13 @@ export function projectPermission(request: PermissionRequest): PermissionPresent
   let tagOperation: PermissionPresentation["tagOperation"];
   let tagTarget: PermissionPresentation["tagTarget"];
   switch (request.tool_name) {
-    case "create_note": title = `创建「${documentName(request)}」`; break;
-    case "edit_note": title = `编辑「${documentName(request)}」`; break;
-    case "write_note": title = `覆写「${documentName(request)}」`; break;
+    case "edit": title = `编辑「${documentName(request)}」`; break;
+    case "write": {
+      title = request.operation === "create" || detail.kind === "note_create"
+        ? `创建「${documentName(request)}」`
+        : `覆写「${documentName(request)}」`;
+      break;
+    }
     case "tag_create": {
       const d = detail.kind === "tag_create" ? detail : null;
       title = `新建标签「${d?.tagName ?? "未命名"}」`;
@@ -98,8 +103,10 @@ export function projectPermission(request: PermissionRequest): PermissionPresent
   }
   return {
     title,
-    canView: ["create_note", "edit_note", "write_note"].includes(request.tool_name),
-    canSnapshot: request.tool_name === "write_note" && request.can_snapshot,
+    canView: request.tool_name === "edit" || request.tool_name === "write",
+    canSnapshot: request.tool_name === "write"
+      && request.operation === "rewrite"
+      && request.can_snapshot,
     colors,
     tagOperation,
     tagTarget,

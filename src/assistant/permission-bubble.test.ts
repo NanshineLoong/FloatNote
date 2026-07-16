@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { mountPermissionBubble, type PermissionRequest } from "./permission-bubble";
+import { mountPermissionBubble, TOOL_LABEL, type PermissionRequest } from "./permission-bubble";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(undefined) }));
 
 function request(overrides: Partial<PermissionRequest> = {}): PermissionRequest {
   return {
-    request_id: "req-1", conversation_id: "conv-1", tool_name: "create_note",
+    request_id: "req-1", conversation_id: "conv-1", tool_name: "write", operation: "create",
     old_content: "", new_content: "# Full document\n\nComplete body",
-    preview: { tool: "create_note", summary: "duplicate summary", detail: { kind: "note_create", filename: "Ideas.md", contentPreview: "# Short" } },
+    preview: { tool: "write", summary: "duplicate summary", detail: { kind: "note_create", filename: "Ideas.md", contentPreview: "# Short" } },
     can_snapshot: false, resolved_path: "/notes/Ideas.md", ...overrides,
   };
 }
@@ -20,6 +20,18 @@ afterEach(() => {
 });
 
 describe("permission bubble", () => {
+  it("exposes only the new FloatNote tool labels", () => {
+    expect(TOOL_LABEL).toMatchObject({
+      ls: "列出笔记",
+      read: "读取文档",
+      find: "查找文档",
+      grep: "搜索文档",
+      edit: "编辑文本",
+      write: "写入文档",
+    });
+    expect(TOOL_LABEL).not.toHaveProperty("read_note");
+  });
+
   it("renders exactly a semantic title row and a footer with ordered controls", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
@@ -52,6 +64,7 @@ describe("permission bubble", () => {
     const targetText = `第一行\n${"超过八十字符的完整目标".repeat(12)}`;
     bubble.show(request({
       tool_name: "tag_text",
+      operation: "tag",
       preview: { tool: "tag_text", summary: "", detail: { kind: "tag_assign", textExcerpt: targetText.slice(0, 80), targetText, annotationCount: 1, action: "add", tagName: "重点", tagColor: "#e5484d" } },
     }));
 
@@ -78,6 +91,7 @@ describe("permission bubble", () => {
     const bubble = mountPermissionBubble(root, vi.fn());
     bubble.show(request({
       tool_name: "tag_text",
+      operation: "tag",
       preview: { tool: "tag_text", summary: "", detail: { kind: "tag_assign", textExcerpt: "旧请求摘要", annotationCount: 1, action: "remove", tagName: "重点", tagColor: "#e5484d" } },
     }));
 
@@ -96,6 +110,7 @@ describe("permission bubble", () => {
     const tagRequest = (id: string, tagName: string): PermissionRequest => request({
       request_id: id,
       tool_name: "tag_text",
+      operation: "tag",
       preview: { tool: "tag_text", summary: "", detail: { kind: "tag_assign", textExcerpt: "摘要", targetText: "完整目标", annotationCount: 1, action: "add", tagName, tagColor: "#e5484d" } },
     });
     bubble.show(tagRequest("req-1", "重点"));
@@ -118,7 +133,7 @@ describe("permission bubble", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const bubble = mountPermissionBubble(root, resolve);
-    bubble.show(request({ tool_name: "write_note", can_snapshot: true, preview: { tool: "write_note", summary: "", detail: { kind: "diff", hunks: "" } } }));
+    bubble.show(request({ tool_name: "write", operation: "rewrite", can_snapshot: true, preview: { tool: "write", summary: "", detail: { kind: "diff", hunks: "" } } }));
     root.querySelector<HTMLButtonElement>(".perm-view")!.click();
     root.querySelector<HTMLButtonElement>(".perm-allow-main")!.click();
     root.querySelector<HTMLButtonElement>(".perm-deny")!.click();
@@ -218,7 +233,7 @@ describe("permission bubble", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const bubble = mountPermissionBubble(root);
-    bubble.show(request({ tool_name: "write_note", can_snapshot: true, preview: { tool: "write_note", summary: "", detail: { kind: "diff", hunks: "" } } }));
+    bubble.show(request({ tool_name: "write", operation: "rewrite", can_snapshot: true, preview: { tool: "write", summary: "", detail: { kind: "diff", hunks: "" } } }));
     root.querySelector<HTMLButtonElement>(".perm-allow-arrow")!.click();
     document.querySelector<HTMLButtonElement>(".fn-menu__item")!.click();
     expect(invoke).toHaveBeenCalledOnce();

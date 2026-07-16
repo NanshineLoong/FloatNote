@@ -3,13 +3,14 @@ import { formatToolTitle, sanitizeToolError } from "./tool-title.js";
 
 describe("formatToolTitle", () => {
   it.each([
-    ["read_note", { target: { kind: "tasks" } }, "读取 行动清单"],
-    ["write_note", { target: { kind: "inbox" }, content: "secret" }, "编辑 采集区"],
-    ["edit_note", { target: { kind: "piece", name: "piece.md" }, old_string: "secret" }, "编辑 piece.md"],
-    ["create_note", { title: "Ideas" }, "创建 Ideas.md"],
-    ["read_note", {}, "读取当前文档"],
+    ["ls", {}, "列出笔记"],
+    ["read", { path: "_tasks.md" }, "读取 行动清单"],
+    ["write", { path: "_inbox.md", content: "secret" }, "写入 采集区"],
+    ["edit", { path: "piece.md", edits: [{ oldText: "secret", newText: "safe" }] }, "编辑 piece.md"],
+    ["find", { pattern: "*.md" }, "查找文档 *.md"],
+    ["grep", { pattern: "计划" }, "搜索文档 计划"],
+    ["read", {}, "读取文档"],
     ["tag_text", { exact: "第一行\n后续正文", tagName: "行动" }, "给“第一行 后续正文”设置标签"],
-    ["read_skill", { name: "brainstorming" }, "读取技能 brainstorming"],
     ["web_search", { query: "FloatNote Tauri" }, "搜索网页 FloatNote Tauri"],
     ["web_fetch", { url: "https://example.com/a?secret=1" }, "读取网页 example.com"],
   ])("formats %s safely", (name, args, expected) => {

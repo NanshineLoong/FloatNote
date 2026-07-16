@@ -234,14 +234,14 @@ describe("reduceEvents", () => {
   });
 
   it("creates an action block on tool start and marks it done on tool end", () => {
-    const started = run([{ type: "tool", requestId: "r1", callId: "call-1", name: "write_note", label: "编辑 piece.md", phase: "start" }]);
+    const started = run([{ type: "tool", requestId: "r1", callId: "call-1", name: "write", label: "写入 piece.md", phase: "start" }]);
     expect(norm(started.messages)).toEqual([
-      { role: "assistant", streaming: true, blocks: [{ kind: "action", callId: "call-1", tool: "write_note", label: "编辑 piece.md", targets: [], decision: "pending", execution: "running" }] },
+      { role: "assistant", streaming: true, blocks: [{ kind: "action", callId: "call-1", tool: "write", label: "写入 piece.md", targets: [], decision: "pending", execution: "running" }] },
     ]);
 
-    const ended = reduceEvents(started, { type: "tool", requestId: "r1", callId: "call-1", name: "write_note", phase: "end", isError: false });
+    const ended = reduceEvents(started, { type: "tool", requestId: "r1", callId: "call-1", name: "write", phase: "end", isError: false });
     expect(norm(ended.messages)).toEqual([
-      { role: "assistant", streaming: true, blocks: [{ kind: "action", callId: "call-1", tool: "write_note", label: "编辑 piece.md", targets: [], decision: "pending", execution: "succeeded" }] },
+      { role: "assistant", streaming: true, blocks: [{ kind: "action", callId: "call-1", tool: "write", label: "写入 piece.md", targets: [], decision: "pending", execution: "succeeded" }] },
     ]);
   });
 
@@ -250,7 +250,7 @@ describe("reduceEvents", () => {
       type: "tool",
       requestId: "r1",
       callId: "call-1",
-      name: "read_note",
+      name: "read",
       label: "正在准备工具调用…",
       phase: "prepare",
     }]);
@@ -258,7 +258,7 @@ describe("reduceEvents", () => {
       type: "tool",
       requestId: "r1",
       callId: "call-1",
-      name: "read_note",
+      name: "read",
       label: "读取 piece.md",
       phase: "start",
     });
@@ -270,7 +270,7 @@ describe("reduceEvents", () => {
         blocks: [{
           kind: "action",
           callId: "call-1",
-          tool: "read_note",
+          tool: "read",
           label: "读取 piece.md",
           targets: [],
           decision: "pending",
@@ -282,10 +282,10 @@ describe("reduceEvents", () => {
 
   it("matches interleaved tool results by call id instead of the most recent action", () => {
     let state = run([
-      { type: "tool", requestId: "r1", callId: "read-1", name: "read_note", label: "读取 piece.md", phase: "start" },
-      { type: "tool", requestId: "r1", callId: "read-2", name: "read_note", label: "读取 ideas.md", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "read-1", name: "read", label: "读取 piece.md", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "read-2", name: "read", label: "读取 ideas.md", phase: "start" },
     ]);
-    state = reduceEvents(state, { type: "tool", requestId: "r1", callId: "read-1", name: "read_note", phase: "end", isError: false });
+    state = reduceEvents(state, { type: "tool", requestId: "r1", callId: "read-1", name: "read", phase: "end", isError: false });
     const blocks = (state.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks;
     expect(blocks[0]).toMatchObject({ kind: "process_group" });
     if (blocks[0].kind === "process_group") {
@@ -296,11 +296,11 @@ describe("reduceEvents", () => {
 
   it("groups three consecutive read tools and starts a new segment after text", () => {
     const state = run([
-      { type: "tool", requestId: "r1", callId: "a", name: "read_note", label: "读取 a.md", phase: "start" },
-      { type: "tool", requestId: "r1", callId: "b", name: "read_note", label: "读取 b.md", phase: "start" },
-      { type: "tool", requestId: "r1", callId: "c", name: "read_note", label: "读取 c.md", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "a", name: "read", label: "读取 a.md", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "b", name: "read", label: "读取 b.md", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "c", name: "read", label: "读取 c.md", phase: "start" },
       { type: "delta", requestId: "r1", text: "阶段说明" },
-      { type: "tool", requestId: "r1", callId: "d", name: "read_note", label: "读取 d.md", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "d", name: "read", label: "读取 d.md", phase: "start" },
     ]);
     const blocks = (state.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks;
     expect(blocks[0]).toMatchObject({ kind: "process_group" });
@@ -310,22 +310,22 @@ describe("reduceEvents", () => {
   });
 
   it("creates a readonly action block for read-only tools (no permission flow)", () => {
-    const started = run([{ type: "tool", requestId: "r1", name: "read_note", phase: "start" }]);
-    // read_note 不进 permission 流，但仍产出 action block（渲染为紧凑行）。
+    const started = run([{ type: "tool", requestId: "r1", name: "read", phase: "start" }]);
+    // read 不进 permission 流，但仍产出 action block（渲染为紧凑行）。
     expect(norm(started.messages)).toEqual([
-      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "read_note", targets: [], decision: "pending", execution: "running" }] },
+      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "read", targets: [], decision: "pending", execution: "running" }] },
     ]);
 
-    const ended = reduceEvents(started, { type: "tool", requestId: "r1", name: "read_note", phase: "end" });
+    const ended = reduceEvents(started, { type: "tool", requestId: "r1", name: "read", phase: "end" });
     expect(norm(ended.messages)).toEqual([
-      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "read_note", targets: [], decision: "pending", execution: "succeeded" }] },
+      { role: "assistant", streaming: true, blocks: [{ kind: "action", tool: "read", targets: [], decision: "pending", execution: "succeeded" }] },
     ]);
   });
 
   it("marks unfinished process items incomplete when the turn ends", () => {
     const state = run([
       { type: "thinking_start", requestId: "r1", blockId: "t1" },
-      { type: "tool", requestId: "r1", callId: "c1", name: "read_note", label: "读取当前文档", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "c1", name: "read", label: "读取文档", phase: "start" },
       { type: "done", requestId: "r1" },
     ]);
     const group = (state.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks[0];
@@ -339,8 +339,8 @@ describe("reduceEvents", () => {
   it("keeps only a compact completed tool result and adds a following text block", () => {
     const state = run([
       { type: "user", text: "整理一下" },
-      { type: "tool", requestId: "r1", name: "write_note", phase: "start" },
-      { type: "tool", requestId: "r1", name: "write_note", phase: "end" },
+      { type: "tool", requestId: "r1", name: "write", phase: "start" },
+      { type: "tool", requestId: "r1", name: "write", phase: "end" },
       { type: "delta", requestId: "r1", text: "已整理" },
       { type: "done", requestId: "r1" },
     ]);
@@ -349,7 +349,7 @@ describe("reduceEvents", () => {
       {
         role: "assistant", streaming: false,
         blocks: [
-          { kind: "action", tool: "write_note", targets: [], decision: "pending", execution: "succeeded" },
+          { kind: "action", tool: "write", targets: [], decision: "pending", execution: "succeeded" },
           { kind: "text", text: "已整理", streaming: false },
         ],
       },
@@ -380,7 +380,7 @@ describe("reduceEvents", () => {
       { type: "thinking_delta", requestId: "r1", text: "分析" },
       { type: "thinking_end", requestId: "r1" },
       { type: "tool", requestId: "r1", callId: "c1", name: "web_search", label: "搜索网页 FloatNote", phase: "start" },
-      { type: "tool", requestId: "r1", callId: "c2", name: "read_note", label: "读取当前文档", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "c2", name: "read", label: "读取文档", phase: "start" },
       { type: "delta", requestId: "r1", text: "正文" },
       { type: "tool", requestId: "r1", callId: "c3", name: "list_tags", label: "列出标签", phase: "start" },
     ]);
@@ -397,7 +397,7 @@ describe("reduceEvents", () => {
     const state = run([{ type: "session_opened", conversationId: "c1", sessionFile: "session.jsonl", messages: [
       { role: "assistant", timestamp: 1, entryId: "a1", blocks: [
         { type: "thinking", text: "分析" },
-        { type: "tool", callId: "c1", name: "read_note", label: "读取 行动清单", status: "succeeded" },
+        { type: "tool", callId: "c1", name: "read", label: "读取 行动清单", status: "succeeded" },
         { type: "tool", callId: "c2", name: "web_fetch", label: "读取网页 example.com", status: "failed", error: "拒绝访问" },
         { type: "text", text: "结论" },
       ] },
@@ -412,12 +412,12 @@ describe("reduceEvents", () => {
   });
 
   it("keeps a user-denied tool rejected after its normal tool end", () => {
-    const started = run([{ type: "tool", requestId: "r1", callId: "call-1", name: "edit_note", label: "编辑 piece.md", phase: "start" }]);
+    const started = run([{ type: "tool", requestId: "r1", callId: "call-1", name: "edit", label: "编辑 piece.md", phase: "start" }]);
     const filled = reduceEvents(started, {
       type: "permission_request",
       requestId: "pe-1",
       callId: "call-1",
-      toolName: "edit_note",
+      toolName: "edit",
       detail: { kind: "diff", hunks: "- a\n+ b" },
       summary: "编辑文本",
       oldContent: "a",
@@ -439,7 +439,7 @@ describe("reduceEvents", () => {
       expect(after.execution).toBe("rejected");
     }
 
-    const ended = reduceEvents(resolved, { type: "tool", requestId: "r1", callId: "call-1", name: "edit_note", phase: "end", isError: false });
+    const ended = reduceEvents(resolved, { type: "tool", requestId: "r1", callId: "call-1", name: "edit", phase: "end", isError: true, error: "用户拒绝了此操作" });
     const finalBlock = (ended.messages[0] as Extract<ChatMessage, { role: "assistant" }>).blocks[0];
     expect(finalBlock).toMatchObject({ kind: "action", decision: "denied", execution: "rejected" });
   });

@@ -6,6 +6,7 @@ import type { ChatConversation, ChatScope } from "../platform/chat-history";
 import { deriveTitleFromFirstMessage, formatHistoryTime } from "../platform/chat-history-format";
 import socratesSvg from "../assets/socrates.svg?raw";
 import { mountPermissionBubble, type PermissionRequest } from "./permission-bubble.js";
+import { projectPermission } from "./permission-model.js";
 import type { SkillSummary } from "./skill-picker.js";
 import type { MentionFile } from "./mention-picker.js";
 import { mountComposer, type ComposerHandle } from "./input/composer";
@@ -618,7 +619,7 @@ export function mountAssistant(root: HTMLElement, deps: AssistantDeps): Assistan
       summary: req.preview.summary,
       oldContent: req.old_content,
       newContent: req.new_content,
-      canSnapshot: req.can_snapshot,
+      canSnapshot: projectPermission(req).canSnapshot,
     });
     permBubble.show(req);
   }).then((un) => {

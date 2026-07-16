@@ -11,7 +11,7 @@ describe("action cards", () => {
     const block: ActionBlock = {
       id: "tool-1",
       kind: "action",
-      tool: "write_note",
+      tool: "write",
       targets: [],
       decision: "pending",
       execution: "rejected",

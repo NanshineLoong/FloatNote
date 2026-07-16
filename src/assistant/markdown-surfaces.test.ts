@@ -10,10 +10,11 @@ function editRequest(): PermissionRequest {
   return {
     request_id: "r",
     conversation_id: "c",
-    tool_name: "edit_note",
+    tool_name: "edit",
+    operation: "edit",
     old_content: "# Before",
     new_content: "# After\n\n| A | B |\n| --- | --- |\n| 1 | 2 |",
-    preview: { tool: "edit_note", summary: "", detail: { kind: "diff", hunks: "" } },
+    preview: { tool: "edit", summary: "", detail: { kind: "diff", hunks: "" } },
     can_snapshot: false,
     resolved_path: "/notes/piece.md",
   };
@@ -64,9 +65,10 @@ describe("Markdown surfaces", () => {
 
   it("renders create review directly without an empty tab row", () => {
     const req = editRequest();
-    req.tool_name = "create_note";
+    req.tool_name = "write";
+    req.operation = "create";
     req.old_content = "";
-    req.preview = { tool: "create_note", summary: "", detail: { kind: "note_create", filename: "piece.md", contentPreview: "" } };
+    req.preview = { tool: "write", summary: "", detail: { kind: "note_create", filename: "piece.md", contentPreview: "" } };
     const dialog = createPermissionDialog({ onResolve: vi.fn(), onClose: vi.fn() });
     dialog.open(req, projectPermission(req));
 

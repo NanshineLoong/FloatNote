@@ -21,7 +21,7 @@ function titleFor(tool: string): string {
 }
 
 /** 写入/标签工具：产出可交互 action 卡（detail 由 permission://request 填充）。
- *  其余工具（read_note/list_tags/read_skill…）为只读，渲染为紧凑行。 */
+ *  其余工具（read/ls/find/grep/list_tags…）为只读，渲染为紧凑行。 */
 function isReadonly(_tool: string): boolean {
   // 所有工具统一为不可展开的结果行；写入确认仅由 dock 气泡承载。
   return true;
@@ -31,9 +31,9 @@ function isReadonly(_tool: string): boolean {
 function toolIcon(tool: string): string {
   const path = tool.startsWith("tag")
     ? tagPath()
-    : tool === "read_note" || tool === "read_skill"
+    : tool === "read"
       ? readPath()
-      : tool === "list_tags"
+      : ["ls", "find", "grep", "list_tags"].includes(tool)
         ? listPath()
         : editPath();
   return `<span class="chat-action-icon" aria-hidden="true">${path}</span>`;
@@ -226,7 +226,7 @@ function renderActionBody(block: Extract<Block, { kind: "action" }>): HTMLElemen
   const detail = block.detail;
   switch (detail.kind) {
     case "diff":
-      return block.tool === "write_note"
+      return block.tool === "write"
         ? renderWriteNotePreview(block.newContent ?? "")
         : renderEditDiff(block.oldContent ?? "", block.newContent ?? "", detail);
     case "tag_assign":
@@ -242,7 +242,7 @@ function renderActionBody(block: Extract<Block, { kind: "action" }>): HTMLElemen
   }
 }
 
-/** write_note：直接展示新版本全文（markdown 渲染，非代码样式）。 */
+/** write：直接展示新版本全文（markdown 渲染，非代码样式）。 */
 function renderWriteNotePreview(newContent: string): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "chat-diff chat-diff-newonly";
@@ -251,7 +251,7 @@ function renderWriteNotePreview(newContent: string): HTMLElement {
 }
 
 /**
- * edit_note：左右并排旧/新，行级对齐标注差异。
+ * edit：左右并排旧/新，行级对齐标注差异。
  * diff 配色不用红绿：新增行淡蓝底，删除行中性灰 + 删除线。
  */
 function renderEditDiff(

@@ -7,9 +7,9 @@ afterEach(() => document.body.replaceChildren());
 
 function request(): PermissionRequest {
   return {
-    request_id: "r", conversation_id: "c", tool_name: "edit_note",
+    request_id: "r", conversation_id: "c", tool_name: "edit", operation: "edit",
     old_content: "a\nb\nc", new_content: "a\ninserted\nb\nc",
-    preview: { tool: "edit_note", summary: "", detail: { kind: "diff", hunks: "bad alignment" } },
+    preview: { tool: "edit", summary: "", detail: { kind: "diff", hunks: "bad alignment" } },
     can_snapshot: false, resolved_path: "/notes/piece.md",
   };
 }

@@ -307,7 +307,7 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
       if (!acceptsConversation(state, event)) return state;
       if (event.phase === "prepare") {
         // 所有工具都产出流内块：写入/标签工具走完整 action 卡（detail 由
-        // permission://request 填充），只读工具（read_note/list_tags/read_skill）
+        // permission://request 填充），只读工具（read/ls/find/grep/list_tags）
         // 走紧凑行（无 detail/requestId → action-card 渲染 header-only）。
         const { state: s, msg } = ensureStreaming(state);
         const action: ActionBlock = {

@@ -70,8 +70,8 @@ describe("reconcileMessages", () => {
     const scroll = makeScroll();
     const map = new Map<string, HTMLElement>();
     let state = run([
-      { type: "tool", requestId: "r1", callId: "c1", name: "read_note", label: "读取当前文档", phase: "start" },
-      { type: "tool", requestId: "r1", callId: "c2", name: "read_note", label: "读取任务", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "c1", name: "read", label: "读取文档", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "c2", name: "read", label: "读取任务", phase: "start" },
     ]);
     reconcileMessages(scroll, state.messages, map);
 
@@ -88,7 +88,7 @@ describe("reconcileMessages", () => {
     expect(group.querySelector("details")).toBeNull();
 
     state = reduceEvents(state, {
-      type: "tool", requestId: "r1", callId: "c2", name: "read_note", phase: "end",
+      type: "tool", requestId: "r1", callId: "c2", name: "read", phase: "end",
     });
     reconcileMessages(scroll, state.messages, map);
     expect(scroll.querySelector<HTMLButtonElement>(".chat-process-group-head")?.getAttribute("aria-expanded")).toBe("true");
@@ -103,7 +103,7 @@ describe("reconcileMessages", () => {
     let state = run([
       { type: "thinking_start", requestId: "r1", blockId: "t1" },
       { type: "thinking_delta", requestId: "r1", text: "分析" },
-      { type: "tool", requestId: "r1", callId: "c1", name: "read_note", label: "读取当前文档", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "c1", name: "read", label: "读取文档", phase: "start" },
       { type: "process_toggle", blockId: "t1", collapsed: false },
     ]);
     reconcileMessages(scroll, state.messages, map);
@@ -125,7 +125,7 @@ describe("reconcileMessages", () => {
     const state = run([
       { type: "thinking_start", requestId: "r1", blockId: "t1" },
       { type: "thinking_delta", requestId: "r1", text: "分析" },
-      { type: "tool", requestId: "r1", callId: "c1", name: "read_note", label: "读取当前文档", phase: "start" },
+      { type: "tool", requestId: "r1", callId: "c1", name: "read", label: "读取文档", phase: "start" },
     ]);
     reconcileMessages(scroll, state.messages, map, "compact");
     expect(scroll.querySelector(".chat-block-process_group")).toBeNull();

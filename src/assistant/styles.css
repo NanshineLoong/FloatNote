@@ -711,7 +711,7 @@
   flex-wrap: wrap;
 }
 
-/* diff 预览（write_note 只显示新版本；edit_note 左右并排）。 */
+/* diff 预览（write 只显示新版本；edit 左右并排）。 */
 .chat-diff {
   font-size: 12.5px;
   line-height: 1.5;

@@ -7,10 +7,19 @@ export type { EditPreview, EditPreviewDetail, PermissionRequest, WriteMode } fro
 import type { PermissionRequest, WriteMode } from "./permission-model";
 
 export const TOOL_LABEL: Record<string, string> = {
-  read_note: "读取文档", list_tags: "列出标签", list_notes: "列出笔记",
-  web_search: "搜索网页", web_fetch: "读取网页", read_skill: "读取技能",
-  edit_note: "编辑文本", write_note: "编辑文本", tag_text: "设置文本标签",
-  tag_create: "新建标签", tag_update: "修改标签", create_note: "创建文档", tag_delete: "删除标签",
+  ls: "列出笔记",
+  read: "读取文档",
+  find: "查找文档",
+  grep: "搜索文档",
+  edit: "编辑文本",
+  write: "写入文档",
+  list_tags: "列出标签",
+  tag_text: "设置文本标签",
+  tag_create: "新建标签",
+  tag_update: "修改标签",
+  tag_delete: "删除标签",
+  web_search: "搜索网页",
+  web_fetch: "读取网页",
 };
 
 function renderTitle(presentation: PermissionPresentation): HTMLElement {

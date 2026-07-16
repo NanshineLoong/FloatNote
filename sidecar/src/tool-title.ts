@@ -32,20 +32,16 @@ function domainOf(value: unknown): string | undefined {
   }
 }
 
-function markdownName(value: unknown): string {
-  const name = shortLine(value) ?? "文档";
-  return name.toLowerCase().endsWith(".md") ? name : `${name}.md`;
-}
-
 export function formatToolTitle(name: string, args: unknown): string {
   const value = args && typeof args === "object" ? args as Record<string, unknown> : {};
   const target = noteTarget(value);
   switch (name) {
-    case "read_note": return target ? `读取 ${target}` : "读取当前文档";
-    case "list_notes": return "列出项目文档";
-    case "create_note": return `创建 ${markdownName(value.title ?? value.name)}`;
-    case "edit_note":
-    case "write_note": return target ? `编辑 ${target}` : "编辑当前文档";
+    case "ls": return "列出笔记";
+    case "read": return target ? `读取 ${target}` : "读取文档";
+    case "find": return `查找文档 ${shortLine(value.pattern) ?? ""}`.trim();
+    case "grep": return `搜索文档 ${shortLine(value.pattern) ?? ""}`.trim();
+    case "edit": return target ? `编辑 ${target}` : "编辑文档";
+    case "write": return target ? `写入 ${target}` : "写入文档";
     case "list_tags": return "列出标签";
     case "tag_text": {
       const exact = shortLine(value.exact, 32);
@@ -54,7 +50,6 @@ export function formatToolTitle(name: string, args: unknown): string {
     case "tag_create": return `新建标签 ${shortLine(value.tagName ?? value.name) ?? ""}`.trim();
     case "tag_update": return `修改标签 ${shortLine(value.tagName ?? value.name ?? value.newName) ?? ""}`.trim();
     case "tag_delete": return `删除标签 ${shortLine(value.tagName ?? value.name) ?? ""}`.trim();
-    case "read_skill": return `读取技能 ${shortLine(value.name) ?? ""}`.trim();
     case "web_search": return `搜索网页 ${shortLine(value.query) ?? ""}`.trim();
     case "web_fetch": return `读取网页 ${domainOf(value.url) ?? ""}`.trim();
     default: return name;

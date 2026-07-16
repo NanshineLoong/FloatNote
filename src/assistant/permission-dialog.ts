@@ -167,7 +167,7 @@ export function createPermissionDialog(options: PermissionDialogOptions): Permis
   function renderBody(request: PermissionRequest): HTMLElement {
     const body = document.createElement("div");
     body.className = "perm-dialog-body";
-    if (request.tool_name === "create_note") {
+    if (request.operation === "create" || request.preview.detail.kind === "note_create") {
       const article = document.createElement("article");
       article.className = "perm-dialog-markdown";
       if (request.new_content) fillMarkdown(article, request.new_content);

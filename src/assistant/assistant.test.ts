@@ -176,7 +176,7 @@ describe("assistant message actions", () => {
     emitAgent({ type: "session_opened", conversationId: "c1", sessionFile: conversation.sessionFile, messages: [{
       role: "assistant", timestamp: 0, blocks: [
         { type: "thinking", text: "分析" },
-        { type: "tool", callId: "c1", name: "read_note", label: "读取当前文档", status: "succeeded" },
+        { type: "tool", callId: "c1", name: "read", label: "读取文档", status: "succeeded" },
       ],
     }] });
     emitMode("detailed");
@@ -190,7 +190,7 @@ describe("assistant message actions", () => {
   it("keeps a process group interactive while streaming and after completion", async () => {
     const { root, emitAgent } = await mountWithDeps({ getOutputMode: async () => "detailed" });
     await Promise.resolve();
-    emitAgent({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c1", name: "read_note", label: "读取当前文档", phase: "start" });
+    emitAgent({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c1", name: "read", label: "读取文档", phase: "start" });
     emitAgent({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c2", name: "list_tags", label: "读取标签", phase: "start" });
 
     root.querySelector<HTMLButtonElement>(".chat-process-group-head")!.click();

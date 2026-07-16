@@ -6,10 +6,11 @@ function request(overrides: Partial<PermissionRequest> = {}): PermissionRequest 
   return {
     request_id: "req-1",
     conversation_id: "conv-1",
-    tool_name: "edit_note",
+    tool_name: "edit",
+    operation: "edit",
     old_content: "old",
     new_content: "new",
-    preview: { tool: "edit_note", summary: "ignored", detail: { kind: "diff", hunks: "" } },
+    preview: { tool: "edit", summary: "ignored", detail: { kind: "diff", hunks: "" } },
     can_snapshot: false,
     ...overrides,
   };
@@ -17,14 +18,15 @@ function request(overrides: Partial<PermissionRequest> = {}): PermissionRequest 
 
 describe("projectPermission", () => {
   it.each([
-    ["create_note", "创建「Ideas.md」", true],
-    ["edit_note", "编辑「piece.md」", true],
-    ["write_note", "覆写「piece.md」", true],
-  ])("projects %s document title", (tool, title, canView) => {
+    ["write", "create", "创建「Ideas.md」", true],
+    ["edit", "edit", "编辑「piece.md」", true],
+    ["write", "rewrite", "覆写「piece.md」", true],
+  ] as const)("projects %s/%s document title", (tool, operation, title, canView) => {
     const result = projectPermission(request({
       tool_name: tool,
-      resolved_path: tool === "create_note" ? "C:\\notes\\Ideas.md" : "/notes/piece.md",
-      preview: tool === "create_note"
+      operation,
+      resolved_path: operation === "create" ? "C:\\notes\\Ideas.md" : "/notes/piece.md",
+      preview: operation === "create"
         ? { tool, summary: "ignored", detail: { kind: "note_create", filename: "fallback.md", contentPreview: "short" } }
         : { tool, summary: "ignored", detail: { kind: "diff", hunks: "" } },
     }));
@@ -66,8 +68,9 @@ describe("projectPermission", () => {
     expect(remove.title).toBe("删除标签「重点」并清除 3 个标注");
   });
 
-  it("only enables snapshot split approval for snapshot-capable write_note", () => {
-    expect(projectPermission(request({ tool_name: "write_note", can_snapshot: true })).canSnapshot).toBe(true);
-    expect(projectPermission(request({ tool_name: "edit_note", can_snapshot: true })).canSnapshot).toBe(false);
+  it("only enables snapshot split approval for snapshot-capable rewrites", () => {
+    expect(projectPermission(request({ tool_name: "write", operation: "rewrite", can_snapshot: true })).canSnapshot).toBe(true);
+    expect(projectPermission(request({ tool_name: "write", operation: "create", can_snapshot: true })).canSnapshot).toBe(false);
+    expect(projectPermission(request({ tool_name: "edit", operation: "edit", can_snapshot: true })).canSnapshot).toBe(false);
   });
 });
