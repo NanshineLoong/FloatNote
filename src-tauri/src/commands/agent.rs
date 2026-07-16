@@ -321,6 +321,8 @@ pub fn agent_cancel(state: State<AppState>, request_id: String) -> Result<(), St
 pub struct SkillCatalogEntry {
     name: String,
     description: String,
+    display_name: String,
+    display_description: String,
     source: String,
     enabled: bool,
 }
@@ -408,17 +410,11 @@ fn copy_skill_dir_inner(from: &cap_std::fs::Dir, to: &cap_std::fs::Dir) -> Resul
 struct SkillMetadata {
     name: String,
     description: String,
+    display_name: String,
+    display_description: String,
 }
 
 fn builtin_skill_roots(app: &tauri::AppHandle) -> Vec<PathBuf> {
-    let bundled = app
-        .path()
-        .resource_dir()
-        .ok()
-        .map(|path| path.join("skills"));
-    if let Some(path) = bundled.filter(|path| path.is_dir()) {
-        return vec![path];
-    }
     #[cfg(debug_assertions)]
     {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -427,6 +423,14 @@ fn builtin_skill_roots(app: &tauri::AppHandle) -> Vec<PathBuf> {
         if path.is_dir() {
             return vec![path];
         }
+    }
+    let bundled = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|path| path.join("skills"));
+    if let Some(path) = bundled.filter(|path| path.is_dir()) {
+        return vec![path];
     }
     Vec::new()
 }
@@ -471,6 +475,11 @@ fn catalog_skills(
             let metadata = validate_skill_dir(&directory).map_err(|error| {
                 format!("无法读取 {source} Skill {}：{error}", directory.display())
             })?;
+            if source == "builtin"
+                && !crate::agent::BUILTIN_SKILL_NAMES.contains(&metadata.name.as_str())
+            {
+                continue;
+            }
             if !seen.insert(metadata.name.clone()) {
                 continue;
             }
@@ -478,6 +487,8 @@ fn catalog_skills(
                 enabled: !disabled.contains(metadata.name.as_str()),
                 name: metadata.name,
                 description: metadata.description,
+                display_name: metadata.display_name,
+                display_description: metadata.display_description,
                 source: source.into(),
             });
         }
@@ -510,14 +521,15 @@ fn validate_skill_dir(source: &Path) -> Result<SkillMetadata, String> {
     }
     let text =
         fs::read_to_string(&skill_file).map_err(|error| format!("无法读取 SKILL.md：{error}"))?;
-    let SkillMetadata { name, description } = parse_skill_metadata(&text)?;
-    if !name
+    let metadata = parse_skill_metadata(&text)?;
+    if !metadata
+        .name
         .chars()
         .all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_')
     {
         return Err("Skill name 只能包含 ASCII 字母、数字、-、_".into());
     }
-    Ok(SkillMetadata { name, description })
+    Ok(metadata)
 }
 
 fn validate_open_skill_dir(source: &cap_std::fs::Dir) -> Result<SkillMetadata, String> {
@@ -619,11 +631,27 @@ fn parse_skill_metadata(text: &str) -> Result<SkillMetadata, String> {
     struct Frontmatter {
         name: String,
         description: String,
+        #[serde(default)]
+        metadata: std::collections::HashMap<String, String>,
     }
     let parsed: Frontmatter = serde_yaml::from_str(&frontmatter.join("\n"))
         .map_err(|error| format!("无效的 YAML frontmatter：{error}"))?;
     let name = parsed.name.trim().to_string();
     let description = parsed.description.trim().to_string();
+    let display_name = parsed
+        .metadata
+        .get("floatnote-display-name")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&name)
+        .to_string();
+    let display_description = parsed
+        .metadata
+        .get("floatnote-short-description")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&description)
+        .to_string();
     Ok(SkillMetadata {
         name: (!name.is_empty())
             .then_some(name)
@@ -631,6 +659,8 @@ fn parse_skill_metadata(text: &str) -> Result<SkillMetadata, String> {
         description: (!description.is_empty())
             .then_some(description)
             .ok_or("Skill 缺少 description")?,
+        display_name,
+        display_description,
     })
 }
 
@@ -688,7 +718,7 @@ mod skill_catalog_tests {
         let dir = crate::testutil::tempdir();
         let builtin = dir.path().join("builtin");
         let imported = dir.path().join("imported");
-        write_skill(&builtin, "structure-piece", "structure-piece", "组织文章");
+        write_skill(&builtin, "organize", "organize", "组织文章");
         write_skill(&imported, "my-skill", "my-skill", "自定义 Skill");
 
         let skills = catalog_skills(&[builtin], Some(&imported), &["my-skill".into()]).unwrap();
@@ -752,6 +782,74 @@ mod skill_catalog_tests {
         assert!(validate_skill_dir(&source)
             .unwrap_err()
             .contains("frontmatter"));
+    }
+
+    #[test]
+    fn catalog_exposes_floatnote_display_metadata_with_fallbacks() {
+        let dir = crate::testutil::tempdir();
+        let builtin = dir.path().join("builtin");
+        let localized = builtin.join("organize");
+        fs::create_dir_all(&localized).unwrap();
+        fs::write(
+            localized.join("SKILL.md"),
+            "---\nname: organize\ndescription: Organize source material.\nmetadata:\n  floatnote-display-name: 整理材料\n  floatnote-short-description: 按主题整理采集内容\n---\n",
+        )
+        .unwrap();
+        write_skill(&builtin, "write", "write", "Plain description");
+
+        let skills = catalog_skills(&[builtin], None, &[]).unwrap();
+
+        assert_eq!(skills[0].name, "organize");
+        assert_eq!(skills[0].display_name, "整理材料");
+        assert_eq!(skills[0].display_description, "按主题整理采集内容");
+        assert_eq!(skills[1].display_name, "write");
+        assert_eq!(skills[1].display_description, "Plain description");
+    }
+
+    #[test]
+    fn bundled_catalog_contains_the_four_localized_skills() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("skills");
+
+        let skills = catalog_skills(&[root], None, &[]).unwrap();
+        let summaries = skills
+            .into_iter()
+            .map(|skill| (skill.name, skill.display_name))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            summaries,
+            vec![
+                ("organize".into(), "整理材料".into()),
+                ("plan-actions".into(), "行动规划".into()),
+                ("tutor".into(), "拷问学习".into()),
+                ("write".into(), "文章写作".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn catalog_ignores_retired_builtin_skill_directories() {
+        let dir = crate::testutil::tempdir();
+        let builtin = dir.path().join("builtin");
+        write_skill(&builtin, "organize", "organize", "Current skill");
+        write_skill(
+            &builtin,
+            "socratic-review",
+            "socratic-review",
+            "Retired skill",
+        );
+
+        let skills = catalog_skills(&[builtin], None, &[]).unwrap();
+
+        assert_eq!(
+            skills
+                .into_iter()
+                .map(|skill| skill.name)
+                .collect::<Vec<_>>(),
+            vec!["organize"]
+        );
     }
 
     #[test]

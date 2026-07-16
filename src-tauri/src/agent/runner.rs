@@ -7,7 +7,6 @@
 use crate::state::AppState;
 #[cfg(debug_assertions)]
 use std::io::{BufRead, BufReader, Write};
-#[cfg(debug_assertions)]
 use std::path::{Path, PathBuf};
 #[cfg(debug_assertions)]
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -547,23 +546,40 @@ fn on_sidecar_exit(app: &AppHandle) {
 /// - 用户全局：`~/.floatnote/skills`（用户自建，复用 chat_history 的 home 解析）。
 ///
 /// 仅返回已存在的目录；全无则空 vec（降级，不崩）。
+pub const BUILTIN_SKILL_NAMES: &[&str] = &["organize", "plan-actions", "tutor", "write"];
+
+pub(crate) fn current_builtin_skill_dirs(root: &Path) -> Vec<PathBuf> {
+    BUILTIN_SKILL_NAMES
+        .iter()
+        .map(|name| root.join(name))
+        .filter(|path| path.join("SKILL.md").is_file())
+        .collect()
+}
+
 pub fn skill_paths_for_app(app: &AppHandle) -> Vec<String> {
     let mut paths: Vec<String> = Vec::new();
 
     let bundled = app.path().resource_dir().ok().map(|d| d.join("skills"));
-    let bundled_exists = bundled.as_ref().is_some_and(|d| d.is_dir());
-    if bundled_exists {
-        paths.push(bundled.unwrap().to_string_lossy().into_owned());
-    }
-
     #[cfg(debug_assertions)]
-    if !bundled_exists {
+    let builtin_root = {
         let dev = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("resources")
             .join("skills");
         if dev.is_dir() {
-            paths.push(dev.to_string_lossy().into_owned());
+            Some(dev)
+        } else {
+            bundled
         }
+    };
+    #[cfg(not(debug_assertions))]
+    let builtin_root = bundled;
+
+    if let Some(root) = builtin_root.filter(|path| path.is_dir()) {
+        paths.extend(
+            current_builtin_skill_dirs(&root)
+                .into_iter()
+                .map(|path| path.to_string_lossy().into_owned()),
+        );
     }
 
     if let Some(floatnote) = crate::paths::floatnote_home() {
@@ -633,5 +649,24 @@ mod one_shot_pending_tests {
         assert_eq!(first_rx.try_recv().unwrap(), Err("断开".into()));
         assert_eq!(second_rx.try_recv().unwrap(), Err("断开".into()));
         assert!(pending.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn sidecar_paths_include_only_current_builtin_skills() {
+        let dir = crate::testutil::tempdir();
+        let root = dir.path().join("skills");
+        for name in ["organize", "socratic-review"] {
+            let skill = root.join(name);
+            std::fs::create_dir_all(&skill).unwrap();
+            std::fs::write(
+                skill.join("SKILL.md"),
+                "---\nname: sample\ndescription: sample\n---\n",
+            )
+            .unwrap();
+        }
+
+        let paths = current_builtin_skill_dirs(&root);
+
+        assert_eq!(paths, vec![root.join("organize")]);
     }
 }

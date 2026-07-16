@@ -4,6 +4,10 @@
 
 `sidecar/scripts/bundle.mjs` 将 sidecar 输出为 `sidecar/dist/floatnote-agent.mjs`。`prepare-tauri.mjs` 将 bundle 复制到 `src-tauri/resources/sidecar/`，并把 Node runtime 复制为符合 Tauri target triple 的 `src-tauri/binaries/floatnote-node-<triple>`。Tauri bundle 配置使用显式目录映射，将 sidecar bundle 与内置 skills 分别放到应用 `resource_dir()/sidecar` 和 `resource_dir()/skills`；Rust 从这些稳定的发布资源路径读取。Node runtime 作为 external binary 打包。
 
+Tauri 的增量资源复制可能在 `target` 或旧 bundle 中留下已从源码删除的 Skill
+目录。Rust 只枚举当前内置 Skill ID 清单并向 sidecar 下发对应的具体 Skill 目录，
+因此陈旧副本不会在运行时复活；debug 模式直接使用源码 Skill 目录。
+
 交叉构建时，必须提供与目标一致的：
 
 ```text

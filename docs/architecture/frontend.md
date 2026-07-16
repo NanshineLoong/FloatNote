@@ -23,6 +23,9 @@ FloatNote 使用 Vite 多页面应用：根目录 HTML 是各 WebView 入口。`
 切换，`general.ts` 只管理开机启动，`skills.ts` 管理目录清单、启停与导入，
 `shortcuts.ts` 管理录制器、渐进披露和冲突反馈。模块通过 `Config` 与显式保存
 回调协作，不跨模块查询 DOM。AI 提供商仍由 `provider-settings.ts` 管理六个固定档案，`output-mode.ts` 负责助手简洁/详细显示设置并在保存失败时恢复旧选择。
+Skill 候选和设置列表显示目录清单中的 `displayName` 与 `displayDescription`，
+但候选引用、启停开关和发送协议始终使用稳定英文 `name`；外部 Skill 未提供
+FloatNote 展示元数据时，host 已将显示字段回退到标准 `name` 与 `description`。
 列表采用单列行内展开，一次只编辑一家；输入先保存在本地草稿，只有字段合法且
 发生变化时才允许显式保存。启用开关与展开状态独立，未保存 API Key 与模型的
 档案不可启用，Base URL 只对 OpenAI、Anthropic 与阿里云百炼显示。

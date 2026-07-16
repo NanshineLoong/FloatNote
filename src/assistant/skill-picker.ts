@@ -17,6 +17,8 @@ import { createDockDropdown } from "./dock-dropdown.js";
 export interface SkillSummary {
   name: string;
   description: string;
+  displayName?: string;
+  displayDescription?: string;
 }
 
 export interface SkillPickerOptions {
@@ -48,7 +50,9 @@ export function renderSkillList(skills: SkillSummary[], query: string): HTMLElem
   const filtered = q
     ? skills.filter(
         (s) =>
-          s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q),
+          s.name.toLowerCase().includes(q) ||
+          (s.displayName ?? s.name).toLowerCase().includes(q) ||
+          (s.displayDescription ?? s.description).toLowerCase().includes(q),
       )
     : skills;
   if (filtered.length === 0) {
@@ -65,10 +69,10 @@ export function renderSkillList(skills: SkillSummary[], query: string): HTMLElem
     item.dataset.skillName = s.name;
     const name = document.createElement("span");
     name.className = "assistant-skill-name";
-    name.textContent = s.name;
+    name.textContent = s.displayName ?? s.name;
     const desc = document.createElement("span");
     desc.className = "assistant-skill-desc";
-    desc.textContent = s.description;
+    desc.textContent = s.displayDescription ?? s.description;
     item.append(name, desc);
     container.appendChild(item);
   }

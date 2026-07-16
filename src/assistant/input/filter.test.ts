@@ -50,4 +50,17 @@ describe("filterItems", () => {
     const items = [file("Piece.md")];
     expect(filterItems(items, "PIECE").length).toBe(1);
   });
+
+  it("隐藏别名参与搜索但不改变显示名", () => {
+    const items: Candidate[] = [{
+      ref: { kind: "skill", id: "organize", display: "整理材料" },
+      description: "按主题整理采集内容",
+      keywords: "organize",
+    }];
+
+    const result = filterItems(items, "organize");
+
+    expect(result).toHaveLength(1);
+    expect(result[0].candidate.ref.display).toBe("整理材料");
+  });
 });

@@ -33,6 +33,8 @@ export interface NoteUpdated {
 export interface Skill {
   name: string;
   description: string;
+  displayName: string;
+  displayDescription: string;
 }
 
 export function agentSend(args: {

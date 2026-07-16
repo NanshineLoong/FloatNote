@@ -10,6 +10,8 @@ import type { Ref } from "./model";
 export interface Candidate {
   ref: Ref;
   description?: string;
+  /** 用于过滤但不在候选项中显示，例如本地化 Skill 的稳定英文 ID。 */
+  keywords?: string;
 }
 
 export interface ScoredCandidate {
@@ -28,7 +30,8 @@ export function filterItems(items: Candidate[], query: string): ScoredCandidate[
     const c = items[i];
     const label = c.ref.display.toLowerCase();
     const desc = c.description?.toLowerCase() ?? "";
-    const score = scoreMatch(label, desc, q);
+    const keywords = c.keywords?.toLowerCase() ?? "";
+    const score = scoreMatch(label, desc, keywords, q);
     if (score < 0) continue;
     out.push({ candidate: c, score: score * 1000 + (1000 - label.length) + (items.length - i) });
   }
@@ -38,7 +41,7 @@ export function filterItems(items: Candidate[], query: string): ScoredCandidate[
 }
 
 /** 返回 -1 表示不匹配；否则越大越相关。 */
-function scoreMatch(label: string, desc: string, q: string): number {
+function scoreMatch(label: string, desc: string, keywords: string, q: string): number {
   const li = label.indexOf(q);
   if (li === 0) return 500; // 前缀
   if (li > 0) {
@@ -49,5 +52,8 @@ function scoreMatch(label: string, desc: string, q: string): number {
   const di = desc.indexOf(q);
   if (di === 0) return 100;
   if (di > 0) return 50;
+  const ki = keywords.indexOf(q);
+  if (ki === 0) return 100;
+  if (ki > 0) return 50;
   return -1;
 }

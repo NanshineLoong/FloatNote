@@ -197,8 +197,9 @@ export function mountComposer(opts: ComposerOptions): ComposerHandle {
   }
   function skillCandidates(skills: SkillSummary[]): Candidate[] {
     return skills.map((s) => ({
-      ref: { kind: "skill", id: s.name, display: s.name },
-      description: s.description,
+      ref: { kind: "skill", id: s.name, display: s.displayName ?? s.name },
+      description: s.displayDescription ?? s.description,
+      keywords: s.name,
     }));
   }
 

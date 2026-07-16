@@ -19,11 +19,16 @@ interface Setup {
 
 function makeComposer(opts: {
   files?: { name: string; kind: "inbox" | "tasks" | "piece" | "doc" }[];
-  skills?: { name: string; description: string }[];
+  skills?: { name: string; description: string; displayName?: string; displayDescription?: string }[];
   submitImmediately?: boolean;
 } = {}): Setup {
   const files = opts.files ?? [{ name: "piece.md", kind: "piece" as const }];
-  const skills = opts.skills ?? [{ name: "summarize", description: "总结" }];
+  const skills = opts.skills ?? [{
+    name: "organize",
+    description: "Organize source material.",
+    displayName: "整理材料",
+    displayDescription: "按主题整理采集内容",
+  }];
   const submitted: PromptPayload[] = [];
   let emptySends = 0;
   let resolveSubmit = (_accepted: boolean) => {};
@@ -80,8 +85,24 @@ describe("composer", () => {
   });
 
   it("/ 触发 skill 候选 popover", async () => {
-    handle.insertText("/sum");
+    handle.insertText("/整理");
     await vi.waitFor(() => expect(handle.isPopoverOpen()).toBe(true));
+  });
+
+  it("skill 候选显示中文但提交稳定英文 ID", async () => {
+    handle.insertText("/整理");
+    await vi.waitFor(() => expect(handle.isPopoverOpen()).toBe(true));
+
+    handle.pressKey("Enter");
+    handle.pressKey("Enter");
+
+    expect(submitted).toHaveLength(1);
+    expect(submitted[0].skill).toEqual({ name: "organize" });
+    expect(submitted[0].references[0]).toMatchObject({
+      kind: "skill",
+      id: "organize",
+      display: "整理材料",
+    });
   });
 
   it("Enter 确认候选 → 插入 chip，不提交", async () => {

@@ -3,9 +3,11 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { escapeHtml } from "../shared/escape";
 import type { Config, SaveConfig } from "./types";
 
-interface SkillSummary {
+export interface SkillSummary {
   name: string;
   description: string;
+  displayName?: string;
+  displayDescription?: string;
   source: "builtin" | "imported";
   enabled: boolean;
 }
@@ -19,6 +21,7 @@ export function mountSkills(root: HTMLElement, importButton: HTMLButtonElement, 
       root.querySelectorAll<HTMLInputElement>("[data-skill]").forEach((input) => {
         input.addEventListener("change", async () => {
           const name = input.dataset.skill!;
+          const displayName = input.dataset.skillDisplayName ?? name;
           const previous = [...config.disabled_skills];
           input.disabled = true;
           notice.textContent = "";
@@ -30,7 +33,7 @@ export function mountSkills(root: HTMLElement, importButton: HTMLButtonElement, 
           } catch (reason) {
             config.disabled_skills = previous;
             input.checked = !input.checked;
-            updateSkillLabel(input, name);
+            updateSkillLabel(input, displayName);
             notice.textContent = `无法保存 Skill 状态：${String(reason)}`;
             input.disabled = false;
             return;
@@ -40,7 +43,7 @@ export function mountSkills(root: HTMLElement, importButton: HTMLButtonElement, 
           } catch {
             notice.textContent = "设置已保存，将在 AI 运行时恢复后生效。";
           }
-          updateSkillLabel(input, name);
+          updateSkillLabel(input, displayName);
           input.disabled = false;
         });
       });
@@ -76,9 +79,13 @@ function updateSkillLabel(input: HTMLInputElement, name: string): void {
   input.setAttribute("aria-label", `${input.checked ? "停用" : "启用"} ${name}`);
 }
 
-function renderSkills(root: HTMLElement, skills: SkillSummary[]): void {
-  root.innerHTML = skills.length ? `<div class="settings-card">${skills.map((skill) => `<label class="skill-line">
-    <span class="skill-copy"><span class="skill-title"><strong>${escapeHtml(skill.name)}</strong><span class="skill-source">${skill.source === "builtin" ? "内置" : "已导入"}</span></span><small>${escapeHtml(skill.description)}</small></span>
-    <span class="settings-toggle"><input type="checkbox" data-skill="${escapeHtml(skill.name)}" ${skill.enabled ? "checked" : ""} aria-label="${skill.enabled ? "停用" : "启用"} ${escapeHtml(skill.name)}"/><span class="settings-toggle-track" aria-hidden="true"></span></span>
-  </label>`).join("")}</div>` : `<span class="settings-muted">暂无可用 Skill</span>`;
+export function renderSkills(root: HTMLElement, skills: SkillSummary[]): void {
+  root.innerHTML = skills.length ? `<div class="settings-card">${skills.map((skill) => {
+    const displayName = skill.displayName ?? skill.name;
+    const displayDescription = skill.displayDescription ?? skill.description;
+    return `<label class="skill-line">
+    <span class="skill-copy"><span class="skill-title"><strong>${escapeHtml(displayName)}</strong><span class="skill-source">${skill.source === "builtin" ? "内置" : "已导入"}</span></span><small>${escapeHtml(displayDescription)}</small></span>
+    <span class="settings-toggle"><input type="checkbox" data-skill="${escapeHtml(skill.name)}" data-skill-display-name="${escapeHtml(displayName)}" ${skill.enabled ? "checked" : ""} aria-label="${skill.enabled ? "停用" : "启用"} ${escapeHtml(displayName)}"/><span class="settings-toggle-track" aria-hidden="true"></span></span>
+  </label>`;
+  }).join("")}</div>` : `<span class="settings-muted">暂无可用 Skill</span>`;
 }

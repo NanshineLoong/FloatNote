@@ -3,9 +3,10 @@ import { describe, it, expect, vi } from "vitest";
 import { mountSkillPicker, renderSkillList, type SkillSummary } from "./skill-picker.js";
 
 const SKILLS: SkillSummary[] = [
-  { name: "socratic-review", description: "逐点苏格拉底式追问" },
-  { name: "inbox-to-actions", description: "提炼行动项写入 _tasks" },
-  { name: "structure-piece", description: "组织 piece 结构" },
+  { name: "organize", description: "Organize source material.", displayName: "整理材料", displayDescription: "按主题整理采集内容" },
+  { name: "tutor", description: "Question the user.", displayName: "拷问学习", displayDescription: "追问并指出理解缺口" },
+  { name: "plan-actions", description: "Create an action plan.", displayName: "行动规划", displayDescription: "逐步形成行动清单" },
+  { name: "write", description: "Develop an article.", displayName: "文章写作", displayDescription: "用用户内容形成文章" },
 ];
 
 function setup(skills: SkillSummary[] = SKILLS) {
@@ -28,22 +29,22 @@ function setup(skills: SkillSummary[] = SKILLS) {
 describe("renderSkillList", () => {
   it("lists all skills with name + description when query is empty", () => {
     const el = renderSkillList(SKILLS, "");
-    expect(el.querySelectorAll(".assistant-skill-item")).toHaveLength(3);
-    expect(el.querySelector(".assistant-skill-name")?.textContent).toBe("socratic-review");
-    expect(el.querySelector(".assistant-skill-desc")?.textContent).toContain("苏格拉底");
+    expect(el.querySelectorAll(".assistant-skill-item")).toHaveLength(4);
+    expect(el.querySelector(".assistant-skill-name")?.textContent).toBe("整理材料");
+    expect(el.querySelector(".assistant-skill-desc")?.textContent).toContain("采集内容");
   });
 
   it("filters by name substring (case-insensitive)", () => {
-    const el = renderSkillList(SKILLS, "INBOX");
+    const el = renderSkillList(SKILLS, "ORGANIZE");
     const items = el.querySelectorAll(".assistant-skill-item");
     expect(items).toHaveLength(1);
-    expect(items[0].getAttribute("data-skill-name")).toBe("inbox-to-actions");
+    expect(items[0].getAttribute("data-skill-name")).toBe("organize");
   });
 
   it("filters by description substring", () => {
-    const el = renderSkillList(SKILLS, "结构");
+    const el = renderSkillList(SKILLS, "行动");
     expect(el.querySelectorAll(".assistant-skill-item")).toHaveLength(1);
-    expect(el.querySelector(".assistant-skill-item")?.getAttribute("data-skill-name")).toBe("structure-piece");
+    expect(el.querySelector(".assistant-skill-item")?.getAttribute("data-skill-name")).toBe("plan-actions");
   });
 
   it("shows empty state when nothing matches", () => {
@@ -62,10 +63,10 @@ describe("mountSkillPicker right-click menu", () => {
       expect(document.querySelector(".assistant-skill-menu")).not.toBeNull();
     });
 
-    const item = document.querySelector<HTMLButtonElement>('.assistant-skill-item[data-skill-name="socratic-review"]')!;
+    const item = document.querySelector<HTMLButtonElement>('.assistant-skill-item[data-skill-name="organize"]')!;
     item.click();
 
-    expect(input.value).toBe("/skill:socratic-review ");
+    expect(input.value).toBe("/skill:organize ");
     expect(picker.isOpen()).toBe(false);
     // 收起态选中技能后立即展开输入框
     expect(openInput).toHaveBeenCalled();
@@ -88,9 +89,9 @@ describe("mountSkillPicker / autocomplete", () => {
     await vi.waitFor(() => {
       expect(document.querySelector(".assistant-skill-dropdown")?.hasAttribute("hidden")).toBe(false);
     });
-    expect(document.querySelectorAll(".assistant-skill-item")).toHaveLength(3);
+    expect(document.querySelectorAll(".assistant-skill-item")).toHaveLength(4);
 
-    input.value = "/str";
+    input.value = "/文章";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     await vi.waitFor(() => {
       expect(document.querySelectorAll(".assistant-skill-item")).toHaveLength(1);
@@ -105,9 +106,9 @@ describe("mountSkillPicker / autocomplete", () => {
     await vi.waitFor(() => {
       expect(document.querySelectorAll(".assistant-skill-item").length).toBeGreaterThan(0);
     });
-    const item = document.querySelector<HTMLButtonElement>('.assistant-skill-item[data-skill-name="inbox-to-actions"]')!;
+    const item = document.querySelector<HTMLButtonElement>('.assistant-skill-item[data-skill-name="plan-actions"]')!;
     item.click();
-    expect(input.value).toBe("/skill:inbox-to-actions ");
+    expect(input.value).toBe("/skill:plan-actions ");
     expect(picker.isOpen()).toBe(false);
     picker.destroy();
   });
