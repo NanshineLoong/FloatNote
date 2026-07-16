@@ -813,6 +813,11 @@ mod skill_catalog_tests {
             .join("skills");
 
         let skills = catalog_skills(&[root], None, &[]).unwrap();
+        let organize = skills
+            .iter()
+            .find(|skill| skill.name == "organize")
+            .unwrap();
+        assert_eq!(organize.display_description, "理清主题和脉络");
         let summaries = skills
             .into_iter()
             .map(|skill| (skill.name, skill.display_name))
@@ -821,7 +826,7 @@ mod skill_catalog_tests {
         assert_eq!(
             summaries,
             vec![
-                ("organize".into(), "整理材料".into()),
+                ("organize".into(), "梳理材料".into()),
                 ("plan-actions".into(), "行动规划".into()),
                 ("tutor".into(), "拷问学习".into()),
                 ("write".into(), "文章写作".into()),
