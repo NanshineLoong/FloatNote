@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { statSync } from "node:fs";
 import path from "node:path";
 import { decodeInbox } from "@floatnote/note-logic";
-import type { WorkspaceEntry } from "../protocol.js";
+import type { EditPreview, MutationOperation, WorkspaceEntry } from "../protocol.js";
 import type { SessionSkillView } from "../skills.js";
 import { validateProjectPath } from "./path-policy.js";
 import { projectInbox, projectMarkdown } from "./projection.js";
@@ -12,6 +12,15 @@ export interface ProjectedRead {
   context?: string;
   totalLines: number;
   nextOffset?: number;
+}
+
+export interface PreparedMutation {
+  path: string;
+  operation: MutationOperation;
+  oldContent: string;
+  newContent: string;
+  createOnly: boolean;
+  preview: EditPreview;
 }
 
 export interface WorkspaceHost {
