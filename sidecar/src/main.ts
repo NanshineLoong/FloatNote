@@ -114,17 +114,17 @@ async function main(): Promise<void> {
           send({ type: "rewind_result", callId: msg.callId, ok: false, error: safeError(err) });
         }
         break;
-      case "apply_edit_result":
-        runner.onApplyEditResult(msg);
+      case "workspace_list_result":
+        runner.onWorkspaceListResult(msg);
         break;
-      case "note_text":
-        runner.onNoteText(msg);
+      case "workspace_read_result":
+        runner.onWorkspaceReadResult(msg);
         break;
-      case "notes_list":
-        runner.onNotesList(msg);
+      case "mutation_review_result":
+        runner.onMutationReviewResult(msg);
         break;
-      case "create_note_result":
-        runner.onCreateNoteResult(msg);
+      case "mutation_commit_result":
+        runner.onMutationCommitResult(msg);
         break;
       case "list_skills":
         send({ type: "skills_list", callId: msg.callId, skills: runner.listSkills() });

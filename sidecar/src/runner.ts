@@ -1,5 +1,5 @@
 import { complete } from "@earendil-works/pi-ai/compat";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import type { Context } from "@earendil-works/pi-ai";
 import {
   AuthStorage,
@@ -9,19 +9,25 @@ import {
   ModelRegistry,
   SessionManager,
   type AgentSessionEvent,
+  type InlineExtension,
   type SessionManager as PiSessionManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { createNoteTools, type CreateNoteResult, type NoteListEntry, type WriteResult } from "./note-tools.js";
+import { createPermissionExtension } from "./extensions/permission-extension.js";
+import { createTagExtension, createTagTools } from "./extensions/tag-extension.js";
+import { createWebExtension } from "./extensions/web-extension.js";
+import { createWorkspaceExtension, createWorkspaceTools } from "./extensions/workspace-extension.js";
 import { createDefaultWebTools } from "./web-tools.js";
 import { TUTOR_SYSTEM_PROMPT } from "./tutor-prompt.js";
 import { SessionSkillView, SkillRegistry, type SkillSnapshot } from "./skills.js";
-import type { ChatDisplayBlock, ChatDisplayMessage, EditPreview, HostToSidecar, NoteTarget, PromptRef, SidecarToHost } from "./protocol.js";
+import type { ChatDisplayBlock, ChatDisplayMessage, HostToSidecar, PromptRef, SidecarToHost, WorkspaceEntry } from "./protocol.js";
 import { buildAgentModel, resolveAgentConfig, sanitizeAgentError, type AgentConfig } from "./model.js";
 import { translateEvent } from "./event-translate.js";
 import { composePromptText } from "./prompt-compose.js";
 import { formatToolTitle, sanitizeToolError } from "./tool-title.js";
 import { buildOneShotContext } from "./one-shot.js";
+import { MutationCoordinator } from "./workspace/mutation-coordinator.js";
+import { WorkspaceClient, type PreparedMutation } from "./workspace/types.js";
 
 /** Minimal surface of a Pi AgentSession the runner depends on (injectable for tests). */
 export interface SessionLike {
@@ -45,6 +51,7 @@ export type SessionFactory = (
 
 export interface SessionResources {
   skillView: SessionSkillView;
+  extensions: InlineExtension[];
 }
 
 export interface AgentRunnerOptions {
@@ -74,6 +81,17 @@ export interface OpenSessionRequest {
 }
 
 const EMPTY_RESPONSE_MESSAGE = "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。";
+export const ACTIVE_TOOL_NAMES = [
+  "ls", "read", "find", "grep", "edit", "write",
+  "list_tags", "tag_text", "tag_create", "tag_update", "tag_delete",
+  "web_search", "web_fetch",
+] as const;
+
+interface PendingCall<T> {
+  conversationId: string;
+  resolve: (value: T) => void;
+  reject: (error: Error) => void;
+}
 
 /**
  * Drives a tutor session: builds the note tools (with host-delegated writes),
@@ -90,12 +108,12 @@ export class AgentRunner {
   private readonly dirtySkillSessions = new Map<string, SkillSnapshot>();
   private readonly activeConversations = new Map<string, string>();
   private readonly discardedConversations = new Set<string>();
-  private writeSeq = 0;
-  private textSeq = 0;
-  private readonly pendingEdits = new Map<string, (r: WriteResult) => void>();
-  private readonly pendingTexts = new Map<string, (r: { content: string; found: boolean }) => void>();
-  private readonly pendingLists = new Map<string, (notes: NoteListEntry[]) => void>();
-  private readonly pendingCreates = new Map<string, (result: CreateNoteResult) => void>();
+  private readonly mutationCoordinators = new Map<string, MutationCoordinator>();
+  private callSeq = 0;
+  private readonly pendingWorkspaceLists = new Map<string, PendingCall<WorkspaceEntry[]>>();
+  private readonly pendingWorkspaceReads = new Map<string, PendingCall<string>>();
+  private readonly pendingMutationReviews = new Map<string, PendingCall<Extract<HostToSidecar, { type: "mutation_review_result" }>>>();
+  private readonly pendingMutationCommits = new Map<string, PendingCall<Extract<HostToSidecar, { type: "mutation_commit_result" }>>>();
 
   constructor(options: AgentRunnerOptions) {
     this.send = options.send;
@@ -107,7 +125,11 @@ export class AgentRunner {
       throw new Error("请等待当前回复完成后再切换 AI 提供商");
     }
     const resolved = resolveAgentConfig(cfg);
-    const replacements = new Map<string, { session: SessionLike; skillView: SessionSkillView }>();
+    const replacements = new Map<string, {
+      session: SessionLike;
+      skillView: SessionSkillView;
+      coordinator: MutationCoordinator;
+    }>();
     try {
       for (const [conversationId, sessionManager] of this.sessionManagers) {
         replacements.set(conversationId, await this.createConfiguredSession(resolved, conversationId, sessionManager));
@@ -116,10 +138,12 @@ export class AgentRunner {
       for (const replacement of replacements.values()) replacement.session.dispose?.();
       throw error;
     }
-    for (const [conversationId, { session: replacement, skillView }] of replacements) {
+    for (const [conversationId, { session: replacement, skillView, coordinator }] of replacements) {
       this.sessions.get(conversationId)?.dispose?.();
       this.sessions.set(conversationId, replacement);
       this.skillViews.set(conversationId, skillView);
+      this.mutationCoordinators.get(conversationId)?.clear();
+      this.mutationCoordinators.set(conversationId, coordinator);
     }
     this.cfg = resolved;
   }
@@ -133,6 +157,9 @@ export class AgentRunner {
     this.sessionManagers.clear();
     this.skillViews.clear();
     this.dirtySkillSessions.clear();
+    for (const coordinator of this.mutationCoordinators.values()) coordinator.clear();
+    this.mutationCoordinators.clear();
+    this.rejectAllPending("AI 配置已关闭");
     this.cfg = undefined;
   }
 
@@ -193,6 +220,9 @@ export class AgentRunner {
     this.sessionManagers.delete(conversationId);
     this.skillViews.delete(conversationId);
     this.dirtySkillSessions.delete(conversationId);
+    this.mutationCoordinators.get(conversationId)?.clear();
+    this.mutationCoordinators.delete(conversationId);
+    this.rejectConversationCalls(conversationId, "对话已关闭");
     for (const [requestId, activeConversationId] of this.activeConversations) {
       if (activeConversationId === conversationId) this.activeConversations.delete(requestId);
     }
@@ -270,32 +300,25 @@ export class AgentRunner {
     this.emitSessionSynced(conversationId);
   }
 
-  /** Resolve a pending get_note_text round-trip with the host-supplied content. */
-  onNoteText(msg: Extract<HostToSidecar, { type: "note_text" }>): void {
-    const resolve = this.pendingTexts.get(msg.callId);
-    if (resolve) {
-      this.pendingTexts.delete(msg.callId);
-      resolve({ content: msg.content, found: msg.found });
-    }
+  onWorkspaceListResult(msg: Extract<HostToSidecar, { type: "workspace_list_result" }>): void {
+    this.settle(this.pendingWorkspaceLists, msg.callId, msg.entries, msg.error);
   }
 
-  /** Resolve a pending apply_edit round-trip with the host-supplied result. */
-  onApplyEditResult(msg: Extract<HostToSidecar, { type: "apply_edit_result" }>): void {
-    const resolve = this.pendingEdits.get(msg.callId);
-    if (resolve) {
-      this.pendingEdits.delete(msg.callId);
-      resolve({ ok: msg.ok, denied: msg.denied, version: msg.version, error: msg.error });
-    }
+  onWorkspaceReadResult(msg: Extract<HostToSidecar, { type: "workspace_read_result" }>): void {
+    this.settle(
+      this.pendingWorkspaceReads,
+      msg.callId,
+      msg.content ?? "",
+      msg.error ?? (!msg.found ? "目标笔记不存在" : undefined),
+    );
   }
 
-  onNotesList(msg: Extract<HostToSidecar, { type: "notes_list" }>): void {
-    const resolve = this.pendingLists.get(msg.callId);
-    if (resolve) { this.pendingLists.delete(msg.callId); resolve(msg.notes); }
+  onMutationReviewResult(msg: Extract<HostToSidecar, { type: "mutation_review_result" }>): void {
+    this.settle(this.pendingMutationReviews, msg.callId, msg);
   }
 
-  onCreateNoteResult(msg: Extract<HostToSidecar, { type: "create_note_result" }>): void {
-    const resolve = this.pendingCreates.get(msg.callId);
-    if (resolve) { this.pendingCreates.delete(msg.callId); resolve(msg); }
+  onMutationCommitResult(msg: Extract<HostToSidecar, { type: "mutation_commit_result" }>): void {
+    this.settle(this.pendingMutationCommits, msg.callId, msg);
   }
 
   /** Cancel the in-flight prompt for `requestId`. Scoped to that request's
@@ -305,13 +328,15 @@ export class AgentRunner {
     const conversationId = requestId ? this.activeConversations.get(requestId) : undefined;
     if (!conversationId) return;
     await this.sessions.get(conversationId)?.abort();
+    this.mutationCoordinators.get(conversationId)?.clear();
+    this.rejectConversationCalls(conversationId, "工具调用已取消");
   }
 
   private async installSession(conversationId: string, sessionManager: PiSessionManager): Promise<void> {
     if (!this.cfg) {
       throw new Error("尚未配置或启用 AI 提供商，请前往设置完成配置并启用。");
     }
-    const { session, skillView } = await this.createConfiguredSession(
+    const { session, skillView, coordinator } = await this.createConfiguredSession(
       this.cfg,
       conversationId,
       sessionManager,
@@ -326,6 +351,8 @@ export class AgentRunner {
     this.sessionManagers.set(conversationId, sessionManager);
     this.sessions.set(conversationId, session);
     this.skillViews.set(conversationId, skillView);
+    this.mutationCoordinators.get(conversationId)?.clear();
+    this.mutationCoordinators.set(conversationId, coordinator);
     const sessionFile = session.sessionFile ?? session.sessionManager?.getSessionFile() ?? sessionManager.getSessionFile();
     if (!sessionFile) {
       throw new Error("persistent session file unavailable");
@@ -355,29 +382,43 @@ export class AgentRunner {
     cfg: AgentConfig,
     conversationId: string,
     sessionManager: PiSessionManager,
-  ): Promise<{ session: SessionLike; skillView: SessionSkillView }> {
+  ): Promise<{
+    session: SessionLike;
+    skillView: SessionSkillView;
+    coordinator: MutationCoordinator;
+  }> {
     const skillView = this.skillViews.get(conversationId)
       ?? new SessionSkillView(this.skillRegistry.snapshot());
-    const noteTools = createNoteTools({
-      getNoteText: (target) => this.getNoteText(conversationId, target),
-      listNotes: () => this.listNotes(conversationId),
-      requestCreateNote: (args) => this.requestCreateNote(conversationId, args),
-      requestWrite: (args) => this.requestWrite(conversationId, args),
-      readSkillBody: (name) => {
-        const skill = skillView.skills().find((candidate) => candidate.name === name);
-        if (!skill) return null;
-        const file = skillView.resolveReadableFile(skill.filePath);
-        if (!file) return null;
-        try {
-          return readFileSync(file, "utf8");
-        } catch {
-          return null;
-        }
-      },
+    const workspace = new WorkspaceClient({
+      list: () => this.listWorkspace(conversationId),
+      read: (path) => this.readWorkspace(conversationId, path),
+    }, skillView);
+    const coordinator = new MutationCoordinator({
+      workspace,
+      review: (toolCallId, toolName, mutation) => this.reviewMutation(
+        conversationId,
+        toolCallId,
+        toolName,
+        mutation,
+      ),
+      commit: (toolCallId, lease) => this.commitMutation(
+        conversationId,
+        toolCallId,
+        lease,
+      ),
     });
-    const tools = [...noteTools, ...createDefaultWebTools()];
-    const session = await this.factory(cfg, tools, sessionManager, { skillView });
-    return { session, skillView };
+    const workspaceTools = createWorkspaceTools(workspace, coordinator);
+    const tagTools = createTagTools(workspace, coordinator);
+    const webTools = createDefaultWebTools();
+    const tools = [...workspaceTools, ...tagTools, ...webTools];
+    const extensions = [
+      createWorkspaceExtension(workspaceTools),
+      createTagExtension(tagTools),
+      createWebExtension(),
+      createPermissionExtension(coordinator),
+    ];
+    const session = await this.factory(cfg, tools, sessionManager, { skillView, extensions });
+    return { session, skillView, coordinator };
   }
 
   private async generateTitle(conversationId: string, userText: string): Promise<void> {
@@ -406,72 +447,100 @@ export class AgentRunner {
     }
   }
 
-  private getNoteText(conversationId: string, target?: NoteTarget): Promise<string> {
-    const callId = `g${++this.textSeq}`;
-    const msg: SidecarToHost = {
-      type: "get_note_text",
-      callId,
-      conversationId,
-      // target 缺省=当前活动笔记；仅当调用方给出时携带，由 Rust 解析。
-      ...(target ? { target } : {}),
-    };
-    return new Promise<string>((resolve, reject) => {
-      this.pendingTexts.set(callId, (r) => {
-        // `found === false` means the target note does not exist on disk.
-        // Reject so tools surface a clear "note not found" error instead of
-        // silently operating on (and writing back) an empty document.
-        if (!r.found) {
-          reject(new Error("目标笔记不存在"));
-          return;
-        }
-        resolve(r.content);
-      });
-      this.send(msg);
+  private listWorkspace(conversationId: string): Promise<WorkspaceEntry[]> {
+    const callId = this.nextCallId("l");
+    return new Promise((resolve, reject) => {
+      this.pendingWorkspaceLists.set(callId, { conversationId, resolve, reject });
+      this.send({ type: "workspace_list", callId, conversationId });
     });
   }
 
-  private requestWrite(
+  private readWorkspace(conversationId: string, path: string): Promise<string> {
+    const callId = this.nextCallId("r");
+    return new Promise((resolve, reject) => {
+      this.pendingWorkspaceReads.set(callId, { conversationId, resolve, reject });
+      this.send({ type: "workspace_read", callId, conversationId, path });
+    });
+  }
+
+  private reviewMutation(
     conversationId: string,
-    args: { toolCallId: string; target?: NoteTarget; toolName: string; oldContent: string; newContent: string; preview: EditPreview },
-  ): Promise<WriteResult> {
-    const callId = `w${++this.writeSeq}`;
-    const msg: SidecarToHost = {
-      type: "apply_edit",
-      callId,
-      conversationId,
-      toolCallId: args.toolCallId,
-      // target 缺省=当前活动笔记；仅当调用方给出时携带，由 Rust 解析。
-      ...(args.target ? { target: args.target } : {}),
-      toolName: args.toolName,
-      oldContent: args.oldContent,
-      newContent: args.newContent,
-      preview: args.preview,
-    };
-    return new Promise<WriteResult>((resolve) => {
-      this.pendingEdits.set(callId, resolve);
-      this.send(msg);
+    toolCallId: string,
+    toolName: string,
+    mutation: PreparedMutation,
+  ): Promise<Extract<HostToSidecar, { type: "mutation_review_result" }>> {
+    const callId = this.nextCallId("v");
+    return new Promise((resolve, reject) => {
+      this.pendingMutationReviews.set(callId, { conversationId, resolve, reject });
+      this.send({
+        type: "review_mutation",
+        callId,
+        conversationId,
+        toolCallId,
+        toolName,
+        ...mutation,
+      });
     });
   }
 
-  private listNotes(conversationId: string): Promise<NoteListEntry[]> {
-    const callId = `l${++this.textSeq}`;
-    return new Promise((resolve) => {
-      this.pendingLists.set(callId, resolve);
-      this.send({ type: "list_notes", callId, conversationId });
+  private commitMutation(
+    conversationId: string,
+    toolCallId: string,
+    lease: string,
+  ): Promise<Extract<HostToSidecar, { type: "mutation_commit_result" }>> {
+    const callId = this.nextCallId("m");
+    return new Promise((resolve, reject) => {
+      this.pendingMutationCommits.set(callId, { conversationId, resolve, reject });
+      this.send({ type: "commit_mutation", callId, conversationId, toolCallId, lease });
     });
   }
 
-  private requestCreateNote(conversationId: string, args: { toolCallId: string; title: string; content: string; preview: EditPreview }): Promise<CreateNoteResult> {
-    const callId = `c${++this.writeSeq}`;
-    return new Promise((resolve) => {
-      this.pendingCreates.set(callId, resolve);
-      this.send({ type: "create_note", callId, conversationId, toolCallId: args.toolCallId, title: args.title, content: args.content, preview: args.preview });
-    });
+  private nextCallId(prefix: string): string {
+    return `${prefix}${++this.callSeq}`;
+  }
+
+  private settle<T>(
+    pending: Map<string, PendingCall<T>>,
+    callId: string,
+    value: T,
+    error?: string,
+  ): void {
+    const call = pending.get(callId);
+    if (!call) return;
+    pending.delete(callId);
+    if (error) call.reject(new Error(error));
+    else call.resolve(value);
+  }
+
+  private rejectConversationCalls(conversationId: string, message: string): void {
+    for (const pending of this.pendingMaps()) {
+      for (const [callId, call] of pending) {
+        if (call.conversationId !== conversationId) continue;
+        pending.delete(callId);
+        call.reject(new Error(message));
+      }
+    }
+  }
+
+  private rejectAllPending(message: string): void {
+    for (const pending of this.pendingMaps()) {
+      for (const call of pending.values()) call.reject(new Error(message));
+      pending.clear();
+    }
+  }
+
+  private pendingMaps(): Array<Map<string, PendingCall<unknown>>> {
+    return [
+      this.pendingWorkspaceLists,
+      this.pendingWorkspaceReads,
+      this.pendingMutationReviews,
+      this.pendingMutationCommits,
+    ] as Array<Map<string, PendingCall<unknown>>>;
   }
 }
 
 /** Build a real Pi tutor session from config. */
-const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager, resources) => {
+const defaultCreateSession: SessionFactory = async (cfg, _tools, sessionManager, resources) => {
   const authStorage = AuthStorage.inMemory();
   if (cfg.apiKey) {
     authStorage.setRuntimeApiKey(buildAgentModel(cfg).provider, cfg.apiKey);
@@ -487,6 +556,7 @@ const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager, 
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: true,
+    extensionFactories: resources.extensions,
     skillsOverride: () => ({ skills: resources.skillView.skills(), diagnostics: [] }),
     systemPromptOverride: () => TUTOR_SYSTEM_PROMPT,
   });
@@ -496,8 +566,7 @@ const defaultCreateSession: SessionFactory = async (cfg, tools, sessionManager, 
 
   const { session } = await createAgentSession({
     model,
-    customTools: tools,
-    tools: ["read_note", "list_notes", "list_tags", "edit_note", "write_note", "create_note", "tag_text", "tag_create", "tag_update", "tag_delete", "web_search", "web_fetch", "read_skill"],
+    tools: [...ACTIVE_TOOL_NAMES],
     noTools: "builtin",
     resourceLoader,
     authStorage,

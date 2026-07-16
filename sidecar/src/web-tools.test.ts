@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { assertPublicWebUrl, createWebTools, htmlToReadableText } from "./web-tools.js";
+import { createWebExtension } from "./extensions/web-extension.js";
 
 describe("assertPublicWebUrl", () => {
   it("accepts a public https URL", async () => {
@@ -28,6 +29,14 @@ describe("htmlToReadableText", () => {
 });
 
 describe("web tools", () => {
+  it("registers both unchanged Web definitions through the inline extension", async () => {
+    const names: string[] = [];
+    const extension = createWebExtension();
+    const factory = typeof extension === "function" ? extension : extension.factory;
+    await factory({ registerTool: (tool: { name: string }) => names.push(tool.name) } as never);
+    expect(names).toEqual(["web_search", "web_fetch"]);
+  });
+
   it("returns bounded search results from the injected adapter", async () => {
     const tools = createWebTools({
       lookup: async () => ["93.184.216.34"],

@@ -456,17 +456,19 @@ describe("AgentRunner", () => {
     })).rejects.toThrow("尚未配置或启用 AI 提供商");
   });
 
-  it("emits apply_edit when the model writes, and resolves on the host result", async () => {
+  it("activates only FloatNote tool implementations and completes a review/commit round trip", async () => {
     const sent: SidecarToHost[] = [];
-    let capturedWriteText: string | undefined;
+    let capturedResultText: string | undefined;
+    let permissionHook: ((event: unknown) => Promise<unknown>) | undefined;
 
-    // Script: during prompt, invoke write_note exactly like the model would.
     const { session } = fakeSession(async (emit) => {
-      const writeTool = capturedTools!.find((t) => t.name === "write_note")!;
-      emit(ev({ type: "tool_execution_start", toolCallId: "c1", toolName: "write_note", args: {} }));
-      const result = await writeTool.execute("c1", { content: "tidied note" } as never, undefined, undefined, {} as never);
-      capturedWriteText = (result.content[0] as { text: string }).text;
-      emit(ev({ type: "tool_execution_end", toolCallId: "c1", toolName: "write_note", result: {}, isError: false }));
+      const editTool = capturedTools!.find((tool) => tool.name === "edit")!;
+      const input = { path: "piece.md", edits: [{ oldText: "old", newText: "new" }] };
+      await permissionHook?.({ type: "tool_call", toolCallId: "c1", toolName: "edit", input });
+      emit(ev({ type: "tool_execution_start", toolCallId: "c1", toolName: "edit", args: input }));
+      const result = await editTool.execute("c1", input as never, undefined, undefined, {} as never);
+      capturedResultText = (result.content[0] as { text: string }).text;
+      emit(ev({ type: "tool_execution_end", toolCallId: "c1", toolName: "edit", result: {}, isError: false }));
       emit(ev({ type: "agent_end", messages: [], willRetry: false }));
     });
 
@@ -474,15 +476,47 @@ describe("AgentRunner", () => {
     const runner = new AgentRunner({
       send: (m) => {
         sent.push(m);
-        // Host responds to get_note_text and apply_edit out-of-band.
-        if (m.type === "get_note_text") {
-          runner.onNoteText({ type: "note_text", callId: m.callId, content: "old doc", found: true });
-        } else if (m.type === "apply_edit") {
-          runner.onApplyEditResult({ type: "apply_edit_result", callId: m.callId, ok: true, version: 4 });
+        if (m.type === "workspace_list") {
+          runner.onWorkspaceListResult({
+            type: "workspace_list_result",
+            callId: m.callId,
+            entries: [{ path: "piece.md", kind: "piece" }],
+          });
+        } else if (m.type === "workspace_read") {
+          runner.onWorkspaceReadResult({
+            type: "workspace_read_result",
+            callId: m.callId,
+            found: true,
+            content: "old",
+          });
+        } else if (m.type === "review_mutation") {
+          runner.onMutationReviewResult({
+            type: "mutation_review_result",
+            callId: m.callId,
+            allowed: true,
+            lease: "lease-1",
+            writeMode: "direct",
+          });
+        } else if (m.type === "commit_mutation") {
+          runner.onMutationCommitResult({
+            type: "mutation_commit_result",
+            callId: m.callId,
+            ok: true,
+            version: 4,
+          });
         }
       },
-      createSession: async (_cfg, tools) => {
+      createSession: async (_cfg, tools, _manager, resources) => {
         capturedTools = tools;
+        for (const extension of resources.extensions) {
+          const factory = typeof extension === "function" ? extension : extension.factory;
+          await factory({
+            registerTool() {},
+            on(event: string, handler: (event: unknown) => Promise<unknown>) {
+              if (event === "tool_call") permissionHook = handler;
+            },
+          } as never);
+        }
         return session;
       },
     });
@@ -490,61 +524,31 @@ describe("AgentRunner", () => {
     await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
     await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "整理一下" });
 
-    const applyEdit = sent.find((m) => m.type === "apply_edit");
-    // write_note 未带 target → apply_edit 应省略 target 字段（由 Rust 解析为活动笔记）。
-    expect(applyEdit).toEqual({
-      type: "apply_edit",
-      callId: expect.any(String),
-      conversationId: "c1",
+    expect(new Set(capturedTools?.map((tool) => tool.name))).toEqual(new Set([
+      "ls", "read", "find", "grep", "edit", "write",
+      "list_tags", "tag_text", "tag_create", "tag_update", "tag_delete",
+      "web_search", "web_fetch",
+    ]));
+    expect(capturedTools?.find((tool) => tool.name === "read")?.description).toContain("FloatNote");
+    expect(capturedTools?.find((tool) => tool.name === "grep")?.description).toContain("当前项目");
+    expect(sent).toContainEqual(expect.objectContaining({
+      type: "review_mutation",
       toolCallId: "c1",
-      toolName: "write_note",
-      oldContent: "old doc",
-      newContent: "tidied note",
-      preview: expect.objectContaining({ tool: "write_note", summary: "整篇覆写" }),
-    });
-    expect(applyEdit).not.toHaveProperty("target");
-    expect(capturedWriteText).toBe("已更新，版本 v4");
-    expect(capturedWriteText).not.toBeUndefined();
-  });
-
-  it("surfaces a denied write as a user-denied tool result", async () => {
-    const sent: SidecarToHost[] = [];
-    let capturedWriteText: string | undefined;
-
-    const { session } = fakeSession(async (emit) => {
-      const writeTool = capturedTools!.find((t) => t.name === "write_note")!;
-      emit(ev({ type: "tool_execution_start", toolCallId: "c1", toolName: "write_note", args: {} }));
-      const result = await writeTool.execute("c1", { content: "nope" } as never, undefined, undefined, {} as never);
-      capturedWriteText = (result.content[0] as { text: string }).text;
-      emit(ev({ type: "tool_execution_end", toolCallId: "c1", toolName: "write_note", result: {}, isError: false }));
-      emit(ev({ type: "agent_end", messages: [], willRetry: false }));
-    });
-
-    let capturedTools: ToolDefinition[] | undefined;
-    const runner = new AgentRunner({
-      send: (m) => {
-        sent.push(m);
-        if (m.type === "get_note_text") {
-          runner.onNoteText({ type: "note_text", callId: m.callId, content: "", found: true });
-        } else if (m.type === "apply_edit") {
-          runner.onApplyEditResult({ type: "apply_edit_result", callId: m.callId, ok: false, denied: true });
-        }
-      },
-      createSession: async (_cfg, tools) => {
-        capturedTools = tools;
-        return session;
-      },
-    });
-    await runner.configure({ provider: "anthropic", model: "claude-opus-4-5", apiKey: "k" });
-    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
-    await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "整理一下" });
-
-    expect(capturedWriteText).toBe("用户拒绝了此操作");
+      toolName: "edit",
+      oldContent: "old",
+      newContent: "new",
+    }));
+    expect(sent).toContainEqual(expect.objectContaining({
+      type: "commit_mutation",
+      toolCallId: "c1",
+      lease: "lease-1",
+    }));
+    expect(capturedResultText).toBe("已更新，版本 v4");
   });
 });
 
-describe("AgentRunner getNoteText round-trip", () => {
-  it("resolves getNoteText from note_text reply", async () => {
+describe("AgentRunner workspace round-trip", () => {
+  it("resolves a workspace read from the correlated host reply", async () => {
     const sent: SidecarToHost[] = [];
     const { session } = fakeSession(async () => {});
     const runner = new AgentRunner({
@@ -554,10 +558,17 @@ describe("AgentRunner getNoteText round-trip", () => {
     await runner.configure({ provider: "anthropic", model: "x" });
     await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
 
-    const p = (runner as unknown as { getNoteText: (id: string, t?: { kind: string }) => Promise<string> }).getNoteText("c1", { kind: "inbox" });
-    expect(sent.at(-1)?.type).toBe("get_note_text");
+    const p = (runner as unknown as {
+      readWorkspace: (id: string, path: string) => Promise<string>;
+    }).readWorkspace("c1", "_inbox.md");
+    expect(sent.at(-1)?.type).toBe("workspace_read");
     const last = sent.at(-1) as { callId: string };
-    (runner as unknown as { onNoteText: (m: { type: "note_text"; callId: string; content: string; found: boolean }) => void }).onNoteText({ type: "note_text", callId: last.callId, content: "doc", found: true });
+    runner.onWorkspaceReadResult({
+      type: "workspace_read_result",
+      callId: last.callId,
+      content: "doc",
+      found: true,
+    });
     await expect(p).resolves.toBe("doc");
   });
 });

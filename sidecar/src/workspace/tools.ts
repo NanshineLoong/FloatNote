@@ -62,7 +62,7 @@ export function createReadOnlyWorkspaceTools(deps: ReadOnlyWorkspaceToolDeps): T
   const read = defineTool({
     name: "read",
     label: "Read",
-    description: "读取项目笔记或可用 Skill 资源。读取 Inbox 时返回干净 Markdown，并附带只读的标签与引用来源上下文。",
+    description: "读取当前 FloatNote 项目笔记或可用 Skill 资源。读取 Inbox 时返回干净 Markdown，并附带只读的标签与引用来源上下文。",
     parameters: Type.Object({
       path: Type.String({ description: "当前项目中的笔记路径，或 <available_skills> 中列出的 Skill 资源路径" }),
       offset: Type.Optional(Type.Number({ description: "Line number to start reading from (1-indexed)" })),
