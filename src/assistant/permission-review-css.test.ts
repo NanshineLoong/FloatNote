@@ -9,8 +9,13 @@ describe("permission review CSS", () => {
     expect(css).toMatch(/\.assistant-perm-region\s*\{[^}]*left:\s*var\(--assistant-dock-inset\);[^}]*right:\s*var\(--assistant-dock-inset\);/s);
   });
 
-  it("keeps review paper geometry aligned with the focused input paper", () => {
-    expect(css).toMatch(/\.perm-dialog-paper\s*\{[^}]*width:\s*min\(920px, calc\(100vw - 32px\)\);[^}]*height:\s*min\(720px, calc\(100vh - 64px\)\);/s);
+  it("sizes the review paper from its resize-aware dialog container", () => {
+    expect(css).toMatch(/\.perm-dialog-paper\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*920px;[^}]*height:\s*100%;[^}]*max-height:\s*720px;/s);
+    expect(css).not.toMatch(/\.perm-dialog-paper\s*\{[^}]*100vw|\.perm-dialog-paper\s*\{[^}]*100vh/s);
+  });
+
+  it("wraps review actions instead of letting them overflow a narrow footer", () => {
+    expect(css).toMatch(/\.perm-dialog-footer\s*\{[^}]*flex-wrap:\s*wrap;/s);
   });
 
   it("switches from unified to side-by-side diff at a 680px review-container width", () => {
@@ -32,6 +37,12 @@ describe("permission review CSS", () => {
   it("keeps review tabs fixed above one scrollable panel", () => {
     expect(css).toMatch(/\.perm-dialog-body\.has-tabs\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\);/s);
     expect(css).toMatch(/\.perm-review-panel\s*\{[^}]*overflow:\s*hidden;/s);
+  });
+
+  it("keeps the rendered Markdown review inside a shrinkable scrollport on narrow windows", () => {
+    expect(css).toMatch(/\.perm-dialog-body\s*\{[^}]*min-width:\s*0;[^}]*min-height:\s*0;[^}]*overflow:\s*hidden;/s);
+    expect(css).toMatch(/\.perm-dialog-markdown\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*100%;[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;/s);
+    expect(css).toMatch(/\.perm-dialog-markdown\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
   });
 
   it("makes Markdown tables and code blocks scroll without widening their surface", () => {
