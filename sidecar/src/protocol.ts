@@ -53,6 +53,10 @@ export type HostToSidecar =
       version?: number;
       error?: string;
     }
+  | { type: "workspace_list_result"; callId: string; entries: WorkspaceEntry[]; error?: string }
+  | { type: "workspace_read_result"; callId: string; found: boolean; content?: string; error?: string }
+  | { type: "mutation_review_result"; callId: string; allowed: boolean; lease?: string; writeMode?: WriteMode; error?: string }
+  | { type: "mutation_commit_result"; callId: string; ok: boolean; version?: number; error?: string }
   | { type: "note_text"; callId: string; content: string; found: boolean }
   | { type: "notes_list"; callId: string; notes: Array<{ kind: "inbox" | "tasks" | "piece"; name: string }> }
   | { type: "create_note_result"; callId: string; ok: boolean; denied?: boolean; name?: string; error?: string }
@@ -73,6 +77,14 @@ export type HostToSidecar =
     };
 
 export type NoteTarget = { kind: "inbox" | "tasks" | "piece"; name?: string };
+
+export interface WorkspaceEntry {
+  path: string;
+  kind: "inbox" | "tasks" | "piece";
+}
+
+export type MutationOperation = "create" | "edit" | "rewrite" | "tag";
+export type WriteMode = "direct" | "snapshot";
 
 /** prompt 携带的结构化引用：显示名(display) 与内部标识(id) 分离。 */
 export interface PromptRef {
@@ -147,6 +159,22 @@ export type SidecarToHost =
       newContent: string;
       preview: EditPreview;
     }
+  | { type: "workspace_list"; callId: string; conversationId: string }
+  | { type: "workspace_read"; callId: string; conversationId: string; path: string }
+  | {
+      type: "review_mutation";
+      callId: string;
+      conversationId: string;
+      toolCallId: string;
+      toolName: string;
+      operation: MutationOperation;
+      path: string;
+      oldContent: string;
+      newContent: string;
+      createOnly: boolean;
+      preview: EditPreview;
+    }
+  | { type: "commit_mutation"; callId: string; conversationId: string; toolCallId: string; lease: string }
   | { type: "get_note_text"; callId: string; conversationId: string; target?: NoteTarget }
   | { type: "list_notes"; callId: string; conversationId: string }
   | { type: "create_note"; callId: string; conversationId: string; toolCallId: string; title: string; content: string; preview: EditPreview }

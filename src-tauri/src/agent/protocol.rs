@@ -69,6 +69,38 @@ pub enum HostToSidecar {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    WorkspaceListResult {
+        call_id: String,
+        entries: Vec<WorkspaceEntry>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    WorkspaceReadResult {
+        call_id: String,
+        found: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        content: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    MutationReviewResult {
+        call_id: String,
+        allowed: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        lease: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        write_mode: Option<WriteMode>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    MutationCommitResult {
+        call_id: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        version: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     NoteText {
         call_id: String,
         content: String,
@@ -192,6 +224,33 @@ pub enum SidecarToHost {
         old_content: String,
         new_content: String,
         preview: EditPreview,
+    },
+    WorkspaceList {
+        call_id: String,
+        conversation_id: String,
+    },
+    WorkspaceRead {
+        call_id: String,
+        conversation_id: String,
+        path: String,
+    },
+    ReviewMutation {
+        call_id: String,
+        conversation_id: String,
+        tool_call_id: String,
+        tool_name: String,
+        operation: MutationOperation,
+        path: String,
+        old_content: String,
+        new_content: String,
+        create_only: bool,
+        preview: EditPreview,
+    },
+    CommitMutation {
+        call_id: String,
+        conversation_id: String,
+        tool_call_id: String,
+        lease: String,
     },
     GetNoteText {
         call_id: String,
@@ -368,6 +427,29 @@ pub struct AgentNoteEntry {
     pub name: String,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceEntry {
+    pub path: String,
+    pub kind: String,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MutationOperation {
+    Create,
+    Edit,
+    Rewrite,
+    Tag,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum WriteMode {
+    Direct,
+    Snapshot,
+}
+
 /// apply_edit 的预览细节（判别联合，`kind` 区分）。
 ///
 /// 变体名用 `rename_all = "snake_case"` 序列化为 `diff`/`tag_assign`/
@@ -435,6 +517,59 @@ pub struct NoteUpdated {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workspace_protocol_round_trips() {
+        for line in [
+            r#"{"type":"workspace_list","callId":"l1","conversationId":"cv1"}"#,
+            r#"{"type":"workspace_read","callId":"r1","conversationId":"cv1","path":"_inbox.md"}"#,
+        ] {
+            let message: SidecarToHost = serde_json::from_str(line).unwrap();
+            let encoded = serde_json::to_string(&message).unwrap();
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(&encoded).unwrap(),
+                serde_json::from_str::<serde_json::Value>(line).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn mutation_transaction_protocol_round_trips() {
+        let review = r##"{"type":"review_mutation","callId":"review-1","conversationId":"cv1","toolCallId":"tool-1","toolName":"write","operation":"create","path":"Ideas.md","oldContent":"","newContent":"# Ideas\n","createOnly":true,"preview":{"tool":"write","summary":"创建文档「Ideas.md」","detail":{"kind":"note_create","filename":"Ideas.md","contentPreview":"# Ideas\n"}}}"##;
+        let review_message: SidecarToHost = serde_json::from_str(review).unwrap();
+        assert_eq!(
+            serde_json::from_str::<SidecarToHost>(&serde_json::to_string(&review_message).unwrap())
+                .unwrap(),
+            review_message
+        );
+
+        let approved = r#"{"type":"mutation_review_result","callId":"review-1","allowed":true,"lease":"lease-1","writeMode":"direct"}"#;
+        let approved_message: HostToSidecar = serde_json::from_str(approved).unwrap();
+        assert_eq!(
+            serde_json::from_str::<HostToSidecar>(
+                &serde_json::to_string(&approved_message).unwrap()
+            )
+            .unwrap(),
+            approved_message
+        );
+
+        let commit = r#"{"type":"commit_mutation","callId":"commit-1","conversationId":"cv1","toolCallId":"tool-1","lease":"lease-1"}"#;
+        let commit_message: SidecarToHost = serde_json::from_str(commit).unwrap();
+        assert_eq!(
+            serde_json::from_str::<SidecarToHost>(&serde_json::to_string(&commit_message).unwrap())
+                .unwrap(),
+            commit_message
+        );
+
+        let result =
+            r#"{"type":"mutation_commit_result","callId":"commit-1","ok":true,"version":2}"#;
+        let result_message: HostToSidecar = serde_json::from_str(result).unwrap();
+        assert_eq!(
+            serde_json::from_str::<HostToSidecar>(&serde_json::to_string(&result_message).unwrap())
+                .unwrap(),
+            result_message
+        );
+    }
 
     #[test]
     fn one_shot_protocol_round_trips() {

@@ -63,6 +63,65 @@ describe("project note protocol", () => {
   });
 });
 
+describe("workspace protocol", () => {
+  it("encodes list and read round trips", () => {
+    const list: SidecarToHost = {
+      type: "workspace_list",
+      callId: "l1",
+      conversationId: "cv1",
+    };
+    const read: SidecarToHost = {
+      type: "workspace_read",
+      callId: "r1",
+      conversationId: "cv1",
+      path: "_inbox.md",
+    };
+    expect(JSON.parse(encodeLine(list))).toEqual(list);
+    expect(JSON.parse(encodeLine(read))).toEqual(read);
+  });
+});
+
+describe("mutation transaction protocol", () => {
+  it("encodes review, approval lease, and commit", () => {
+    const review: SidecarToHost = {
+      type: "review_mutation",
+      callId: "review-1",
+      conversationId: "cv1",
+      toolCallId: "tool-1",
+      toolName: "write",
+      operation: "create",
+      path: "Ideas.md",
+      oldContent: "",
+      newContent: "# Ideas\n",
+      createOnly: true,
+      preview: {
+        tool: "write",
+        summary: "创建文档「Ideas.md」",
+        detail: { kind: "note_create", filename: "Ideas.md", contentPreview: "# Ideas\n" },
+      },
+    };
+    expect(JSON.parse(encodeLine(review))).toEqual(review);
+
+    const approved: HostToSidecar = {
+      type: "mutation_review_result",
+      callId: "review-1",
+      allowed: true,
+      lease: "lease-1",
+      writeMode: "direct",
+    };
+    expect(approved.lease).toBe("lease-1");
+
+    const commit: SidecarToHost = {
+      type: "commit_mutation",
+      callId: "commit-1",
+      conversationId: "cv1",
+      toolCallId: "tool-1",
+      lease: "lease-1",
+    };
+    expect(JSON.parse(encodeLine(commit))).toEqual(commit);
+  });
+});
+
 describe("skills protocol", () => {
   it("encodes list_skills / skills_list round-trip", () => {
     const req: HostToSidecar = { type: "list_skills", callId: "sl1" };
