@@ -3,7 +3,7 @@
 //! and the selection monitor. Pulled out of `commands.rs` so the command file
 //! is a thin handler layer and the state root has its own home.
 
-use crate::agent::{ActiveNote, AgentHandle, MutationStore, PendingEdit, SkillSummary};
+use crate::agent::{ActiveNote, AgentHandle, MutationStore, SkillSummary};
 use crate::config::Config;
 use crate::popup::PopupCache;
 use crate::watcher::{FileWatcher, SuppressList};
@@ -64,9 +64,6 @@ pub struct AppState {
     pub write_suppress: SuppressList,
     /// 划词弹窗急切抓取的待提交文本。
     pub popup_cache: PopupCache,
-    /// apply_edit 待裁决表：request_id → PendingEdit。
-    /// `handle_apply_edit` 暂存，`resolve_permission` 取出落盘并回 sidecar。
-    pub pending_edits: Mutex<HashMap<String, PendingEdit>>,
     /// Structured mutation reviews and one-use approval leases.
     pub mutations: Mutex<MutationStore>,
     /// `agent_list_skills` 的 host 侧一次性等待表：call_id → oneshot sender。

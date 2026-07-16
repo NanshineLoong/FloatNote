@@ -53,7 +53,7 @@ describe("translateEvent", () => {
       assistantMessageEvent: {
         type: "toolcall_start",
         contentIndex: 0,
-        partial: { content: [{ type: "toolCall", id: "call-1", name: "read_note", arguments: {} }] },
+        partial: { content: [{ type: "toolCall", id: "call-1", name: "read", arguments: {} }] },
       },
     }));
     expect(out).toEqual({
@@ -61,7 +61,7 @@ describe("translateEvent", () => {
       requestId: "r1",
       conversationId: "c1",
       callId: "call-1",
-      name: "read_note",
+      name: "read",
       label: "正在准备工具调用…",
       phase: "prepare",
     });
@@ -69,11 +69,11 @@ describe("translateEvent", () => {
 
   it("maps tool execution start/end to tool lines", () => {
     expect(
-      translateEvent("r1", "c1", ev({ type: "tool_execution_start", toolCallId: "c", toolName: "write_note", args: { target: "piece.md" } })),
-    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write_note", label: "编辑 piece.md", phase: "start" });
+      translateEvent("r1", "c1", ev({ type: "tool_execution_start", toolCallId: "c", toolName: "write", args: { path: "piece.md" } })),
+    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write", label: "写入 piece.md", phase: "start" });
     expect(
-      translateEvent("r1", "c1", ev({ type: "tool_execution_end", toolCallId: "c", toolName: "write_note", result: {}, isError: false })),
-    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write_note", phase: "end", isError: false });
+      translateEvent("r1", "c1", ev({ type: "tool_execution_end", toolCallId: "c", toolName: "write", result: {}, isError: false })),
+    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write", phase: "end", isError: false });
   });
 
   it("maps a completed agent_end to a completed done line", () => {
@@ -129,7 +129,7 @@ describe("displayMessagesFromSession", () => {
           { id: "u1", type: "message", timestamp: "2026-07-12T00:00:00.000Z", message: { role: "user", content: "问题" } },
           { id: "a1", type: "message", timestamp: "2026-07-12T00:00:01.000Z", message: { role: "assistant", content: [
             { type: "thinking", thinking: "先读取" },
-            { type: "toolCall", id: "call-1", name: "read_note", arguments: { target: { kind: "tasks" }, content: "不得泄露" } },
+            { type: "toolCall", id: "call-1", name: "read", arguments: { path: "_tasks.md", content: "不得泄露" } },
             { type: "text", text: "完成" },
             { type: "toolCall", id: "call-2", name: "web_fetch", arguments: { url: "https://example.com/a" } },
           ] } },
@@ -142,7 +142,7 @@ describe("displayMessagesFromSession", () => {
       { role: "user", text: "问题", timestamp: expect.any(Number), entryId: "u1" },
       { role: "assistant", timestamp: expect.any(Number), entryId: "a1", blocks: [
         { type: "thinking", text: "先读取" },
-        { type: "tool", callId: "call-1", name: "read_note", label: "读取 行动清单", status: "succeeded" },
+        { type: "tool", callId: "call-1", name: "read", label: "读取 行动清单", status: "succeeded" },
         { type: "text", text: "完成" },
         { type: "tool", callId: "call-2", name: "web_fetch", label: "读取网页 example.com", status: "failed", error: "network denied" },
       ] },
@@ -154,12 +154,12 @@ describe("displayMessagesFromSession", () => {
   it("marks a tool without a result as incomplete", () => {
     const session = { sessionManager: { getBranch: () => [
       { id: "a1", type: "message", timestamp: "2026-07-12T00:00:01.000Z", message: { role: "assistant", content: [
-        { type: "toolCall", id: "call-1", name: "read_note", arguments: {} },
+        { type: "toolCall", id: "call-1", name: "read", arguments: {} },
       ] } },
     ] } } as SessionLike;
     expect(displayMessagesFromSession(session)).toEqual([
       { role: "assistant", timestamp: expect.any(Number), entryId: "a1", blocks: [
-        { type: "tool", callId: "call-1", name: "read_note", label: "读取当前文档", status: "incomplete" },
+        { type: "tool", callId: "call-1", name: "read", label: "读取文档", status: "incomplete" },
       ] },
     ]);
   });
@@ -169,7 +169,7 @@ describe("displayMessagesFromSession", () => {
       { id: "u1", type: "message", timestamp: "2026-07-12T00:00:00.000Z", message: { role: "user", content: "问题" } },
       { id: "a1", type: "message", timestamp: "2026-07-12T00:00:01.000Z", message: { role: "assistant", content: [
         { type: "thinking", thinking: "先看" },
-        { type: "toolCall", id: "c1", name: "read_note", arguments: {} },
+        { type: "toolCall", id: "c1", name: "read", arguments: {} },
       ] } },
       { id: "tr1", type: "message", timestamp: "2026-07-12T00:00:02.000Z", message: { role: "toolResult", toolCallId: "c1", content: [{ type: "text", text: "secret" }], isError: false } },
       { id: "a2", type: "message", timestamp: "2026-07-12T00:00:03.000Z", message: { role: "assistant", content: [{ type: "text", text: "结论" }] } },
@@ -357,8 +357,8 @@ describe("AgentRunner", () => {
     const { session } = fakeSession((emit) => {
       emit(ev({ type: "message_update", message: {}, assistantMessageEvent: { type: "thinking_start", contentIndex: 0, partial: {} } }));
       emit(ev({ type: "message_update", message: {}, assistantMessageEvent: { type: "thinking_end", contentIndex: 0, partial: {} } }));
-      emit(ev({ type: "tool_execution_start", toolCallId: "c1", toolName: "read_note", args: {} }));
-      emit(ev({ type: "tool_execution_end", toolCallId: "c1", toolName: "read_note", result: {}, isError: false }));
+      emit(ev({ type: "tool_execution_start", toolCallId: "c1", toolName: "read", args: {} }));
+      emit(ev({ type: "tool_execution_end", toolCallId: "c1", toolName: "read", result: {}, isError: false }));
       emit(ev({ type: "message_update", message: {}, assistantMessageEvent: { type: "thinking_start", contentIndex: 0, partial: {} } }));
       emit(ev({ type: "agent_end", messages: [], willRetry: false }));
     });
@@ -588,6 +588,27 @@ describe("AgentRunner skills", () => {
     const runner = new AgentRunner({ send: () => {}, createSession: async () => session });
     await runner.setSkillPaths([root]);
     expect(runner.listSkills()).toEqual([{ name: "socratic-review", description: "追问" }]);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("lets Pi add the native available_skills catalog to the effective prompt", async () => {
+    const root = mkdtempSync(join(tmpdir(), "floatnote-native-skills-"));
+    const skillRoot = join(root, "skills");
+    const sessionDir = join(root, "sessions");
+    mkdirSync(sessionDir, { recursive: true });
+    writeSkill(skillRoot, "native-skill", "原生技能目录");
+    const runner = new AgentRunner({ send: () => {} });
+    await runner.setSkillPaths([skillRoot]);
+    await runner.configure({ provider: "openai", model: "gpt-5", apiKey: "test" });
+    await runner.newSession({ conversationId: "native", cwd: root, sessionDir });
+
+    const sessions = (runner as unknown as {
+      sessions: Map<string, SessionLike & { systemPrompt: string }>;
+    }).sessions;
+    expect(sessions.get("native")?.systemPrompt).toContain("<available_skills>");
+    expect(sessions.get("native")?.systemPrompt).toContain("native-skill");
+
+    runner.discardSession("native");
     rmSync(root, { recursive: true, force: true });
   });
 

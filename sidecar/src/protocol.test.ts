@@ -1,65 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { createLineDecoder, encodeLine } from "./protocol.js";
-import type { SidecarToHost, HostToSidecar, NoteTarget } from "./protocol.js";
+import type { SidecarToHost, HostToSidecar } from "./protocol.js";
 
 describe("encodeLine", () => {
   it("escapes embedded newlines so each message stays on one line", () => {
     const msg: SidecarToHost = {
-      type: "apply_edit",
+      type: "review_mutation",
       callId: "c1",
       conversationId: "conv1",
-      target: { kind: "inbox" },
-      toolName: "replace",
+      toolCallId: "tool-1",
+      toolName: "edit",
+      operation: "edit",
+      path: "piece.md",
       oldContent: "line one\nline two",
       newContent: "line three\nline four",
-      preview: { tool: "replace", summary: "替换", detail: { kind: "diff", hunks: "@@\n-a\n+b" } },
+      createOnly: false,
+      preview: { tool: "edit", summary: "替换", detail: { kind: "diff", hunks: "@@\n-a\n+b" } },
     };
     const line = encodeLine(msg);
     // exactly one terminator newline, none inside the payload
     expect(line.split("\n").filter((s) => s.length > 0)).toHaveLength(1);
     expect(JSON.parse(line)).toEqual(msg);
-  });
-});
-
-describe("apply_edit protocol", () => {
-  const target: NoteTarget = { kind: "inbox" };
-  it("encodes apply_edit with preview", () => {
-    const msg: SidecarToHost = {
-      type: "apply_edit",
-      callId: "w1",
-      conversationId: "c1",
-      target,
-      toolName: "tag_text",
-      oldContent: "a",
-      newContent: "b",
-      preview: { tool: "tag_text", summary: "打标签", detail: { kind: "tag_assign", textExcerpt: "文本", targetText: "文本全文", annotationCount: 1, action: "add", tagName: "review", tagColor: "#e5484d" } },
-    };
-    const line = encodeLine(msg);
-    expect(line).toContain('"type":"apply_edit"');
-    expect(line).toContain('"toolName":"tag_text"');
-    expect(line).toContain('"targetText":"文本全文"');
-    expect(line.endsWith("\n")).toBe(true);
-  });
-  it("decodes apply_edit_result with denied", () => {
-    const line = encodeLine({ type: "apply_edit_result", callId: "w1", ok: false, denied: true } as HostToSidecar);
-    expect(JSON.parse(line)).toMatchObject({ type: "apply_edit_result", callId: "w1", denied: true });
-  });
-  it("encodes get_note_text / note_text", () => {
-    const req: SidecarToHost = { type: "get_note_text", callId: "g1", conversationId: "c1", target };
-    const res: HostToSidecar = { type: "note_text", callId: "g1", content: "doc", found: true };
-    expect(encodeLine(req)).toContain('"type":"get_note_text"');
-    expect(encodeLine(res)).toContain('"type":"note_text"');
-  });
-});
-
-describe("project note protocol", () => {
-  it("encodes list and confirmed create round-trips", () => {
-    const list: SidecarToHost = { type: "list_notes", callId: "l1", conversationId: "c1" };
-    const listed: HostToSidecar = { type: "notes_list", callId: "l1", notes: [{ kind: "piece", name: "piece.md" }] };
-    const create: SidecarToHost = { type: "create_note", callId: "c1", conversationId: "cv", toolCallId: "t1", title: "Ideas", content: "body", preview: { tool: "create_note", summary: "创建", detail: { kind: "note_create", filename: "Ideas.md", contentPreview: "body" } } };
-    expect(JSON.parse(encodeLine(list))).toEqual(list);
-    expect(JSON.parse(encodeLine(listed))).toEqual(listed);
-    expect(JSON.parse(encodeLine(create))).toEqual(create);
   });
 });
 

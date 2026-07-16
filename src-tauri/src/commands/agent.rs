@@ -1,5 +1,5 @@
 use crate::agent::{
-    ActiveNote, HostToSidecar, MutationOperation, NoteUpdated, PromptRef, PromptSkill, WriteMode,
+    ActiveNote, HostToSidecar, MutationOperation, PromptRef, PromptSkill, WriteMode,
 };
 use crate::{
     config::{AiProviderConfig, AiProviderId},
@@ -892,7 +892,6 @@ mod skill_catalog_tests {
 
 #[tauri::command]
 pub fn resolve_permission(
-    app: tauri::AppHandle,
     state: State<AppState>,
     request_id: String,
     decision: String,
@@ -982,82 +981,5 @@ pub fn resolve_permission(
         return Ok(());
     }
 
-    let pending = state.pending_edits.lock().unwrap().remove(&request_id);
-    let Some(p) = pending else {
-        return Ok(());
-    };
-    if decision != "allow" {
-        let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
-            if p.create_only {
-                agent.send(&HostToSidecar::CreateNoteResult {
-                    call_id: p.call_id,
-                    ok: false,
-                    denied: Some(true),
-                    name: None,
-                    error: None,
-                })
-            } else {
-                agent.send(&HostToSidecar::ApplyEditResult {
-                    call_id: p.call_id,
-                    ok: false,
-                    denied: Some(true),
-                    version: None,
-                    error: None,
-                })
-            }
-        });
-        return Ok(());
-    }
-    if p.create_only && std::path::Path::new(&p.path).exists() {
-        let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
-            agent.send(&HostToSidecar::CreateNoteResult {
-                call_id: p.call_id,
-                ok: false,
-                denied: Some(false),
-                name: None,
-                error: Some("同名文档已存在".into()),
-            })
-        });
-        return Ok(());
-    }
-    crate::watcher::mark_self_write(&state.write_suppress, &p.path);
-    let outcome = crate::agent::handle_apply_edit_at(
-        &p.dir,
-        &p.note_id,
-        std::path::Path::new(&p.path),
-        &p.old_content,
-        &p.new_content,
-        &write_mode,
-        p.can_snapshot,
-    );
-    if outcome.ok {
-        let _ = app.emit(
-            "note://updated",
-            &NoteUpdated {
-                note_id: p.note_id.clone(),
-                path: p.path.clone(),
-                version: outcome.version.unwrap_or(0),
-            },
-        );
-    }
-    let _ = state.agent.lock().unwrap().as_mut().map(|agent| {
-        if p.create_only {
-            agent.send(&HostToSidecar::CreateNoteResult {
-                call_id: p.call_id,
-                ok: outcome.ok,
-                denied: Some(false),
-                name: outcome.ok.then(|| format!("{}.md", p.note_id)),
-                error: outcome.error,
-            })
-        } else {
-            agent.send(&HostToSidecar::ApplyEditResult {
-                call_id: p.call_id,
-                ok: outcome.ok,
-                denied: Some(false),
-                version: outcome.version,
-                error: outcome.error,
-            })
-        }
-    });
     Ok(())
 }

@@ -258,7 +258,6 @@ mod tests {
             watcher: Mutex::new(None),
             write_suppress: crate::watcher::new_suppress_list(),
             popup_cache: crate::popup::PopupCache::default(),
-            pending_edits: Mutex::new(HashMap::new()),
             mutations: Mutex::new(crate::agent::MutationStore::default()),
             pending_skill_lists: Mutex::new(HashMap::new()),
             pending_agent_configs: Mutex::new(HashMap::new()),

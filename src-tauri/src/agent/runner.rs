@@ -1,8 +1,7 @@
 //! sidecar 进程生命周期：spawn、stdout 读循环、消息分派、退出处理。
 //!
 //! 拉起 Node sidecar 子进程，单独线程按行读 stdout，把流式事件经 Tauri
-//! `agent://event` 广播给所有助手视图；收到 `apply_edit`/`get_note_text` 时
-//! 分派到 `handlers` 模块的处理函数。
+//! `agent://event` 广播给所有助手视图；虚拟工作区消息分派到 `workspace`。
 
 use crate::state::AppState;
 #[cfg(debug_assertions)]
@@ -14,9 +13,6 @@ use tauri::{AppHandle, Emitter, Manager};
 #[cfg(not(debug_assertions))]
 use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 
-use super::handlers::{
-    handle_apply_edit, handle_create_note, handle_get_note_text, handle_list_notes,
-};
 use super::protocol::{HostToSidecar, SidecarToHost};
 use super::workspace::{
     handle_commit_mutation, handle_review_mutation, handle_workspace_list, handle_workspace_read,
@@ -355,32 +351,6 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
                 }
             }
         }
-        SidecarToHost::ApplyEdit {
-            call_id,
-            conversation_id,
-            tool_call_id,
-            target,
-            tool_name,
-            old_content,
-            new_content,
-            preview,
-        } => handle_apply_edit(
-            app,
-            call_id,
-            conversation_id,
-            tool_call_id,
-            target,
-            tool_name,
-            old_content,
-            new_content,
-            preview,
-        ),
-        SidecarToHost::GetNoteText {
-            call_id,
-            conversation_id,
-            target,
-        } => handle_get_note_text(app, call_id, conversation_id, target),
-        SidecarToHost::ListNotes { call_id, .. } => handle_list_notes(app, call_id),
         SidecarToHost::WorkspaceList { call_id, .. } => handle_workspace_list(app, call_id),
         SidecarToHost::WorkspaceRead { call_id, path, .. } => {
             handle_workspace_read(app, call_id, path)
@@ -415,22 +385,6 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             tool_call_id,
             lease,
         } => handle_commit_mutation(app, call_id, conversation_id, tool_call_id, lease),
-        SidecarToHost::CreateNote {
-            call_id,
-            conversation_id,
-            tool_call_id,
-            title,
-            content,
-            preview,
-        } => handle_create_note(
-            app,
-            call_id,
-            conversation_id,
-            tool_call_id,
-            title,
-            content,
-            preview,
-        ),
         SidecarToHost::ConfigureResult { call_id, ok, error } => {
             if let Some(state) = app.try_state::<AppState>() {
                 if let Some(sender) = state.pending_agent_configs.lock().unwrap().remove(&call_id) {

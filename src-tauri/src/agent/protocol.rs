@@ -59,16 +59,6 @@ pub enum HostToSidecar {
         conversation_id: String,
         user_entry_id: String,
     },
-    ApplyEditResult {
-        call_id: String,
-        ok: bool,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        denied: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        version: Option<u32>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        error: Option<String>,
-    },
     WorkspaceListResult {
         call_id: String,
         entries: Vec<WorkspaceEntry>,
@@ -98,25 +88,6 @@ pub enum HostToSidecar {
         ok: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         version: Option<u32>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        error: Option<String>,
-    },
-    NoteText {
-        call_id: String,
-        content: String,
-        found: bool,
-    },
-    NotesList {
-        call_id: String,
-        notes: Vec<AgentNoteEntry>,
-    },
-    CreateNoteResult {
-        call_id: String,
-        ok: bool,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        denied: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        name: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
@@ -213,18 +184,6 @@ pub enum SidecarToHost {
         #[serde(skip_serializing_if = "Option::is_none")]
         is_error: Option<bool>,
     },
-    ApplyEdit {
-        call_id: String,
-        conversation_id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        tool_call_id: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        target: Option<NoteTarget>,
-        tool_name: String,
-        old_content: String,
-        new_content: String,
-        preview: EditPreview,
-    },
     WorkspaceList {
         call_id: String,
         conversation_id: String,
@@ -251,24 +210,6 @@ pub enum SidecarToHost {
         conversation_id: String,
         tool_call_id: String,
         lease: String,
-    },
-    GetNoteText {
-        call_id: String,
-        conversation_id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        target: Option<NoteTarget>,
-    },
-    ListNotes {
-        call_id: String,
-        conversation_id: String,
-    },
-    CreateNote {
-        call_id: String,
-        conversation_id: String,
-        tool_call_id: String,
-        title: String,
-        content: String,
-        preview: EditPreview,
     },
     Done {
         request_id: String,
@@ -319,7 +260,7 @@ pub struct SkillSummary {
 }
 
 /// prompt 携带的结构化引用：显示名(display) 与内部标识(id) 分离。
-/// `kind` 取值 `file`/`skill`；`note_kind` 仅文件引用携带（与 NoteTarget.kind 同语义）。
+/// `kind` 取值 `file`/`skill`；`note_kind` 仅文件引用携带。
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptRef {
@@ -396,9 +337,7 @@ pub enum ToolDisplayStatus {
 }
 
 /// 当前活动笔记：由笔记窗 `set_active_note` 发布、`agent_send` 也会更新，
-/// 供 apply_edit / get_note_text 定位 dir / path，并供独立助手窗 `get_active_note` 查询。
-/// `kind` 与 `NoteTarget.kind` 同语义（inbox/tasks/piece/doc），用于缺省 target 时
-/// 决定 `can_snapshot`（仅 piece 可快照）。
+/// 供受控工作区解析 project root，并供独立助手窗 `get_active_note` 查询。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActiveNote {
@@ -406,25 +345,6 @@ pub struct ActiveNote {
     pub note_id: String,
     pub path: String,
     pub kind: String,
-}
-
-/// apply_edit / get_note_text 的目标笔记定位。
-///
-/// `kind` 取值与 sidecar `protocol.ts` 的 `NoteTarget` 一致：
-/// `inbox`/`tasks`/`piece`/`doc`；`name` 仅在 `piece`/`doc` 时给出文件名。
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct NoteTarget {
-    pub kind: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentNoteEntry {
-    pub kind: String,
-    pub name: String,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
@@ -450,7 +370,7 @@ pub enum WriteMode {
     Snapshot,
 }
 
-/// apply_edit 的预览细节（判别联合，`kind` 区分）。
+/// mutation review 的预览细节（判别联合，`kind` 区分）。
 ///
 /// 变体名用 `rename_all = "snake_case"` 序列化为 `diff`/`tag_assign`/
 /// `tag_create`/`tag_delete`（与 TS 线格式一致）；字段名用
@@ -496,7 +416,7 @@ pub enum EditPreviewDetail {
     },
 }
 
-/// apply_edit 携带的编辑预览：工具名 + 摘要 + 详情。
+/// mutation review 携带的编辑预览：工具名 + 摘要 + 详情。
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EditPreview {
@@ -602,7 +522,7 @@ mod tests {
                 },
                 ChatDisplayBlock::Tool {
                     call_id: "c1".into(),
-                    name: "read_note".into(),
+                    name: "read".into(),
                     label: "读取 行动清单".into(),
                     status: ToolDisplayStatus::Succeeded,
                     error: None,
@@ -824,39 +744,6 @@ mod tests {
     }
 
     #[test]
-    fn parses_apply_edit_line() {
-        let line = r##"{"type":"apply_edit","callId":"w1","conversationId":"c1","target":{"kind":"inbox"},"toolName":"tag_text","oldContent":"a","newContent":"b","preview":{"tool":"tag_text","summary":"s","detail":{"kind":"tag_assign","textExcerpt":"文本","targetText":"文本全文","annotationCount":1,"action":"add","tagName":"review","tagColor":"#e5484d"}}}"##;
-        let msg: SidecarToHost = serde_json::from_str(line).unwrap();
-        match msg {
-            SidecarToHost::ApplyEdit {
-                ref tool_name,
-                ref target,
-                ..
-            } => {
-                assert_eq!(tool_name, "tag_text");
-                let t = target.as_ref().expect("target present");
-                assert_eq!(t.kind, "inbox");
-                assert!(t.name.is_none());
-            }
-            _ => panic!("not ApplyEdit"),
-        }
-
-        // Round-trip back to JSON and verify camelCase field names + snake_case type.
-        let json = serde_json::to_string(&msg).unwrap();
-        assert!(json.contains("\"type\":\"apply_edit\""), "{json}");
-        assert!(json.contains("\"callId\":\"w1\""), "{json}");
-        assert!(json.contains("\"conversationId\":\"c1\""), "{json}");
-        assert!(json.contains("\"toolName\":\"tag_text\""), "{json}");
-        assert!(json.contains("\"oldContent\":\"a\""), "{json}");
-        assert!(json.contains("\"newContent\":\"b\""), "{json}");
-        assert!(json.contains("\"textExcerpt\":\"文本\""), "{json}");
-        assert!(json.contains("\"targetText\":\"文本全文\""), "{json}");
-        assert!(json.contains("\"annotationCount\":1"), "{json}");
-        assert!(json.contains("\"tagName\":\"review\""), "{json}");
-        assert!(json.contains("\"tagColor\":\"#e5484d\""), "{json}");
-    }
-
-    #[test]
     fn parses_legacy_tag_assign_without_target_text() {
         let detail: EditPreviewDetail = serde_json::from_str(
             r##"{"kind":"tag_assign","textExcerpt":"可用文本","annotationCount":1,"action":"add","tagName":"review","tagColor":"#e5484d"}"##,
@@ -869,67 +756,6 @@ mod tests {
                 ..
             }
         ));
-    }
-
-    #[test]
-    fn apply_edit_omits_absent_target() {
-        // target 缺省时序列化结果不应包含 target 字段。
-        let msg = SidecarToHost::ApplyEdit {
-            call_id: "w1".into(),
-            conversation_id: "c1".into(),
-            tool_call_id: None,
-            target: None,
-            tool_name: "write_note".into(),
-            old_content: "a".into(),
-            new_content: "b".into(),
-            preview: EditPreview {
-                tool: "write_note".into(),
-                summary: "s".into(),
-                detail: EditPreviewDetail::Diff { hunks: "@@".into() },
-            },
-        };
-        let json = serde_json::to_string(&msg).unwrap();
-        assert!(
-            !json.contains("\"target\""),
-            "absent target should be skipped: {json}"
-        );
-        // 反序列化回来仍是 None。
-        let back: SidecarToHost = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, msg);
-    }
-
-    #[test]
-    fn serializes_apply_edit_result_denied() {
-        let msg = HostToSidecar::ApplyEditResult {
-            call_id: "w1".into(),
-            ok: false,
-            denied: Some(true),
-            version: None,
-            error: None,
-        };
-        let json = serde_json::to_string(&msg).unwrap();
-        assert!(json.contains("\"type\":\"apply_edit_result\""), "{json}");
-        assert!(json.contains("\"callId\":\"w1\""), "{json}");
-        assert!(json.contains("\"denied\":true"), "{json}");
-    }
-
-    #[test]
-    fn parses_note_text_line() {
-        let line = r#"{"type":"note_text","callId":"g1","content":"doc","found":true}"#;
-        let msg: HostToSidecar = serde_json::from_str(line).unwrap();
-        match msg {
-            HostToSidecar::NoteText {
-                call_id,
-                found,
-                content,
-                ..
-            } => {
-                assert_eq!(call_id, "g1");
-                assert!(found);
-                assert_eq!(content, "doc");
-            }
-            _ => panic!("not NoteText"),
-        }
     }
 
     #[test]
@@ -1023,48 +849,5 @@ mod tests {
         assert_eq!(v["kind"], "tag_delete");
         assert_eq!(v["tagName"], "review");
         assert_eq!(v["annotationCount"], 3);
-
-        let create: SidecarToHost = serde_json::from_str(r#"{"type":"create_note","callId":"c1","conversationId":"cv","toolCallId":"t1","title":"Ideas","content":"body","preview":{"tool":"create_note","summary":"create","detail":{"kind":"note_create","filename":"Ideas.md","contentPreview":"body"}}}"#).unwrap();
-        assert!(matches!(create, SidecarToHost::CreateNote { .. }));
-        let list: SidecarToHost =
-            serde_json::from_str(r#"{"type":"list_notes","callId":"l1","conversationId":"cv"}"#)
-                .unwrap();
-        assert!(matches!(list, SidecarToHost::ListNotes { .. }));
-    }
-
-    #[test]
-    fn round_trips_get_note_text_line() {
-        let req = SidecarToHost::GetNoteText {
-            call_id: "g1".into(),
-            conversation_id: "c1".into(),
-            target: Some(NoteTarget {
-                kind: "piece".into(),
-                name: Some("piece.md".into()),
-            }),
-        };
-        let json = serde_json::to_string(&req).unwrap();
-        assert!(json.contains("\"type\":\"get_note_text\""), "{json}");
-        assert!(json.contains("\"callId\":\"g1\""), "{json}");
-        assert!(json.contains("\"conversationId\":\"c1\""), "{json}");
-        assert!(
-            json.contains("\"target\":{\"kind\":\"piece\",\"name\":\"piece.md\"}"),
-            "{json}"
-        );
-        let back: SidecarToHost = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, req);
-
-        // target 缺省时序列化应省略 target 字段，反序列化回 None。
-        let req_no_target = SidecarToHost::GetNoteText {
-            call_id: "g2".into(),
-            conversation_id: "c1".into(),
-            target: None,
-        };
-        let json2 = serde_json::to_string(&req_no_target).unwrap();
-        assert!(
-            !json2.contains("\"target\""),
-            "absent target should be skipped: {json2}"
-        );
-        let back2: SidecarToHost = serde_json::from_str(&json2).unwrap();
-        assert_eq!(back2, req_no_target);
     }
 }
