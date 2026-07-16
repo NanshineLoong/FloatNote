@@ -39,3 +39,9 @@
 如果 `/status` 已 ready，但 `POST /session` 报 `UND_ERR_SOCKET`、连接重置或 4445 很快关闭，先检查代理环境。WebDriver 客户端会读取 `HTTP_PROXY/HTTPS_PROXY`；本地地址未进入 `NO_PROXY/no_proxy` 时，会话请求可能错误地经过代理。两条 review 命令已自动补齐 loopback 排除项。
 
 升级 `@wdio/tauri-service` 时，应重新验证 browser mode、embedded session 和 `@wdio/native-utils` override；不要恢复依赖 `src-tauri/target/debug/floatnote` 的独立运行脚本，因为它无法保证对应当前源码。
+
+## Agent 虚拟工作区的跨平台证据
+
+当前自动化覆盖 Windows 风格反斜杠与盘符绝对路径拒绝、路径大小写/文件名规则、CRLF clean Markdown 搜索，以及 create-only/同名竞态。macOS 上的完整 Rust、sidecar 和浏览器 UI 门禁通过不代表 Windows 原生 UI 已验证。
+
+Windows 发布前仍需人工复核：project picker 与 active-note 路径、Skill 目录 realpath、审批弹窗、piece create/rewrite/snapshot、外部编辑造成的 stale commit、watcher 自写抑制，以及 packaged sidecar 的启动与退出。

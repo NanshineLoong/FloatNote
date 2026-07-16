@@ -1,12 +1,12 @@
 # Rust 后端
 
-`src-tauri/src/lib.rs` 负责应用装配、Tauri invoke handler、窗口、tray 和快捷键注册。`AppState` 保存运行期共享资源，包括 sidecar 进程、当前活动笔记、待裁决编辑、watcher 自写抑制和配置。
+`src-tauri/src/lib.rs` 负责应用装配、Tauri invoke handler、窗口、tray 和快捷键注册。`AppState` 保存运行期共享资源，包括 sidecar 进程、当前活动笔记、结构化 mutation review/lease、watcher 自写抑制和配置。
 
 ## 领域与 adapter
 
 - `commands.rs` 与 `commands/{agent,chat,settings,versions}.rs` 是 Tauri command adapter。它们只做 payload 转换、授权、错误映射和领域调用。
 - `notes.rs`、`project.rs`、`versions.rs` 负责文件、项目空间和版本快照；项目空间文件操作不应写入 command adapter。
-- `agent.rs` 是对 `agent/{protocol,handlers,runner}.rs` 的模块入口；这些模块负责 JSONL 契约、sidecar 生命周期及编辑处理。
+- `agent.rs` 是对 `agent/{protocol,runner,workspace}.rs` 的模块入口；这些模块负责 JSONL 契约、sidecar 生命周期、受限 project-space 解析及 mutation transaction。
 - `chat_history.rs`、`paths.rs`、`watcher.rs` 处理聊天记录、跨平台路径与文件变更。
 - `selection_intent.rs` 是纯鼠标选择状态机；`selection_probe.rs` 通过 macOS
   Accessibility 从 focused element、children、ancestors 读取文本；
@@ -15,7 +15,7 @@
 - `popup.rs` 为每次有效捕获分配 `generationId`。提交、关闭和前端 payload
   都携带该代次，过期的异步捕获不能覆盖或关闭更新的弹窗。
 
-文件写入由 Rust 独占。写入采用原子替换；当保存带有 expected mtime 时，mtime 不一致会返回冲突而不是覆盖磁盘内容。版本快照与 watcher 自写抑制也在这个边界内执行。版本预览只调用只读的 `read_version`；恢复携带 expected mtime，通过冲突检查后才写回正文，并仅在当前内容与目标版本不同时新增一个名为“恢复前备份”的安全快照。版本名称保存在 manifest 的 `summary` 字段；manifest 经临时文件安全替换，删除版本先更新索引再移除对应 Markdown 快照，失败时避免留下指向已丢失内容的条目。
+文件写入由 Rust 独占。Agent mutation 必须携带与 conversation/tool call 绑定、短期且一次性的批准 lease；提交时再次校验旧内容，创建使用 create-only 原子路径，覆写使用原子替换，可选快照只允许现有 piece rewrite。版本快照与 watcher 自写抑制也在这个边界内执行。版本预览只调用只读的 `read_version`；恢复携带 expected mtime，通过冲突检查后才写回正文，并仅在当前内容与目标版本不同时新增一个名为“恢复前备份”的安全快照。版本名称保存在 manifest 的 `summary` 字段；manifest 经临时文件安全替换，删除版本先更新索引再移除对应 Markdown 快照，失败时避免留下指向已丢失内容的条目。
 
 聊天历史索引的所有进程内读改写由同一把锁串行化，并通过同目录临时文件原子替换。
 `updatedAt` 只表示最后一次 prompt 活动；查看或恢复会话只读取记录并绑定 sidecar

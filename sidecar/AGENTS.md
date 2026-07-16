@@ -24,20 +24,25 @@ Entry: `src/main.ts`.
 - `tool-title.ts` — pure safe tool-title and short-error formatting shared by
   live events and session restoration; raw arguments/results never cross the
   display protocol.
-- `note-tools.ts` — the note/project tools (`read_note`/`list_notes`/`list_tags`/
-  `edit_note`/`write_note`/`create_note`/`tag_text`/`tag_create`/`tag_update`/
-  `tag_delete`/`read_skill`). Inbox reads expose clean Markdown; edits map v2
-  annotations through exact changes, and whole-document overwrite is rejected
-  while annotations exist. Tag tools reject non-`inbox` targets explicitly;
-  `tag_text` permission previews carry both an 80-character excerpt and the
-  complete exact target text.
-- `matching.ts` — sidecar-only unique string replacement; text annotation
-  matching and transformations come from `@floatnote/note-logic`.
-- `skills.ts` — skill directory loading + `formatSkillsForSystemPrompt`.
-- `tutor-prompt.ts` — `TUTOR_SYSTEM_PROMPT`.
+- `workspace/` — projected Inbox reads, bounded search, constrained path policy,
+  mutation preparation, and the one-use mutation coordinator. Inbox reads expose
+  clean Markdown plus read-only tag/source context; edit offsets share that clean
+  coordinate space and map v2 annotations exactly once.
+- `extensions/` — trusted Pi inline extensions. `ls/read/find/grep/edit/write`
+  are FloatNote virtual-workspace implementations, tag tools are Inbox-only, and
+  the `tool_call` hook performs review before mutation tool execution.
+- `skills.ts` — immutable Skill registry snapshots and capability-scoped Skill
+  resource resolution. Pi ResourceLoader owns native `<available_skills>` and
+  `/skill:name`; FloatNote does not concatenate Skill text into its base prompt.
+- `tutor-prompt.ts` — the thin `TUTOR_SYSTEM_PROMPT` kernel; it contains no tool
+  list or Skill catalog.
 - `web-tools.ts` — bounded public-web search/fetch tools with redirect-aware
   SSRF checks and untrusted-content wrappers.
 
 Build: `npm run build` (tsc), `npm run bundle` (single ESM runtime bundle),
 and `npm run prepare:tauri` (stage release resource + Node runtime). Tests:
 `npm test`; release smoke: `npm run smoke`.
+
+All local mutation tools use `tool_call → prepare → review → lease → execute/commit`.
+The sidecar never writes note files and never receives a lease in model-visible
+tool arguments. Old Agent sessions using retired tool names are unsupported.
