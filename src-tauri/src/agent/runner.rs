@@ -18,6 +18,7 @@ use super::handlers::{
     handle_apply_edit, handle_create_note, handle_get_note_text, handle_list_notes,
 };
 use super::protocol::{HostToSidecar, SidecarToHost};
+use super::workspace::{handle_workspace_list, handle_workspace_read};
 
 type OneShotPending = std::sync::Mutex<
     std::collections::HashMap<String, tokio::sync::oneshot::Sender<Result<String, String>>>,
@@ -378,6 +379,10 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             target,
         } => handle_get_note_text(app, call_id, conversation_id, target),
         SidecarToHost::ListNotes { call_id, .. } => handle_list_notes(app, call_id),
+        SidecarToHost::WorkspaceList { call_id, .. } => handle_workspace_list(app, call_id),
+        SidecarToHost::WorkspaceRead { call_id, path, .. } => {
+            handle_workspace_read(app, call_id, path)
+        }
         SidecarToHost::CreateNote {
             call_id,
             conversation_id,

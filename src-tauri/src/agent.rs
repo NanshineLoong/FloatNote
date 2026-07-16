@@ -13,6 +13,7 @@
 mod handlers;
 mod protocol;
 mod runner;
+pub(crate) mod workspace;
 
 pub use handlers::*;
 pub use protocol::*;
