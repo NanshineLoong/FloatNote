@@ -7,7 +7,7 @@
     &nbsp;·&nbsp;
     <a href="https://github.com/NanshineLoong/FloatNote/releases/download/v0.1.0/FloatNote_0.1.0_x86_64.dmg"><strong>下载 macOS · Intel</strong></a>
   </p>
-  <p>Windows 版本正在准备中 · <a href="https://github.com/NanshineLoong/FloatNote/releases">查看所有版本</a></p>
+  <p>Windows 版本正在准备中</p>
 </div>
 
 <!--
