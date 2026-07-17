@@ -2,6 +2,7 @@
   "name": "floatnote-agent-sidecar",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "bin": "dist/floatnote-agent.mjs",
   "description": "FloatNote AI tutor agent sidecar (Pi SDK over stdio JSONL)",
