@@ -6,6 +6,7 @@ describe("formatToolTitle", () => {
     ["ls", {}, "列出笔记"],
     ["read", { path: "_tasks.md" }, "读取 行动清单"],
     ["write", { path: "_inbox.md", content: "secret" }, "写入 采集区"],
+    ["create_piece", { title: "AI 内化 Tutor 的想法", content: "secret" }, "创建 AI 内化 Tutor 的想法"],
     ["edit", { path: "piece.md", edits: [{ oldText: "secret", newText: "safe" }] }, "编辑 piece.md"],
     ["find", { pattern: "*.md" }, "查找文档 *.md"],
     ["grep", { pattern: "计划" }, "搜索文档 计划"],

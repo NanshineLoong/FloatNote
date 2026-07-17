@@ -12,8 +12,10 @@ entry that calls `floatnote::run()`.
 - `commands.rs` + `commands/` — Tauri `#[tauri::command]` adapter layer.
   Domain modules currently cover agent, chat, and settings; add siblings rather
   than growing the root file. File logic stays in `notes`/`project`/`versions`.
-- `agent/` — JSONL protocol, dev/release spawn, constrained virtual-workspace
+- `agent/` — JSONL protocol, dev/release spawn, constrained flat virtual-workspace
   reads, mutation review state, one-use leases, stale checks, and atomic commit.
+  Model-visible creation is `create_piece`/`create`; `write` may only review a
+  rewrite of an existing note.
   Debug uses local `tsx`; release uses Tauri's packaged Node external binary
   plus ESM resource bundle.
 - `notes.rs` — note file read/write, `rename_note`/`delete_note`/`create_note`

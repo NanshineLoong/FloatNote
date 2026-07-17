@@ -18,7 +18,7 @@ function request(overrides: Partial<PermissionRequest> = {}): PermissionRequest 
 
 describe("projectPermission", () => {
   it.each([
-    ["write", "create", "创建「Ideas.md」", true],
+    ["create_piece", "create", "创建「Ideas.md」", true],
     ["edit", "edit", "编辑「piece.md」", true],
     ["write", "rewrite", "覆写「piece.md」", true],
   ] as const)("projects %s/%s document title", (tool, operation, title, canView) => {
@@ -70,7 +70,7 @@ describe("projectPermission", () => {
 
   it("only enables snapshot split approval for snapshot-capable rewrites", () => {
     expect(projectPermission(request({ tool_name: "write", operation: "rewrite", can_snapshot: true })).canSnapshot).toBe(true);
-    expect(projectPermission(request({ tool_name: "write", operation: "create", can_snapshot: true })).canSnapshot).toBe(false);
+    expect(projectPermission(request({ tool_name: "create_piece", operation: "create", can_snapshot: true })).canSnapshot).toBe(false);
     expect(projectPermission(request({ tool_name: "edit", operation: "edit", can_snapshot: true })).canSnapshot).toBe(false);
   });
 });

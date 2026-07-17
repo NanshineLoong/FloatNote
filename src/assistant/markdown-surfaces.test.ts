@@ -65,10 +65,10 @@ describe("Markdown surfaces", () => {
 
   it("renders create review directly without an empty tab row", () => {
     const req = editRequest();
-    req.tool_name = "write";
+    req.tool_name = "create_piece";
     req.operation = "create";
     req.old_content = "";
-    req.preview = { tool: "write", summary: "", detail: { kind: "note_create", filename: "piece.md", contentPreview: "" } };
+    req.preview = { tool: "create_piece", summary: "", detail: { kind: "note_create", filename: "piece.md", contentPreview: "" } };
     const dialog = createPermissionDialog({ onResolve: vi.fn(), onClose: vi.fn() });
     dialog.open(req, projectPermission(req));
 

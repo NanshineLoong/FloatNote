@@ -1,8 +1,10 @@
 import {
   prepareEdit,
+  prepareCreatePiece,
   prepareTagMutation,
   prepareWrite,
   type EditInput,
+  type CreatePieceInput,
   type TagMutationInput,
   type TagMutationTool,
   type WriteInput,
@@ -43,7 +45,7 @@ const TAG_TOOLS = new Set<TagMutationTool>([
 ]);
 
 export class MutationCoordinator {
-  private readonly approvals = new Map<string, { lease: string }>();
+  private readonly approvals = new Map<string, { lease: string; mutation: PreparedMutation }>();
 
   constructor(private readonly deps: MutationCoordinatorDeps) {}
 
@@ -59,16 +61,16 @@ export class MutationCoordinator {
     if (!result.lease) {
       throw new Error(result.error || "主机未返回写入许可");
     }
-    this.approvals.set(toolCallId, { lease: result.lease });
+    this.approvals.set(toolCallId, { lease: result.lease, mutation });
   }
 
-  async commitForTool(toolCallId: string): Promise<MutationCommitResult> {
+  async commitForTool(toolCallId: string): Promise<MutationCommitResult & Pick<PreparedMutation, "path" | "operation">> {
     const approved = this.approvals.get(toolCallId);
     if (!approved) throw new Error("没有可用的写入许可");
     this.approvals.delete(toolCallId);
     const result = await this.deps.commit(toolCallId, approved.lease);
     if (!result.ok) throw new Error(result.error || "写入失败");
-    return result;
+    return { ...result, path: approved.mutation.path, operation: approved.mutation.operation };
   }
 
   clear(): void {
@@ -81,6 +83,9 @@ export class MutationCoordinator {
     }
     if (toolName === "write") {
       return prepareWrite(this.deps.workspace, input as WriteInput);
+    }
+    if (toolName === "create_piece") {
+      return prepareCreatePiece(this.deps.workspace, input as CreatePieceInput);
     }
     if (TAG_TOOLS.has(toolName as TagMutationTool)) {
       return prepareTagMutation(

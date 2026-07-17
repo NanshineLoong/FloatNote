@@ -4,6 +4,7 @@ import type { MutationCoordinator } from "../workspace/mutation-coordinator.js";
 const MUTATION_TOOLS = new Set([
   "edit",
   "write",
+  "create_piece",
   "tag_text",
   "tag_create",
   "tag_update",

@@ -525,7 +525,7 @@ describe("AgentRunner", () => {
     await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "整理一下" });
 
     expect(new Set(capturedTools?.map((tool) => tool.name))).toEqual(new Set([
-      "ls", "read", "find", "grep", "edit", "write",
+      "ls", "read", "find", "grep", "edit", "write", "create_piece",
       "list_tags", "tag_text", "tag_create", "tag_update", "tag_delete",
       "web_search", "web_fetch",
     ]));
@@ -543,7 +543,7 @@ describe("AgentRunner", () => {
       toolCallId: "c1",
       lease: "lease-1",
     }));
-    expect(capturedResultText).toBe("已更新，版本 v4");
+    expect(capturedResultText).toBe("已更新 piece.md，版本 v4");
   });
 });
 

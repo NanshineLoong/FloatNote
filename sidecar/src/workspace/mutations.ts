@@ -25,6 +25,11 @@ export interface WriteInput {
   content: string;
 }
 
+export interface CreatePieceInput {
+  title: string;
+  content: string;
+}
+
 export interface TagTextInput {
   exact: string;
   prefix?: string;
@@ -148,22 +153,42 @@ export async function prepareEdit(
   };
 }
 
-function validateNewPiecePath(notePath: string): void {
-  if (notePath === "_inbox.md" || notePath === "_tasks.md" || notePath.startsWith("_")) {
-    throw new Error("Agent 不能创建系统文件，只能创建 piece");
+export function normalizePieceTitle(title: string): string {
+  const withoutExtension = title.normalize("NFC").trim().replace(/\.md$/i, "");
+  const safe = withoutExtension
+    .replace(/[\/\\:*?"<>|\u0000-\u001f]+/g, "-")
+    .trim()
+    .replace(/^[_.\s-]+|[.\s-]+$/g, "");
+  if (!safe) {
+    throw new Error("INVALID_PIECE_TITLE: title 需要包含可用的标题文字；title 是自然标题，不是路径");
   }
-  if (
-    !notePath.endsWith(".md")
-    || notePath.length <= 3
-    || notePath.includes("/")
-    || notePath.includes("\\")
-    || notePath.includes("\0")
-    || notePath === "."
-    || notePath === ".."
-    || /^[A-Za-z]:/.test(notePath)
-  ) {
-    throw new Error("新 piece 必须是当前项目根目录中的小写 .md 文件名");
+  const stem = /^(con|prn|aux|nul|clock\$|com[1-9]|lpt[1-9])$/i.test(safe)
+    ? `${safe}-note`
+    : safe;
+  return `${stem}.md`;
+}
+
+export async function prepareCreatePiece(
+  workspace: WorkspaceClient,
+  input: CreatePieceInput,
+): Promise<PreparedMutation> {
+  const notePath = normalizePieceTitle(input.title);
+  const entries = await workspace.listEntries();
+  if (entries.some((entry) => entry.path.toLocaleLowerCase() === notePath.toLocaleLowerCase())) {
+    throw new Error(`PIECE_ALREADY_EXISTS: “${notePath}”已存在；请读取后使用 edit/write，或选择新标题`);
   }
+  return {
+    path: notePath,
+    operation: "create",
+    oldContent: "",
+    newContent: input.content,
+    createOnly: true,
+    preview: {
+      tool: "create_piece",
+      summary: `创建文档「${notePath}」`,
+      detail: { kind: "note_create", filename: notePath, contentPreview: input.content.slice(0, 240) },
+    },
+  };
 }
 
 export async function prepareWrite(
@@ -173,19 +198,7 @@ export async function prepareWrite(
   const entries = await workspace.listEntries();
   const existing = entries.find((entry) => entry.path === input.path);
   if (!existing) {
-    validateNewPiecePath(input.path);
-    return {
-      path: input.path,
-      operation: "create",
-      oldContent: "",
-      newContent: input.content,
-      createOnly: true,
-      preview: {
-        tool: "write",
-        summary: `创建文档「${input.path}」`,
-        detail: { kind: "note_create", filename: input.path, contentPreview: input.content.slice(0, 240) },
-      },
-    };
+    throw new Error(`USE_CREATE_PIECE: “${input.path}”不是当前项目中已存在的笔记标识；新建文章请调用 create_piece，title 不含项目名或 .md`);
   }
 
   const oldContent = await workspace.readRawProject(input.path);

@@ -24,7 +24,7 @@ export function createReadOnlyWorkspaceTools(deps: ReadOnlyWorkspaceToolDeps): T
   const ls = defineTool({
     name: "ls",
     label: "List",
-    description: "列出当前 FloatNote 项目中的笔记。",
+    description: "列出当前已由 FloatNote 选定的平面项目及其笔记标识。返回的笔记 path 相对于当前项目，不包含项目名称。",
     parameters: Type.Object({
       path: Type.Optional(Type.String({ description: "Workspace root to list; omit or use '.'" })),
       limit: Type.Optional(Type.Number({ description: "Maximum number of entries to return (default: 500)" })),
@@ -33,9 +33,15 @@ export function createReadOnlyWorkspaceTools(deps: ReadOnlyWorkspaceToolDeps): T
       normalizeWorkspaceRoot(input.path);
       const limit = positiveLimit(input.limit, 500, 1000);
       const entries = await deps.workspace.listEntries();
-      const lines = entries.slice(0, limit).map((entry) => entry.path);
-      if (entries.length > limit) lines.push(`[Results truncated at ${limit} entries]`);
-      return textResult(lines.join("\n"));
+      return textResult(JSON.stringify({
+        workspace: {
+          kind: "floatnote_project",
+          layout: "flat",
+          addressing: "note identifiers are relative to this already-selected project",
+        },
+        notes: entries.slice(0, limit),
+        ...(entries.length > limit ? { truncatedAt: limit } : {}),
+      }, null, 2));
     },
   });
 

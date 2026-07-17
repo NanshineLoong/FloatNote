@@ -29,7 +29,8 @@ Entry: `src/main.ts`.
   clean Markdown plus read-only tag/source context; edit offsets share that clean
   coordinate space and map v2 annotations exactly once.
 - `extensions/` — trusted Pi inline extensions. `ls/read/find/grep/edit/write`
-  are FloatNote virtual-workspace implementations, tag tools are Inbox-only, and
+  operate on existing FloatNote notes, `create_piece(title, content)` creates a
+  root-level piece from a natural title, tag tools are Inbox-only, and
   the `tool_call` hook performs review before mutation tool execution.
 - `skills.ts` — immutable Skill registry snapshots and capability-scoped Skill
   resource resolution. Pi ResourceLoader owns native `<available_skills>` and
@@ -44,5 +45,7 @@ and `npm run prepare:tauri` (stage release resource + Node runtime). Tests:
 `npm test`; release smoke: `npm run smoke`.
 
 All local mutation tools use `tool_call → prepare → review → lease → execute/commit`.
+`write` is rewrite-only; creation is a distinct create-only `create_piece`
+operation so model-facing intent and host enforcement stay aligned.
 The sidecar never writes note files and never receives a lease in model-visible
 tool arguments. Old Agent sessions using retired tool names are unsupported.

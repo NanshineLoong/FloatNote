@@ -13,6 +13,7 @@ export const TOOL_LABEL: Record<string, string> = {
   grep: "搜索文档",
   edit: "编辑文本",
   write: "写入文档",
+  create_piece: "创建文章",
   list_tags: "列出标签",
   tag_text: "设置文本标签",
   tag_create: "新建标签",

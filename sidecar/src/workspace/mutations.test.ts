@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decodeInbox, encodeInbox } from "@floatnote/note-logic";
 import { SessionSkillView, SkillRegistry } from "../skills.js";
 import { WorkspaceClient } from "./types.js";
-import { prepareEdit, prepareTagMutation, prepareWrite } from "./mutations.js";
+import { prepareCreatePiece, prepareEdit, prepareTagMutation, prepareWrite } from "./mutations.js";
 
 function workspace(entries: Array<{ path: string; kind: "inbox" | "tasks" | "piece" }>, files: Record<string, string>) {
   return new WorkspaceClient({
@@ -56,12 +56,10 @@ describe("prepareEdit", () => {
 });
 
 describe("prepareWrite", () => {
-  it("uses write create-only only for a missing piece", async () => {
+  it("rejects a missing target and directs the Agent to create_piece", async () => {
     const empty = workspace([], {});
-    const prepared = await prepareWrite(empty, { path: "Ideas.md", content: "# Ideas" });
-    expect(prepared).toMatchObject({ operation: "create", createOnly: true, oldContent: "" });
-    await expect(prepareWrite(empty, { path: "_tasks.md", content: "- [ ] x" }))
-      .rejects.toThrow("系统文件");
+    await expect(prepareWrite(empty, { path: "Ideas.md", content: "# Ideas" }))
+      .rejects.toThrow("USE_CREATE_PIECE");
   });
 
   it("rejects whole Inbox rewrite while text annotations exist", async () => {
@@ -85,6 +83,39 @@ describe("prepareWrite", () => {
     expect(decoded.markdown).toBe("replacement");
     expect(decoded.metadata.tags).toHaveLength(1);
     expect(decoded.metadata.quoteSources).toEqual([]);
+  });
+});
+
+describe("prepareCreatePiece", () => {
+  it("turns a natural title into one canonical root-level piece filename", async () => {
+    const prepared = await prepareCreatePiece(workspace([], {}), {
+      title: "  AI 内化／Tutor 的想法.md  ",
+      content: "# 想法",
+    });
+    expect(prepared).toMatchObject({
+      path: "AI 内化／Tutor 的想法.md",
+      operation: "create",
+      createOnly: true,
+      oldContent: "",
+      newContent: "# 想法",
+    });
+  });
+
+  it.each([
+    ["输入/输出", "输入-输出.md"],
+    ["CON", "CON-note.md"],
+  ])("normalizes the cross-platform title %s", async (title, expectedPath) => {
+    const prepared = await prepareCreatePiece(workspace([], {}), { title, content: "" });
+    expect(prepared.path).toBe(expectedPath);
+  });
+
+  it("reports a collision as an existing piece instead of overwriting it", async () => {
+    const existing = workspace(
+      [{ path: "Ideas.md", kind: "piece" }],
+      { "Ideas.md": "existing" },
+    );
+    await expect(prepareCreatePiece(existing, { title: "Ideas", content: "new" }))
+      .rejects.toThrow("PIECE_ALREADY_EXISTS");
   });
 });
 

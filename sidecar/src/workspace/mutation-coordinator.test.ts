@@ -66,4 +66,30 @@ describe("MutationCoordinator", () => {
     })).rejects.toThrow("写入许可");
     expect(deps.commit).not.toHaveBeenCalled();
   });
+
+  it("prepares create_piece as a create-only mutation", async () => {
+    const deps = dependencies();
+    deps.workspace.listEntries = vi.fn().mockResolvedValue([]);
+    const coordinator = new MutationCoordinator(deps);
+
+    await coordinator.prepareForHook("tool-create", "create_piece", {
+      title: "AI 内化 Tutor 的想法",
+      content: "# 想法",
+    });
+
+    expect(deps.review).toHaveBeenCalledWith(
+      "tool-create",
+      "create_piece",
+      expect.objectContaining({
+        path: "AI 内化 Tutor 的想法.md",
+        operation: "create",
+        createOnly: true,
+      }),
+    );
+    await expect(coordinator.commitForTool("tool-create")).resolves.toMatchObject({
+      ok: true,
+      path: "AI 内化 Tutor 的想法.md",
+      operation: "create",
+    });
+  });
 });

@@ -42,6 +42,7 @@ export function formatToolTitle(name: string, args: unknown): string {
     case "grep": return `搜索文档 ${shortLine(value.pattern) ?? ""}`.trim();
     case "edit": return target ? `编辑 ${target}` : "编辑文档";
     case "write": return target ? `写入 ${target}` : "写入文档";
+    case "create_piece": return `创建 ${shortLine(value.title) ?? "新文章"}`;
     case "list_tags": return "列出标签";
     case "tag_text": {
       const exact = shortLine(value.exact, 32);

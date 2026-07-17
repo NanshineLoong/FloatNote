@@ -429,10 +429,8 @@ fn send_review_result(
 fn mutation_matches_tool(tool_name: &str, operation: MutationOperation) -> bool {
     match tool_name {
         "edit" => operation == MutationOperation::Edit,
-        "write" => matches!(
-            operation,
-            MutationOperation::Create | MutationOperation::Rewrite
-        ),
+        "write" => operation == MutationOperation::Rewrite,
+        "create_piece" => operation == MutationOperation::Create,
         "tag_text" | "tag_create" | "tag_update" | "tag_delete" => {
             operation == MutationOperation::Tag
         }
@@ -765,5 +763,15 @@ mod tests {
         std::fs::write(dir.path().join("Ideas.md"), "exists").unwrap();
         assert!(resolve_project_file(dir.path(), "Ideas.md", ResolveMode::CreatePiece).is_err());
         assert!(resolve_project_file(dir.path(), "Ideas.md", ResolveMode::RewriteExisting).is_ok());
+    }
+
+    #[test]
+    fn create_operation_belongs_only_to_create_piece() {
+        assert!(mutation_matches_tool(
+            "create_piece",
+            MutationOperation::Create
+        ));
+        assert!(!mutation_matches_tool("write", MutationOperation::Create));
+        assert!(mutation_matches_tool("write", MutationOperation::Rewrite));
     }
 }

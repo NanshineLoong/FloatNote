@@ -43,7 +43,17 @@ describe("read-only workspace tools", () => {
     }, new SessionSkillView(new SkillRegistry().snapshot()));
     const tools = createReadOnlyWorkspaceTools({ workspace: client });
     const ls = await findTool(tools, "ls").execute("l1", {}, undefined, undefined, {} as never);
-    expect((ls.content[0] as { text: string }).text).toContain("Ideas.md");
+    expect(JSON.parse((ls.content[0] as { text: string }).text)).toEqual({
+      workspace: {
+        kind: "floatnote_project",
+        layout: "flat",
+        addressing: "note identifiers are relative to this already-selected project",
+      },
+      notes: [
+        { path: "_inbox.md", kind: "inbox" },
+        { path: "Ideas.md", kind: "piece" },
+      ],
+    });
     const find = await findTool(tools, "find").execute("f1", { pattern: "I*.md" } as never, undefined, undefined, {} as never);
     expect((find.content[0] as { text: string }).text).toBe("Ideas.md");
     const read = await findTool(tools, "read").execute("r1", { path: "_inbox.md" } as never, undefined, undefined, {} as never);

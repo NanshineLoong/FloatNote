@@ -455,7 +455,7 @@ mod tests {
 
     #[test]
     fn mutation_transaction_protocol_round_trips() {
-        let review = r##"{"type":"review_mutation","callId":"review-1","conversationId":"cv1","toolCallId":"tool-1","toolName":"write","operation":"create","path":"Ideas.md","oldContent":"","newContent":"# Ideas\n","createOnly":true,"preview":{"tool":"write","summary":"创建文档「Ideas.md」","detail":{"kind":"note_create","filename":"Ideas.md","contentPreview":"# Ideas\n"}}}"##;
+        let review = r##"{"type":"review_mutation","callId":"review-1","conversationId":"cv1","toolCallId":"tool-1","toolName":"create_piece","operation":"create","path":"Ideas.md","oldContent":"","newContent":"# Ideas\n","createOnly":true,"preview":{"tool":"create_piece","summary":"创建文档「Ideas.md」","detail":{"kind":"note_create","filename":"Ideas.md","contentPreview":"# Ideas\n"}}}"##;
         let review_message: SidecarToHost = serde_json::from_str(review).unwrap();
         assert_eq!(
             serde_json::from_str::<SidecarToHost>(&serde_json::to_string(&review_message).unwrap())

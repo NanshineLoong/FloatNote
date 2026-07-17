@@ -82,7 +82,7 @@ export interface OpenSessionRequest {
 
 const EMPTY_RESPONSE_MESSAGE = "助手这次没有返回内容。请检查模型名称、API Key、服务商额度或网络连接后重试。";
 export const ACTIVE_TOOL_NAMES = [
-  "ls", "read", "find", "grep", "edit", "write",
+  "ls", "read", "find", "grep", "edit", "write", "create_piece",
   "list_tags", "tag_text", "tag_create", "tag_update", "tag_delete",
   "web_search", "web_fetch",
 ] as const;

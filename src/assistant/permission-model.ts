@@ -59,10 +59,9 @@ export function projectPermission(request: PermissionRequest): PermissionPresent
   let tagTarget: PermissionPresentation["tagTarget"];
   switch (request.tool_name) {
     case "edit": title = `编辑「${documentName(request)}」`; break;
+    case "create_piece": title = `创建「${documentName(request)}」`; break;
     case "write": {
-      title = request.operation === "create" || detail.kind === "note_create"
-        ? `创建「${documentName(request)}」`
-        : `覆写「${documentName(request)}」`;
+      title = `覆写「${documentName(request)}」`;
       break;
     }
     case "tag_create": {
@@ -103,7 +102,7 @@ export function projectPermission(request: PermissionRequest): PermissionPresent
   }
   return {
     title,
-    canView: request.tool_name === "edit" || request.tool_name === "write",
+    canView: request.tool_name === "edit" || request.tool_name === "write" || request.tool_name === "create_piece",
     canSnapshot: request.tool_name === "write"
       && request.operation === "rewrite"
       && request.can_snapshot,

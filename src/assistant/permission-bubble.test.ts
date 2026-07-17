@@ -7,9 +7,9 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(undef
 
 function request(overrides: Partial<PermissionRequest> = {}): PermissionRequest {
   return {
-    request_id: "req-1", conversation_id: "conv-1", tool_name: "write", operation: "create",
+    request_id: "req-1", conversation_id: "conv-1", tool_name: "create_piece", operation: "create",
     old_content: "", new_content: "# Full document\n\nComplete body",
-    preview: { tool: "write", summary: "duplicate summary", detail: { kind: "note_create", filename: "Ideas.md", contentPreview: "# Short" } },
+    preview: { tool: "create_piece", summary: "duplicate summary", detail: { kind: "note_create", filename: "Ideas.md", contentPreview: "# Short" } },
     can_snapshot: false, resolved_path: "/notes/Ideas.md", ...overrides,
   };
 }

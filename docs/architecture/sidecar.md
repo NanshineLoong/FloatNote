@@ -11,14 +11,16 @@ sidecar 是独立 Node 进程，入口为 `sidecar/src/main.ts`，通过 stdin/s
 - `runner.ts` 在调用 Pi `SessionManager.open` 前验证 session 文件存在，避免旧索引中的错误路径被 Pi 静默初始化成一段新的空会话。
 - 用户从历史回合重试或编辑重发时，host 发送 `rewind`（该用户回合稳定的 session entry ID）。sidecar 通过 Pi `SessionManager` 将活动叶节点移动到该回合之前，并以关联的 `rewind_result` 确认结果；旧分支仍保留在 append-only session 文件中，但不再属于活动上下文。下一次 prompt 会写入新分支，随后 `session_synced` 让 Rust 刷新持久化对话索引而不重置前端草稿状态。
 - `configuration-gate.ts` 串行 provider 配置变更；栅栏初始保持关闭，直到 host 下发启动 `configure` 或 `configuration_ready`。因此即使新建或恢复会话先于启动配置到达，也会等待明确的配置决策；其他 prompt、工具回调和取消消息仍可并发处理。
-- Pi 默认并行执行同轮工具，但 `edit`、`write` 与标签 mutation 工具都声明为 `sequential`。`extensions/` 注册的 `ls/read/find/grep/edit/write` 是 FloatNote 虚拟工作区实现，不是 Pi 的本地文件系统实现；只读与网络工具仍可使用默认并行执行。
-- `workspace/` 通过关联 JSONL 请求读取当前 project space。Inbox 的 `read` 返回 clean Markdown 和独立只读的标签/引用语义上下文；`grep` 搜索同一 clean 坐标空间。`edit` 支持基于同一原文的多个唯一、互不重叠替换并映射 v2 标注；`write` 只创建 piece 或覆写现有笔记，带标注 Inbox 必须使用 `edit`。
+- Pi 默认并行执行同轮工具，但 `edit`、`write`、`create_piece` 与标签 mutation 工具都声明为 `sequential`。`extensions/` 注册的 `ls/read/find/grep/edit/write/create_piece` 是 FloatNote 虚拟工作区实现，不是 Pi 的本地文件系统实现；只读与网络工具仍可使用默认并行执行。
+- `workspace/` 通过关联 JSONL 请求读取当前 project space。`ls` 将其投影为已选定、平铺的笔记集合，返回的 path 都是项目内根级标识而非包含项目名的文件系统路径。Inbox 的 `read` 返回 clean Markdown 和独立只读的标签/引用语义上下文；`grep` 搜索同一 clean 坐标空间。`edit` 支持基于同一原文的多个唯一、互不重叠替换并映射 v2 标注；`write` 只覆写已有笔记，带标注 Inbox 必须使用 `edit`；`create_piece(title, content)` 从自然标题生成跨平台安全文件名，并以 create-only 语义新建 piece。
 - `web-tools.ts` 提供 `web_search` / `web_fetch`。网络结果作为不可信外部资料返回；fetch 会限制协议、重定向、响应大小和内容类型，并拒绝本机、私网与 link-local 地址。
 - `skills.ts` 把 host 下发目录转为不可变 generation；设置窗口的目录发现、来源
   标记和导入由 Rust host 拥有。Pi ResourceLoader 从 generation 生成原生
   `<available_skills>`，并展开 `/skill:name`；FloatNote 不手工拼接目录或 Skill 正文。
 
 本地写入遵循 `tool_call → prepare → review → lease → execute/commit → Rust atomic write`。
+创建与覆写在工具层即分离：`create_piece` 只能对应 `create`，`write` 只能对应
+`rewrite`；Rust 在审核边界再次核对工具名与 operation，防止调用语义漂移。
 权限 hook 先生成结构化预览并等待 host；批准后只保存与 `toolCallId`/conversation
 绑定的一次性 lease，工具 `execute` 消费后才请求提交。旧工具名与旧 session 不做兼容迁移。
 
