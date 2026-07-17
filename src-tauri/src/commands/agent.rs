@@ -564,6 +564,7 @@ fn validate_open_skill_dir(source: &cap_std::fs::Dir) -> Result<SkillMetadata, S
     Ok(metadata)
 }
 
+#[cfg(unix)]
 fn open_bound_dir(path: &Path, label: &str) -> Result<cap_std::fs::Dir, String> {
     let before = fs::symlink_metadata(path).map_err(|error| format!("无法读取{label}：{error}"))?;
     if !before.is_dir() || before.file_type().is_symlink() {
@@ -580,6 +581,33 @@ fn open_bound_dir(path: &Path, label: &str) -> Result<cap_std::fs::Dir, String> 
     Ok(directory)
 }
 
+#[cfg(windows)]
+fn open_bound_dir(path: &Path, label: &str) -> Result<cap_std::fs::Dir, String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    };
+
+    let before = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .map_err(|error| format!("无法读取{label}：{error}"))?;
+    let metadata = before
+        .metadata()
+        .map_err(|error| format!("无法读取{label}：{error}"))?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err(format!("{label}必须是普通目录，而不是符号链接"));
+    }
+    let directory = cap_std::fs::Dir::open_ambient_dir(path, cap_std::ambient_authority())
+        .map_err(|error| format!("无法安全打开{label}：{error}"))?;
+    if !directory_identity_matches(&before, &directory)? {
+        return Err(format!("{label}在打开过程中发生变化，请重试"));
+    }
+    Ok(directory)
+}
+
 #[cfg(unix)]
 fn directory_identity_matches(before: &fs::Metadata, opened: &cap_std::fs::Metadata) -> bool {
     use cap_std::fs::MetadataExt as CapMetadataExt;
@@ -590,20 +618,31 @@ fn directory_identity_matches(before: &fs::Metadata, opened: &cap_std::fs::Metad
 }
 
 #[cfg(windows)]
-fn directory_identity_matches(before: &fs::Metadata, opened: &cap_std::fs::Metadata) -> bool {
-    use cap_std::fs::MetadataExt as CapMetadataExt;
-    use std::os::windows::fs::MetadataExt as StdMetadataExt;
+fn directory_identity_matches(
+    before: &fs::File,
+    opened: &cap_std::fs::Dir,
+) -> Result<bool, String> {
+    use std::os::windows::io::AsRawHandle;
 
-    matches!(
-        (
-            StdMetadataExt::volume_serial_number(before),
-            CapMetadataExt::volume_serial_number(opened),
-            StdMetadataExt::file_index(before),
-            CapMetadataExt::file_index(opened),
-        ),
-        (Some(before_volume), Some(opened_volume), Some(before_index), Some(opened_index))
-            if before_volume == opened_volume && before_index == opened_index
-    )
+    Ok(windows_file_identity(before.as_raw_handle())?
+        == windows_file_identity(opened.as_raw_handle())?)
+}
+
+#[cfg(windows)]
+fn windows_file_identity(handle: std::os::windows::io::RawHandle) -> Result<(u32, u64), String> {
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+
+    let mut information = BY_HANDLE_FILE_INFORMATION::default();
+    if unsafe { GetFileInformationByHandle(handle, &mut information) } == 0 {
+        return Err(format!(
+            "无法确认目录身份：{}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let file_index = ((information.nFileIndexHigh as u64) << 32) | information.nFileIndexLow as u64;
+    Ok((information.dwVolumeSerialNumber, file_index))
 }
 
 fn temporary_skill_name(skill_name: &str) -> Result<String, String> {
@@ -833,10 +872,7 @@ mod skill_catalog_tests {
             plan_actions.display_description,
             "理清方向，定下眼前真正能做的事"
         );
-        let write = skills
-            .iter()
-            .find(|skill| skill.name == "write")
-            .unwrap();
+        let write = skills.iter().find(|skill| skill.name == "write").unwrap();
         assert_eq!(
             write.display_description,
             "边说边想，把真正属于你的内容写成文章"

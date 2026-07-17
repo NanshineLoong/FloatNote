@@ -221,6 +221,11 @@ pub fn frontmost_pid() -> Option<i32> {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
+pub fn frontmost_pid() -> Option<i32> {
+    None
+}
+
 /// Build a per-family osascript that returns `URL\nTitle` of the active tab,
 /// or None if the bundle is not a supported browser. Uses `tell application id`
 /// so localization of the app name cannot break the script.

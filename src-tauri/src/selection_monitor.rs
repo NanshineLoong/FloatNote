@@ -5,13 +5,19 @@
 //! clipboard work only happen on the worker thread. The structure is adapted
 //! from selection-hook's MIT-licensed macOS implementation.
 
+#[cfg(target_os = "macos")]
 use std::ffi::c_void;
+#[cfg(target_os = "macos")]
 use std::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
+#[cfg(target_os = "macos")]
 use std::sync::{mpsc, Mutex};
+#[cfg(target_os = "macos")]
 use std::thread::JoinHandle;
 use tauri::{AppHandle, Manager};
 
-use crate::selection_intent::{MouseDown, MouseUp, Point, SelectionIntentTracker};
+use crate::selection_intent::Point;
+#[cfg(target_os = "macos")]
+use crate::selection_intent::{MouseDown, MouseUp, SelectionIntentTracker};
 
 #[derive(Clone, Copy)]
 struct LogicalRect {
@@ -359,6 +365,7 @@ pub fn uninstall() {
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn event_tap_is_tail_appended_and_listen_only() {
         assert_eq!(cg::KCG_TAIL_APPEND_EVENT_TAP, 1);
