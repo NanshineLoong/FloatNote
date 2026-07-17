@@ -328,8 +328,8 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
         });
       }
       if (event.phase === "start") {
-        // toolcall_start 已经创建通用占位，执行实际开始时以同一 callId
-        // 原位更新标题，避免详细模式中出现两个工具行。
+        // toolcall_start 已经创建语义占位，执行实际开始时以同一 callId
+        // 原位补充分类和目标信息，避免详细模式中出现两个工具行。
         const upgraded = updateAction(state, (b) => b.callId === event.callId && b.execution === "running", (b) => ({
           ...b,
           ...(event.category ? { category: event.category } : {}),

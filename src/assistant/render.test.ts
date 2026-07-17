@@ -245,13 +245,14 @@ describe("reduceEvents", () => {
     ]);
   });
 
-  it("upgrades a preparing tool placeholder in place when execution starts", () => {
+  it("enriches a semantic tool placeholder in place when execution starts", () => {
     const preparing = run([{
       type: "tool",
       requestId: "r1",
       callId: "call-1",
       name: "read",
-      label: "正在准备工具调用…",
+      category: "document_read",
+      label: "读取文档",
       phase: "prepare",
     }]);
     const started = reduceEvents(preparing, {
@@ -259,6 +260,7 @@ describe("reduceEvents", () => {
       requestId: "r1",
       callId: "call-1",
       name: "read",
+      category: "skill",
       label: "读取 piece.md",
       phase: "start",
     });
@@ -271,6 +273,7 @@ describe("reduceEvents", () => {
           kind: "action",
           callId: "call-1",
           tool: "read",
+          category: "skill",
           label: "读取 piece.md",
           targets: [],
           decision: "pending",

@@ -46,14 +46,29 @@ describe("translateEvent", () => {
     ).toEqual({ type: "thinking_end", requestId: "r1", conversationId: "c1" });
   });
 
-  it("opens a generic tool placeholder when the model starts a tool call", () => {
+  it.each([
+    ["ls", "document_list", "列出项目文档"],
+    ["read", "document_read", "读取文档"],
+    ["find", "document_find", "查找文档"],
+    ["grep", "document_search", "搜索文档"],
+    ["edit", "document_write", "编辑文档"],
+    ["write", "document_write", "写入文档"],
+    ["create_piece", "document_create", "创建 新文章"],
+    ["list_tags", "tag", "列出标签"],
+    ["tag_text", "tag", "设置文本标签"],
+    ["tag_create", "tag", "新建标签"],
+    ["tag_update", "tag", "修改标签"],
+    ["tag_delete", "tag", "删除标签"],
+    ["web_search", "web_search", "搜索网页"],
+    ["web_fetch", "web_fetch", "获取网页"],
+  ])("opens a semantic %s placeholder when the model starts the tool call", (name, category, label) => {
     const out = translateEvent("r1", "c1", ev({
       type: "message_update",
       message: {},
       assistantMessageEvent: {
         type: "toolcall_start",
         contentIndex: 0,
-        partial: { content: [{ type: "toolCall", id: "call-1", name: "read", arguments: {} }] },
+        partial: { content: [{ type: "toolCall", id: "call-1", name, arguments: {} }] },
       },
     }));
     expect(out).toEqual({
@@ -61,8 +76,9 @@ describe("translateEvent", () => {
       requestId: "r1",
       conversationId: "c1",
       callId: "call-1",
-      name: "read",
-      label: "正在准备工具调用…",
+      name,
+      category,
+      label,
       phase: "prepare",
     });
   });

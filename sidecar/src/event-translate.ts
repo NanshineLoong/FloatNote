@@ -6,8 +6,9 @@ import { formatToolPresentation, sanitizeToolError } from "./tool-title.js";
  * Translate a Pi agent-session event into a single protocol line, or null when
  * the event is not relevant to the host. We forward text + thinking blocks
  * (streamed into the chat bubble), tool-call preparation, and tool execution
- * start/end. The preparation event opens an immediate generic placeholder;
- * execution start later upgrades it with the structured tool label.
+ * start/end. The preparation event opens an immediate semantic placeholder
+ * based on the known tool name; execution start later enriches it with the
+ * completed arguments.
  */
 export function translateEvent(
   requestId: string,
@@ -35,13 +36,14 @@ export function translateEvent(
           name?: unknown;
         };
         if (typeof block.id === "string" && typeof block.name === "string") {
+          const presentation = formatToolPresentation(block.name, {});
           return {
             type: "tool",
             requestId,
             conversationId,
             callId: block.id,
             name: block.name,
-            label: "正在准备工具调用…",
+            ...presentation,
             phase: "prepare",
           };
         }
