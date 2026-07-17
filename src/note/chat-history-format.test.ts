@@ -20,11 +20,11 @@ describe("chat history display formatting", () => {
   });
 
   it("formats history times by recency", () => {
-    const now = new Date("2026-07-08T15:40:00+08:00").getTime();
+    const now = new Date(2026, 6, 8, 15, 40).getTime();
 
-    expect(formatHistoryTime(new Date("2026-07-08T09:05:00+08:00").getTime(), now)).toBe("09:05");
-    expect(formatHistoryTime(new Date("2026-07-07T22:00:00+08:00").getTime(), now)).toBe("昨天");
-    expect(formatHistoryTime(new Date("2026-07-05T12:00:00+08:00").getTime(), now)).toBe("07/05");
-    expect(formatHistoryTime(new Date("2025-12-31T12:00:00+08:00").getTime(), now)).toBe("2025/12/31");
+    expect(formatHistoryTime(new Date(2026, 6, 8, 9, 5).getTime(), now)).toBe("09:05");
+    expect(formatHistoryTime(new Date(2026, 6, 7, 22).getTime(), now)).toBe("昨天");
+    expect(formatHistoryTime(new Date(2026, 6, 5, 12).getTime(), now)).toBe("07/05");
+    expect(formatHistoryTime(new Date(2025, 11, 31, 12).getTime(), now)).toBe("2025/12/31");
   });
 });

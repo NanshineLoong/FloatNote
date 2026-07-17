@@ -98,7 +98,7 @@ describe("version menu", () => {
         open: vi.fn(),
         loadVersions: async () => [{
           v: 6,
-          ts: "2026-07-13T14:32:00+08:00",
+          ts: new Date(2026, 6, 13, 14, 32).toISOString(),
           source: "manual",
           summary: "完成第一稿",
         }],
