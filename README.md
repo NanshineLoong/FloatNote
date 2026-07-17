@@ -3,10 +3,11 @@
   <h1>FloatNote</h1>
   <p>一款悬浮在桌面上、陪你从捕捉走向写作的本地优先笔记工具。</p>
   <p>
-    <a href="https://github.com/NanshineLoong/FloatNote/releases/download/v0.1.0/FloatNote_0.1.0_aarch64.dmg"><strong>下载 macOS · Apple Silicon</strong></a>
+    <a href="https://github.com/NanshineLoong/FloatNote/releases/download/v0.1.0/FloatNote_0.1.0_aarch64.dmg"><strong>下载 macOS 预览版 · Apple Silicon</strong></a>
     &nbsp;·&nbsp;
-    <a href="https://github.com/NanshineLoong/FloatNote/releases/download/v0.1.0/FloatNote_0.1.0_x86_64.dmg"><strong>下载 macOS · Intel</strong></a>
+    <a href="https://github.com/NanshineLoong/FloatNote/releases/download/v0.1.0/FloatNote_0.1.0_x86_64.dmg"><strong>下载 macOS 预览版 · Intel</strong></a>
   </p>
+  <p>⚠️ 当前版本尚未经过 Apple 公证，首次打开可能被 macOS 阻止。<a href="#首次打开未公证预览版">查看安全说明与打开方法</a></p>
   <p>Windows 版本正在准备中</p>
 </div>
 
