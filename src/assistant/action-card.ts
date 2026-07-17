@@ -3,6 +3,7 @@ import { fillMarkdown } from "./markdown";
 import type { Block } from "./render";
 import { escapeHtml } from "../shared/escape";
 import { createButton } from "../shared/ui/button";
+import type { ToolCategory } from "../platform/agent";
 
 /**
  * 流内动作卡（只读，Phase 1）。
@@ -28,15 +29,41 @@ function isReadonly(_tool: string): boolean {
 }
 
 /** SVG 图标（线性、stroke 1.5、与项目调性一致；aria-hidden）。 */
-function toolIcon(tool: string): string {
-  const path = tool.startsWith("tag")
-    ? tagPath()
-    : tool === "read"
-      ? readPath()
-      : ["ls", "find", "grep", "list_tags"].includes(tool)
-        ? listPath()
-        : editPath();
-  return `<span class="chat-action-icon" aria-hidden="true">${path}</span>`;
+function toolIcon(tool: string, category?: ToolCategory): string {
+  const semantic = category ?? legacyCategory(tool);
+  return `<span class="chat-action-icon" data-tool-category="${semantic}" aria-hidden="true">${iconPath(semantic)}</span>`;
+}
+
+function legacyCategory(tool: string): ToolCategory {
+  if (tool.startsWith("tag") || tool === "list_tags") return "tag";
+  const categories: Partial<Record<string, ToolCategory>> = {
+    ls: "document_list",
+    read: "document_read",
+    find: "document_find",
+    grep: "document_search",
+    edit: "document_write",
+    write: "document_write",
+    create_piece: "document_create",
+    web_search: "web_search",
+    web_fetch: "web_fetch",
+  };
+  return categories[tool] ?? "other";
+}
+
+function iconPath(category: ToolCategory): string {
+  switch (category) {
+    case "skill": return skillPath();
+    case "document_read": return readPath();
+    case "document_list": return listPath();
+    case "document_find": return findPath();
+    case "document_search": return searchPath();
+    case "web_search": return webSearchPath();
+    case "web_fetch": return webFetchPath();
+    case "document_write": return editPath();
+    case "document_create": return createPath();
+    case "tag": return tagPath();
+    case "other": return gearPath();
+  }
 }
 function editPath(): string {
   return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
@@ -50,6 +77,27 @@ function listPath(): string {
 function tagPath(): string {
   return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L3 13V3h10l7.59 7.59a2 2 0 0 1 0 2.82Z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>`;
 }
+function skillPath(): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.35 4.15L17.5 8.5l-4.15 1.35L12 14l-1.35-4.15L6.5 8.5l4.15-1.35Z"/><path d="m19 14 .75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75Z"/><path d="m5 15 .6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6Z"/></svg>`;
+}
+function findPath(): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h6l2 2h10v8"/><path d="M3 6v12h9"/><circle cx="16.5" cy="16.5" r="3.5"/><path d="m19 19 2 2"/></svg>`;
+}
+function searchPath(): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5"/><path d="M7.5 9h6M7.5 12h4"/></svg>`;
+}
+function webSearchPath(): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><path d="M3 10h14M10 3a12 12 0 0 1 0 14M10 3a12 12 0 0 0 0 14"/><path d="m15.5 15.5 5 5"/></svg>`;
+}
+function webFetchPath(): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/><path d="m9 10 3 3 3-3"/></svg>`;
+}
+function createPath(): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v5h5M9 14h6M12 11v6"/></svg>`;
+}
+function gearPath(): string {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.37.27.72.6 1 .98.25.34.4.76.4 1.19V13h-.09A1.7 1.7 0 0 0 19.4 15Z"/></svg>`;
+}
 
 /** 构建动作卡骨架（header + body 容器 + footer）。 */
 export function buildActionCard(block: Extract<Block, { kind: "action" }>): HTMLElement {
@@ -59,7 +107,7 @@ export function buildActionCard(block: Extract<Block, { kind: "action" }>): HTML
 
   const header = document.createElement("div");
   header.className = "chat-action-header";
-  header.innerHTML = `${toolIcon(block.tool)}<span class="chat-action-title">${escapeHtml(titleFor(block.tool))}</span>`;
+  header.innerHTML = `${toolIcon(block.tool, block.category)}<span class="chat-action-title">${escapeHtml(titleFor(block.tool))}</span>`;
   el.appendChild(header);
 
   if (isReadonly(block.tool)) {
@@ -141,6 +189,12 @@ export function updateActionCard(el: HTMLElement, block: Extract<Block, { kind: 
   el.classList.toggle("chat-action-incomplete", block.execution === "incomplete");
 
   const titleEl = el.querySelector<HTMLElement>(".chat-action-title");
+  const iconEl = el.querySelector<HTMLElement>(".chat-action-icon");
+  const category = block.category ?? legacyCategory(block.tool);
+  if (iconEl && iconEl.dataset.toolCategory !== category) {
+    iconEl.dataset.toolCategory = category;
+    iconEl.innerHTML = iconPath(category);
+  }
   const target = block.targets[0];
   if (titleEl) titleEl.textContent = block.label ?? (target ? `${titleFor(block.tool)} ${target}` : titleFor(block.tool));
 

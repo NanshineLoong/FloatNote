@@ -1,12 +1,25 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+export type ToolCategory =
+  | "skill"
+  | "document_read"
+  | "document_list"
+  | "document_find"
+  | "document_search"
+  | "web_search"
+  | "web_fetch"
+  | "document_write"
+  | "document_create"
+  | "tag"
+  | "other";
+
 export type AgentEvent =
   | { type: "ready" }
   | { type: "session_opened"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "session_synced"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "delta"; requestId: string; conversationId: string; text: string }
-  | { type: "tool"; requestId: string; conversationId: string; callId: string; name: string; label?: string; phase: "prepare" | "start" | "end"; error?: string; isError?: boolean }
+  | { type: "tool"; requestId: string; conversationId: string; callId: string; name: string; category?: ToolCategory; label?: string; phase: "prepare" | "start" | "end"; error?: string; isError?: boolean }
   | { type: "done"; requestId: string; conversationId: string; outcome?: "completed" | "cancelled" | "failed"; error?: string }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }
@@ -22,7 +35,7 @@ export type ChatDisplayMessage =
 export type ChatDisplayBlock =
   | { type: "text"; text: string }
   | { type: "thinking"; text: string }
-  | { type: "tool"; callId: string; name: string; label: string; status: "succeeded" | "failed" | "incomplete"; error?: string };
+  | { type: "tool"; callId: string; name: string; category?: ToolCategory; label: string; status: "succeeded" | "failed" | "incomplete"; error?: string };
 
 export interface NoteUpdated {
   noteId: string;

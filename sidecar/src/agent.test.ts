@@ -70,7 +70,7 @@ describe("translateEvent", () => {
   it("maps tool execution start/end to tool lines", () => {
     expect(
       translateEvent("r1", "c1", ev({ type: "tool_execution_start", toolCallId: "c", toolName: "write", args: { path: "piece.md" } })),
-    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write", label: "写入 piece.md", phase: "start" });
+    ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write", category: "document_write", label: "写入 piece.md", phase: "start" });
     expect(
       translateEvent("r1", "c1", ev({ type: "tool_execution_end", toolCallId: "c", toolName: "write", result: {}, isError: false })),
     ).toEqual({ type: "tool", requestId: "r1", conversationId: "c1", callId: "c", name: "write", phase: "end", isError: false });
@@ -142,9 +142,9 @@ describe("displayMessagesFromSession", () => {
       { role: "user", text: "问题", timestamp: expect.any(Number), entryId: "u1" },
       { role: "assistant", timestamp: expect.any(Number), entryId: "a1", blocks: [
         { type: "thinking", text: "先读取" },
-        { type: "tool", callId: "call-1", name: "read", label: "读取 行动清单", status: "succeeded" },
+        { type: "tool", callId: "call-1", name: "read", category: "document_read", label: "读取 行动清单", status: "succeeded" },
         { type: "text", text: "完成" },
-        { type: "tool", callId: "call-2", name: "web_fetch", label: "读取网页 example.com", status: "failed", error: "network denied" },
+        { type: "tool", callId: "call-2", name: "web_fetch", category: "web_fetch", label: "获取网页 example.com", status: "failed", error: "network denied" },
       ] },
     ]);
     expect(JSON.stringify(displayMessagesFromSession(session))).not.toContain("大段工具返回");
@@ -159,7 +159,7 @@ describe("displayMessagesFromSession", () => {
     ] } } as SessionLike;
     expect(displayMessagesFromSession(session)).toEqual([
       { role: "assistant", timestamp: expect.any(Number), entryId: "a1", blocks: [
-        { type: "tool", callId: "call-1", name: "read", label: "读取文档", status: "incomplete" },
+        { type: "tool", callId: "call-1", name: "read", category: "document_read", label: "读取文档", status: "incomplete" },
       ] },
     ]);
   });

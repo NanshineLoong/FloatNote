@@ -397,16 +397,16 @@ describe("reduceEvents", () => {
     const state = run([{ type: "session_opened", conversationId: "c1", sessionFile: "session.jsonl", messages: [
       { role: "assistant", timestamp: 1, entryId: "a1", blocks: [
         { type: "thinking", text: "分析" },
-        { type: "tool", callId: "c1", name: "read", label: "读取 行动清单", status: "succeeded" },
-        { type: "tool", callId: "c2", name: "web_fetch", label: "读取网页 example.com", status: "failed", error: "拒绝访问" },
+        { type: "tool", callId: "c1", name: "read", category: "skill", label: "读取技能 brainstorming", status: "succeeded" },
+        { type: "tool", callId: "c2", name: "web_fetch", category: "web_fetch", label: "获取网页 example.com", status: "failed", error: "拒绝访问" },
         { type: "text", text: "结论" },
       ] },
-    ] }]);
+    ] }] as Parameters<typeof reduceEvents>[1][]);
     const assistant = state.messages[0] as Extract<ChatMessage, { role: "assistant" }>;
     expect(assistant.blocks[0]).toMatchObject({ kind: "process_group" });
     if (assistant.blocks[0].kind === "process_group") {
-      expect(assistant.blocks[0].items[1]).toMatchObject({ kind: "action", callId: "c1", execution: "succeeded", label: "读取 行动清单" });
-      expect(assistant.blocks[0].items[2]).toMatchObject({ kind: "action", callId: "c2", execution: "failed", resultSummary: "拒绝访问" });
+      expect(assistant.blocks[0].items[1]).toMatchObject({ kind: "action", callId: "c1", category: "skill", execution: "succeeded", label: "读取技能 brainstorming" });
+      expect(assistant.blocks[0].items[2]).toMatchObject({ kind: "action", callId: "c2", category: "web_fetch", execution: "failed", resultSummary: "拒绝访问" });
     }
     expect(assistant.blocks[1]).toMatchObject({ kind: "text", text: "结论" });
   });

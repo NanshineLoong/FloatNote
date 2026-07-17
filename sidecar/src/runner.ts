@@ -24,7 +24,7 @@ import type { ChatDisplayBlock, ChatDisplayMessage, HostToSidecar, PromptRef, Si
 import { buildAgentModel, resolveAgentConfig, sanitizeAgentError, type AgentConfig } from "./model.js";
 import { translateEvent } from "./event-translate.js";
 import { composePromptText } from "./prompt-compose.js";
-import { formatToolTitle, sanitizeToolError } from "./tool-title.js";
+import { formatToolPresentation, sanitizeToolError } from "./tool-title.js";
 import { buildOneShotContext } from "./one-shot.js";
 import { MutationCoordinator } from "./workspace/mutation-coordinator.js";
 import { WorkspaceClient, type PreparedMutation } from "./workspace/types.js";
@@ -641,13 +641,14 @@ function assistantDisplayBlocks(
       const name = typeof block.name === "string" ? block.name : typeof block.toolName === "string" ? block.toolName : undefined;
       if (!callId || !name) continue;
       const args = block.arguments ?? block.args;
+      const presentation = formatToolPresentation(name, args);
       const result = results.get(callId);
       const status = !result ? "incomplete" as const : result.isError ? "failed" as const : "succeeded" as const;
       output.push({
         type: "tool",
         callId,
         name,
-        label: formatToolTitle(name, args),
+        ...presentation,
         status,
         ...(status === "failed" && result?.error ? { error: result.error } : {}),
       });

@@ -26,7 +26,7 @@ Assistant UI → src/platform/agent → Tauri command → Rust agent host
                                               Node sidecar
 ```
 
-sidecar 将流式对话事件输出到 JSONL；Rust 解析并广播为 `agent://event`，由 `src/platform/agent.ts` 订阅。工具事件携带稳定 `callId`、安全显示标题、状态和可选短错误，使前端能按真实调用匹配交错执行；原始参数和工具返回正文不进入 UI 协议。模型发出 `toolcall_start` 时，sidecar 先发送安全的通用 `prepare` 工具事件；同一 `callId` 的实际 `start` 事件原位升级标题。mutation 在 Pi `tool_call` hook 中先准备 clean-coordinate 变换，再发 `review_mutation`；Rust 重解析当前 project、校验旧内容并广播结构化 `permission://request`。用户允许后 Rust 返回绑定 conversation/tool call 的短期一次性 lease，工具 `execute` 消费 lease 并发 `commit_mutation`，Rust 再做 stale/create-only 检查、可选快照和原子写入。拒绝、事件广播失败、过期、取消与提交错误都会返回关联结果，不留下悬挂调用。
+sidecar 将流式对话事件输出到 JSONL；Rust 解析并广播为 `agent://event`，由 `src/platform/agent.ts` 订阅。工具事件携带稳定 `callId`、安全显示标题、语义 `category`、状态和可选短错误，使前端能按真实调用匹配交错执行，并以 Skill、文档读取/查找/搜索、网页搜索/获取、写入、创建、标签和未知工具图标区分动作；原始参数和工具返回正文不进入 UI 协议。`read` 指向受控 Skill 资源时，标题只显示稳定 Skill 名称，不显示本机 `SKILL.md` 绝对路径。模型发出 `toolcall_start` 时，sidecar 先发送安全的通用 `prepare` 工具事件；同一 `callId` 的实际 `start` 事件原位升级标题和图标。mutation 在 Pi `tool_call` hook 中先准备 clean-coordinate 变换，再发 `review_mutation`；Rust 重解析当前 project、校验旧内容并广播结构化 `permission://request`。用户允许后 Rust 返回绑定 conversation/tool call 的短期一次性 lease，工具 `execute` 消费 lease 并发 `commit_mutation`，Rust 再做 stale/create-only 检查、可选快照和原子写入。拒绝、事件广播失败、过期、取消与提交错误都会返回关联结果，不留下悬挂调用。
 
 turn 结束事件包含 `completed`、`cancelled` 或 `failed` outcome。取消时前端保留已有
 部分输出并显示“已中断”；无输出取消也不会进入空响应错误分支。模型失败显示清理

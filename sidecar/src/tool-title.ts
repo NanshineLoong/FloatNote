@@ -1,6 +1,24 @@
 const MAX_TARGET = 48;
 const MAX_ERROR = 120;
 
+export type ToolCategory =
+  | "skill"
+  | "document_read"
+  | "document_list"
+  | "document_find"
+  | "document_search"
+  | "web_search"
+  | "web_fetch"
+  | "document_write"
+  | "document_create"
+  | "tag"
+  | "other";
+
+export interface ToolPresentation {
+  category: ToolCategory;
+  label: string;
+}
+
 function shortLine(value: unknown, max = MAX_TARGET): string | undefined {
   if (typeof value !== "string") return undefined;
   const line = value.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
@@ -19,7 +37,18 @@ function noteTarget(args: Record<string, unknown>): string | undefined {
   const value = shortLine(raw);
   if (value === "_tasks.md") return "行动清单";
   if (value === "_inbox.md") return "采集区";
-  return value;
+  if (!value) return undefined;
+  const segments = value.split(/[\\/]/).filter(Boolean);
+  return segments.at(-1) ?? value;
+}
+
+function skillNameOf(args: Record<string, unknown>): string | undefined {
+  const raw = shortLine(args.path ?? args.file_path ?? args.target, 300);
+  if (!raw) return undefined;
+  const segments = raw.split(/[\\/]/).filter(Boolean);
+  if (segments.at(-1) !== "SKILL.md") return undefined;
+  const name = segments.at(-2);
+  return name && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(name) ? name : undefined;
 }
 
 function domainOf(value: unknown): string | undefined {
@@ -32,29 +61,38 @@ function domainOf(value: unknown): string | undefined {
   }
 }
 
-export function formatToolTitle(name: string, args: unknown): string {
+export function formatToolPresentation(name: string, args: unknown): ToolPresentation {
   const value = args && typeof args === "object" ? args as Record<string, unknown> : {};
   const target = noteTarget(value);
   switch (name) {
-    case "ls": return "列出笔记";
-    case "read": return target ? `读取 ${target}` : "读取文档";
-    case "find": return `查找文档 ${shortLine(value.pattern) ?? ""}`.trim();
-    case "grep": return `搜索文档 ${shortLine(value.pattern) ?? ""}`.trim();
-    case "edit": return target ? `编辑 ${target}` : "编辑文档";
-    case "write": return target ? `写入 ${target}` : "写入文档";
-    case "create_piece": return `创建 ${shortLine(value.title) ?? "新文章"}`;
-    case "list_tags": return "列出标签";
+    case "ls": return { category: "document_list", label: "列出项目文档" };
+    case "read": {
+      const skillName = skillNameOf(value);
+      return skillName
+        ? { category: "skill", label: `读取技能 ${skillName}` }
+        : { category: "document_read", label: target ? `读取 ${target}` : "读取文档" };
+    }
+    case "find": return { category: "document_find", label: `查找文档 ${shortLine(value.pattern) ?? ""}`.trim() };
+    case "grep": return { category: "document_search", label: `搜索文档 ${shortLine(value.pattern) ?? ""}`.trim() };
+    case "edit": return { category: "document_write", label: target ? `编辑 ${target}` : "编辑文档" };
+    case "write": return { category: "document_write", label: target ? `写入 ${target}` : "写入文档" };
+    case "create_piece": return { category: "document_create", label: `创建 ${shortLine(value.title) ?? "新文章"}` };
+    case "list_tags": return { category: "tag", label: "列出标签" };
     case "tag_text": {
       const exact = shortLine(value.exact, 32);
-      return exact ? `给“${exact}”设置标签` : "设置文本标签";
+      return { category: "tag", label: exact ? `给“${exact}”设置标签` : "设置文本标签" };
     }
-    case "tag_create": return `新建标签 ${shortLine(value.tagName ?? value.name) ?? ""}`.trim();
-    case "tag_update": return `修改标签 ${shortLine(value.tagName ?? value.name ?? value.newName) ?? ""}`.trim();
-    case "tag_delete": return `删除标签 ${shortLine(value.tagName ?? value.name) ?? ""}`.trim();
-    case "web_search": return `搜索网页 ${shortLine(value.query) ?? ""}`.trim();
-    case "web_fetch": return `读取网页 ${domainOf(value.url) ?? ""}`.trim();
-    default: return name;
+    case "tag_create": return { category: "tag", label: `新建标签 ${shortLine(value.tagName ?? value.name) ?? ""}`.trim() };
+    case "tag_update": return { category: "tag", label: `修改标签 ${shortLine(value.tagName ?? value.name ?? value.newName) ?? ""}`.trim() };
+    case "tag_delete": return { category: "tag", label: `删除标签 ${shortLine(value.tagName ?? value.name) ?? ""}`.trim() };
+    case "web_search": return { category: "web_search", label: `搜索网页 ${shortLine(value.query) ?? ""}`.trim() };
+    case "web_fetch": return { category: "web_fetch", label: `获取网页 ${domainOf(value.url) ?? ""}`.trim() };
+    default: return { category: "other", label: name };
   }
+}
+
+export function formatToolTitle(name: string, args: unknown): string {
+  return formatToolPresentation(name, args).label;
 }
 
 export function sanitizeToolError(value: unknown): string | undefined {

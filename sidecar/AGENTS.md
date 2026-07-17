@@ -21,9 +21,10 @@ Entry: `src/main.ts`.
   not emitted by the sidecar (kept intentionally for now).
 - `one-shot.ts` — restricted no-session/no-tool completion contexts. Only the
   `translate` task is registered; unknown tasks must fail closed.
-- `tool-title.ts` — pure safe tool-title and short-error formatting shared by
-  live events and session restoration; raw arguments/results never cross the
-  display protocol.
+- `tool-title.ts` — pure safe tool-presentation (`label` + semantic `category`)
+  and short-error formatting shared by live events and session restoration;
+  Skill reads expose only the stable Skill name, and raw arguments/results
+  never cross the display protocol.
 - `workspace/` — projected Inbox reads, bounded search, constrained path policy,
   mutation preparation, and the one-use mutation coordinator. Inbox reads expose
   clean Markdown plus read-only tag/source context; edit offsets share that clean

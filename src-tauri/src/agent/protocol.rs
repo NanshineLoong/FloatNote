@@ -177,6 +177,8 @@ pub enum SidecarToHost {
         call_id: String,
         name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        category: Option<ToolCategory>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         label: Option<String>,
         phase: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -321,6 +323,7 @@ pub enum ChatDisplayBlock {
     Tool {
         call_id: String,
         name: String,
+        category: ToolCategory,
         label: String,
         status: ToolDisplayStatus,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -334,6 +337,22 @@ pub enum ToolDisplayStatus {
     Succeeded,
     Failed,
     Incomplete,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCategory {
+    Skill,
+    DocumentRead,
+    DocumentList,
+    DocumentFind,
+    DocumentSearch,
+    WebSearch,
+    WebFetch,
+    DocumentWrite,
+    DocumentCreate,
+    Tag,
+    Other,
 }
 
 /// 当前活动笔记：由笔记窗 `set_active_note` 发布、`agent_send` 也会更新，
@@ -523,6 +542,7 @@ mod tests {
                 ChatDisplayBlock::Tool {
                     call_id: "c1".into(),
                     name: "read".into(),
+                    category: ToolCategory::Skill,
                     label: "读取 行动清单".into(),
                     status: ToolDisplayStatus::Succeeded,
                     error: None,

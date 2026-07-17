@@ -1,4 +1,4 @@
-import type { ChatDisplayMessage } from "../../platform/agent";
+import type { ChatDisplayMessage, ToolCategory } from "../../platform/agent";
 import { type EditPreviewDetail, type WriteMode } from "../permission-bubble";
 
 /**
@@ -23,7 +23,7 @@ export type ChatEvent =
     }
   | { type: "session_synced"; conversationId: string; sessionFile: string; messages: ChatDisplayMessage[] }
   | { type: "delta"; requestId: string; conversationId?: string; text: string }
-  | { type: "tool"; requestId: string; conversationId?: string; callId?: string; name: string; label?: string; phase: "prepare" | "start" | "end"; error?: string; isError?: boolean }
+  | { type: "tool"; requestId: string; conversationId?: string; callId?: string; name: string; category?: ToolCategory; label?: string; phase: "prepare" | "start" | "end"; error?: string; isError?: boolean }
   | { type: "done"; requestId: string; conversationId?: string; outcome?: "completed" | "cancelled" | "failed" }
   | { type: "title"; conversationId: string; title: string }
   | { type: "error"; requestId: string | null; conversationId?: string; message: string }
@@ -58,6 +58,7 @@ export type ActionBlock = {
   id: string;
   kind: "action";
   tool: string;
+  category?: ToolCategory;
   label?: string;
   detail?: EditPreviewDetail;
   summary?: string;
@@ -315,6 +316,7 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
           kind: "action",
           callId: event.callId,
           tool: event.name,
+          ...(event.category ? { category: event.category } : {}),
           label: event.label,
           targets: [],
           decision: "pending",
@@ -330,6 +332,7 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
         // 原位更新标题，避免详细模式中出现两个工具行。
         const upgraded = updateAction(state, (b) => b.callId === event.callId && b.execution === "running", (b) => ({
           ...b,
+          ...(event.category ? { category: event.category } : {}),
           ...(event.label ? { label: event.label } : {}),
         }));
         if (upgraded !== state) return upgraded;
@@ -339,6 +342,7 @@ export function reduceEvents(state: ChatState, event: ChatEvent): ChatState {
           kind: "action",
           callId: event.callId,
           tool: event.name,
+          ...(event.category ? { category: event.category } : {}),
           label: event.label,
           targets: [],
           decision: "pending",
@@ -620,6 +624,7 @@ function displayMessageToChatMessage(message: ChatDisplayMessage): ChatMessage |
             kind: "action",
             callId: block.callId,
             tool: block.name,
+            ...(block.category ? { category: block.category } : {}),
             label: block.label,
             targets: [],
             decision: "pending",

@@ -55,9 +55,11 @@ into a reconciled message list with incremental DOM updates.
   tables and task lists stay editable Markdown rather than becoming widgets.
 - `styles.css` — assistant card/bubble/diff/picker styling.
 
-Tool rows use the sidecar-provided safe `label` and stable `callId`; never render
-raw tool arguments or result bodies. Compact mode is the default and owns the
-streaming cursor. Detailed mode owns process shimmer and expandable groups.
+Tool rows use the sidecar-provided safe `label`, semantic `category`, and stable
+`callId`; `action-card.ts` maps the category to a fixed inline SVG and keeps a
+tool-name fallback only for older events. Never render raw tool arguments or
+result bodies. Compact mode is the default and owns the streaming cursor.
+Detailed mode owns process shimmer and expandable groups.
 
 Cross-feature contracts come from `src/platform/`; shared helpers/UI come from
 `src/shared/`. Do not import `src/note/` from this feature.

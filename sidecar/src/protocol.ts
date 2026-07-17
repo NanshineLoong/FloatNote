@@ -7,6 +7,7 @@
  */
 
 import type { AiProviderId } from "./model.js";
+import type { ToolCategory } from "./tool-title.js";
 
 /** Host → sidecar messages. */
 export type HostToSidecar =
@@ -129,6 +130,7 @@ export type SidecarToHost =
       conversationId: string;
       callId: string;
       name: string;
+      category?: ToolCategory;
       phase: "prepare" | "start" | "end";
       label?: string;
       error?: string;
@@ -174,7 +176,7 @@ export type ChatDisplayMessage =
 export type ChatDisplayBlock =
   | { type: "text"; text: string }
   | { type: "thinking"; text: string }
-  | { type: "tool"; callId: string; name: string; label: string; status: "succeeded" | "failed" | "incomplete"; error?: string };
+  | { type: "tool"; callId: string; name: string; category: ToolCategory; label: string; status: "succeeded" | "failed" | "incomplete"; error?: string };
 
 /**
  * Encode a message as a single newline-terminated JSON line.
