@@ -3,7 +3,7 @@ import "../assistant/styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { onFileChanged, onNoteUpdated } from "./agent";
+import { onFileChanged, onNoteUpdated, type NoteUpdated } from "./agent";
 import { EditorView, placeholder } from "@codemirror/view";
 import { Transaction } from "@codemirror/state";
 import { decodeInbox } from "@floatnote/note-logic";
@@ -96,6 +96,7 @@ import { attachAutomationToasts } from "./automation-toasts";
 import { createProjectMenuRenderer } from "./project-menu-render";
 import { createAssistantController } from "./assistant-controller";
 import { createNoteSession } from "./note-session";
+import { resolveAgentWriteNavigation } from "./agent-write-navigation";
 
 
 export function startNoteApp() {
@@ -610,21 +611,52 @@ async function toggleAssistantFromChrome() {
   await assistantController.toggleFromChrome();
 }
 
-void onNoteUpdated(async (payload) => {
+async function handleAgentNoteUpdated(payload: NoteUpdated) {
   // 与 onFileChanged 对齐：编辑器有未保存的本地修改时跳过 AI 热刷新，
   // 否则磁盘内容会覆盖用户输入，而 pending 仍持旧内容会在后续 flush 时盖回 AI 结果。
   if (isDirty(payload.path)) return;
-  // 采集面（项目模式）被 AI 改写。
-  if (session.currentInbox && payload.path === session.currentInbox.entry.path) {
-    applyRemoteDoc(await loadNote(session.currentInbox.entry.path));
-    return;
+
+  const target = resolveAgentWriteNavigation(payload, {
+    mode: session.mode,
+    project: session.currentProject,
+    document: session.currentDocument,
+  });
+  if (!target) return;
+
+  switch (target.kind) {
+    case "inbox":
+      applyRemoteDoc(await loadNote(target.path));
+      selectView("inbox");
+      return;
+    case "tasks":
+      tasksPanel.setOpen(true);
+      await tasksPanel.reload();
+      return;
+    case "piece":
+      await openPiece(target.entry);
+      renderWindowState({
+        kind: "LOADED",
+        project: session.currentProject!,
+        piece: target.entry,
+      });
+      session.surface = "piece";
+      applyView();
+      return;
+    case "document":
+      pieceHeader?.exitVersionPreview();
+      applyRemoteTo(pieceEditor, await loadNote(target.entry.path));
+      applyView();
+      return;
   }
-  // 成品 / 独立文档被 AI 改写（文档模式无文件监听，靠这条热刷新）。
-  const f = activePieceFile();
-  if (f && payload.path === f.path) {
-    pieceHeader?.exitVersionPreview();
-    applyRemoteTo(pieceEditor, await loadNote(f.path));
-  }
+}
+
+// Agent 一轮内可以连续写多个文件。串行消费成功提交事件，保证每次导航都发生，
+// 同时避免较早的异步 loadNote 晚返回后覆盖较新的目标文件。
+let agentNoteUpdateQueue = Promise.resolve();
+void onNoteUpdated((payload) => {
+  agentNoteUpdateQueue = agentNoteUpdateQueue
+    .then(() => handleAgentNoteUpdated(payload))
+    .catch((error) => console.error("AI write navigation failed", error));
 });
 
 // 外部文件修改：Rust watcher 检测到 .md 文件变化后广播，热刷新对应编辑器。
