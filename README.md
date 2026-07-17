@@ -1,50 +1,85 @@
-# FloatNote
+<div align="center">
+  <img src="src-tauri/icons/icon.png" alt="FloatNote 应用图标" width="88" height="88">
+  <h1>FloatNote</h1>
+  <p>一款悬浮在桌面上、陪你从捕捉走向写作的本地优先笔记工具。</p>
+  <p><strong>macOS</strong> · Windows 正在准备 · 本地优先</p>
+</div>
 
-FloatNote 是一个基于 Tauri 2 的本地优先 Markdown 笔记桌面应用。前端负责多窗口编辑体验，Rust 主进程是本地文件与窗口状态的唯一可信边界，AI 助手在受控的 Node sidecar 中运行。
+<!--
+发布链接准备好后，在这里加入：下载 macOS · 查看功能 · 反馈问题。
+头图准备好后，在这里加入：docs/assets/readme/01-hero.png。
+-->
 
-## 开发
+## 为什么是 FloatNote？
 
-要求：Node.js 22.19 或更高、Rust stable，以及 macOS 或 Windows 的 Tauri 开发环境。
+灵感常常出现在阅读、研究和工作途中。FloatNote 停留在当前工作区上方，让收集、整理和写作保持在同一条思考路径里：看到值得留下的内容时随手收集，需要深入理解时继续追问，准备表达时直接展开写作。
+
+## 从遇见信息，到形成自己的内容
+
+### 随手捕捉，不打断当前工作
+
+悬浮置顶的笔记窗始终在手边，无需离开正在使用的应用。划选内容后，可以快速采集、翻译，或带着原文继续向 AI 提问。
+
+<!-- 截图：docs/assets/readme/02-capture.png -->
+
+### 让材料与写作彼此照见
+
+采集区保存沿途遇见的线索，写作区承接逐渐形成的观点。双栏工作区让素材和文章并排呈现，不必在多个页面之间来回切换。
+
+<!-- 截图：docs/assets/readme/03-dual-pane.png -->
+
+### AI 帮你想清楚，而不是替你思考
+
+FloatNote 通过追问、梳理、规划和共同写作推动思考。需要修改内容时，它会先展示变更，再由你决定是否应用。
+
+<!-- 截图：docs/assets/readme/04-socratic-ai.png -->
+
+| AI 能力 | 支持内容 |
+| --- | --- |
+| 基础能力 | 读取与检索项目内容、创建与修改文章、更新行动清单、添加与管理标签、搜索与读取网页 |
+| 内置 Skills | 问到真懂、梳理材料、下一步、写出所想 |
+| AI 提供商 | OpenAI、Anthropic、DeepSeek、Kimi、智谱、阿里云百炼 |
+
+## 把内容留在自己手中
+
+笔记、行动清单和文章直接保存在你选择的本地文件夹中，并使用 Markdown 格式。你可以用熟悉的文件工具查看、备份和迁移，不依赖 FloatNote 才能访问自己的内容。
+
+> 使用 AI 功能时，完成请求所需的内容会发送给你配置的 AI 提供商。
+
+<!-- 截图：docs/assets/readme/05-local-files.png -->
+
+## 细节也服务于思考
+
+<!--
+截图：
+- docs/assets/readme/06-tags.png
+- docs/assets/readme/07-action-menu.png
+- docs/assets/readme/08-versions.png
+-->
+
+| 标签 | 下一步行动 | 版本管理 |
+| --- | --- | --- |
+| 为重要片段添加标签，让零散内容获得清晰的语义。 | 通过行动菜单记下下一步，把想法逐渐变成可以执行的事情。 | 保存并回看文章的不同版本，在修改中保留重要变化。 |
+
+## 下载与开始使用
+
+- **macOS**：安装包将在项目发布页面提供。
+- **Windows**：正在准备中。
+- **首次使用**：划词采集需要授予系统辅助功能权限；FloatNote 会在需要时引导你完成设置。
+
+<!-- 发布地址准备好后，将 macOS 文案替换为可点击的下载链接。 -->
+
+## 从源码运行
+
+需要 Node.js 22.19 或更高版本、Rust stable，以及 macOS 或 Windows 对应的 Tauri 开发环境。
 
 ```bash
 npm install
 npm run tauri dev
 ```
 
-常用质量门禁：
+更多信息可查看[开发环境](docs/development/setup.md)、[测试说明](docs/development/testing.md)和[架构总览](docs/architecture/overview.md)。
 
-```bash
-npm run test
-npm run build
-npm run smoke:sidecar
-npm run check
-(cd src-tauri && cargo test --lib)
-(cd src-tauri && cargo check --release)
-```
+## 参与项目
 
-`npm run tauri build` 会先构建 sidecar bundle、把 bundle 放入 Tauri resources，并把构建机提供的 Node runtime 作为 Tauri external binary 一同打包。最终用户不需要预先安装 Node.js。
-
-## 架构
-
-```text
-WebView entries ──► feature modules / src/platform ──► Tauri commands ──► Rust domains
-                                      │                                  │
-                                      └── shared DTO/events              └──► Node AI sidecar (JSONL)
-```
-
-- `src/`：Vite 多页面前端；入口 HTML 留在根目录是 Vite 的标准 MPA 约定。
-- `src/platform/`：共享的 agent/chat gateway 与跨 feature DTO。
-- `src/note/`、`src/assistant/`、`src/history/`、`src/settings/`、`src/popup/`：各窗口/feature 的 UI 与控制逻辑。
-- `shared/note-logic/`：前端与 sidecar 共用、无 DOM 与 I/O 的 Markdown/标签领域逻辑。
-- `sidecar/`：AI agent；开发时以 `tsx` 启动，发布时运行 Tauri 打包的 Node runtime 与 ESM bundle。
-- `src-tauri/`：Rust 主进程；唯一执行本地文件写入、版本快照、窗口/系统能力和 sidecar 权限闸。
-
-详细说明见：
-
-- [架构总览](docs/architecture/overview.md)
-- [运行时边界](docs/architecture/runtime-boundaries.md) 与 [数据流](docs/architecture/data-flow.md)
-- [前端](docs/architecture/frontend.md)、[Rust 后端](docs/architecture/backend.md)、[sidecar](docs/architecture/sidecar.md)、[打包](docs/architecture/packaging.md) 与 [安全边界](docs/architecture/security.md)
-- [开发环境](docs/development/setup.md) 与 [跨平台注意事项](docs/development/cross-platform.md)
-- [测试与质量门禁](docs/development/testing.md)
-- [发布流程](docs/development/release.md)
-- [架构决策记录](docs/adr/README.md)
+欢迎反馈问题、提出功能建议或提交改进。正式开源前，项目还会补充贡献指南和许可证文件。
