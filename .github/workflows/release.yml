@@ -1,0 +1,128 @@
+name: Release preview
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  prepare_release:
+    name: Validate tag and prepare draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - name: Verify release tag and commit
+        run: |
+          set -euo pipefail
+          npm run version:check -- --tag "$RELEASE_TAG"
+          git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"
+          tag_commit=$(git rev-list -n 1 "$RELEASE_TAG")
+          head_commit=$(git rev-parse HEAD)
+          if [ "$tag_commit" != "$head_commit" ]; then
+            echo "Tag $RELEASE_TAG does not point to checked-out commit $head_commit" >&2
+            exit 1
+          fi
+          echo "TAG_COMMIT=$tag_commit" >> "$GITHUB_ENV"
+      - name: Create or reuse draft release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          releases_endpoint="repos/$GITHUB_REPOSITORY/releases?per_page=100"
+          release_info=$(gh api --paginate "$releases_endpoint" \
+            --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | [.id, .draft, .prerelease] | @tsv")
+          if [ -n "$release_info" ]; then
+            IFS=$'\t' read -r release_id is_draft is_prerelease <<< "$release_info"
+            if [ "$is_draft" != "true" ] || [ "$is_prerelease" != "true" ]; then
+              echo "Existing release $RELEASE_TAG must remain a draft prerelease" >&2
+              exit 1
+            fi
+          else
+            release_info=$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$RELEASE_TAG" \
+              -f target_commitish="$TAG_COMMIT" \
+              -f name="FloatNote $RELEASE_TAG" \
+              -F body=@.github/release-preview-notes.md \
+              -F draft=true \
+              -F prerelease=true \
+              -F generate_release_notes=true \
+              --jq '[.id, .draft, .prerelease] | @tsv')
+            IFS=$'\t' read -r release_id is_draft is_prerelease <<< "$release_info"
+          fi
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
+  build-macos:
+    name: macOS ${{ matrix.arch }}
+    needs: prepare_release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            runner: macos-15
+            target: aarch64-apple-darwin
+          - arch: x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+      - run: npm ci
+      - name: Verify release version
+        run: npm run version:check -- --tag "$RELEASE_TAG"
+      - name: Run project checks
+        run: npm run check
+      - name: Build DMG and update draft release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ needs.prepare_release.outputs.release_id }}
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseDraft: true
+          prerelease: true
+          uploadUpdaterJson: false
+          releaseAssetNamePattern: FloatNote_[version]_${{ matrix.arch }}[ext]
+          args: --target ${{ matrix.target }} --bundles dmg

@@ -57,3 +57,41 @@ test("bundled agent resources map directly beneath Tauri's resource directory", 
   assert.match(runner, /resource_dir\(\)[\s\S]*?\.join\("sidecar"\)/);
   assert.match(runner, /resource_dir\(\)[\s\S]*?\.join\("skills"\)/);
 });
+
+test("preview releases use the root package version, DMG bundles, and ad-hoc signing", async () => {
+  const pkg = await json("package.json");
+  const config = await json("src-tauri/tauri.conf.json");
+
+  assert.equal(pkg.scripts["version:check"], "node ./scripts/release-version.mjs check");
+  assert.equal(pkg.scripts["version:set"], "node ./scripts/release-version.mjs set");
+  assert.equal(config.version, "../package.json");
+  assert.equal(config.bundle.targets, "dmg");
+  assert.equal(config.bundle.macOS.signingIdentity, "-");
+});
+
+test("GitHub Actions validate changes and publish both native macOS architectures", async () => {
+  const ci = await readFile(new URL(".github/workflows/ci.yml", root), "utf8");
+  const release = await readFile(new URL(".github/workflows/release.yml", root), "utf8");
+
+  assert.match(ci, /npm ci/);
+  assert.match(ci, /npm run check/);
+  assert.match(ci, /cargo test --lib/);
+  assert.match(ci, /cargo check --release/);
+
+  assert.match(release, /tags:[\s\S]*?- "v\*"/);
+  assert.match(release, /macos-15-intel/);
+  assert.match(release, /macos-15/);
+  assert.match(release, /aarch64-apple-darwin/);
+  assert.match(release, /x86_64-apple-darwin/);
+  assert.match(release, /tauri-apps\/tauri-action@v1/);
+  assert.match(release, /releaseDraft: true/);
+  assert.match(release, /prerelease: true/);
+  assert.match(release, /generate_release_notes=true/);
+  assert.match(release, /releaseAssetNamePattern:.*\$\{\{ matrix\.arch \}\}/);
+  assert.match(release, /prepare_release:/);
+  assert.match(release, /gh api --method POST/);
+  assert.match(release, /gh api --paginate/);
+  assert.doesNotMatch(release, /releases\/tags\/\$RELEASE_TAG/);
+  assert.match(release, /needs: prepare_release/);
+  assert.match(release, /releaseId: \$\{\{ needs\.prepare_release\.outputs\.release_id \}\}/);
+});
