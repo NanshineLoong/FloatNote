@@ -15,7 +15,6 @@ const sharedMarkdownHighlight = HighlightStyle.define([
   { tag: tags.strikethrough, textDecoration: "line-through" },
   { tag: tags.monospace, fontFamily: "var(--font-mono)" },
   { tag: tags.link, color: "var(--color-accent)", textDecoration: "underline" },
-  { tag: tags.list, color: "var(--color-text-muted)" },
 ]);
 
 function lineDecorations(

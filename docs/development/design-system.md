@@ -22,11 +22,13 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 
 - **主色 = 墨蓝 Indigo**：浅 `#4F46E5`（`--indigo-600`）、深 `#818CF8`（`--indigo-400`），hover `#4338CA`/`#A5B4FC`，pressed `#3730A3`。经 `--color-accent` 等语义 token 贯穿按钮/选中/焦点环/链接。
 - Indigo **不在 tag 调色板**中，故主操作不会与标签 chip 混淆。
+- **暗色阅读层级**：窗口底层 `#1E1E1E`、正文阅读面 `#222325`、标题栏/控件 `#292A2D`、浮层/代码块 `#303136`。正文文字采用 primary `#E6E8EB`、secondary `#B4B9C2`、tertiary `#9299A5`；三档文字在阅读面均达到 WCAG AA，正文与左右底层只保留轻微层级差。
+- Floating 助手消费暗色 `--color-overlay`，AI 气泡消费 elevated surface；显式深色与跟随系统深色必须同时映射完整 token，不能继承浅色 overlay。
 - **主题**：通用设置提供“跟随系统 / 浅色 / 深色”。`Config.theme` 默认 `system`；
   `src/shared/appearance.ts` 在每个窗口初始化时读取配置，并订阅 Rust 广播的
   `theme-changed` 事件。`system` 使用 `@media (prefers-color-scheme: dark)`；
   显式浅色或深色选择会覆盖该媒体查询。
-- CodeMirror 主题（`src/note/preview/builder.ts`）无法运行时读 CSS 变量，经 `src/styles/accent.ts` 常量桥接（单一来源，与 `primitives.css` 同步）。
+- CodeMirror 主题（`src/note/editor.ts`、`src/note/preview/builder.ts`）直接消费语义 CSS 变量；Markdown 列表正文继承正文色，只有项目符号/序号使用 muted 色，引用与代码语法分别消费可切换的 text/syntax token。
 
 ## 载入契约
 
@@ -115,7 +117,7 @@ token，内容卡片只消费 settings component token，不直接读取 primiti
 
 ## 迁移状态
 
-- ✅ token 地基 + `index.css` 载入 + 起步组件 + 主色 hex（`#2563eb`/`#60a5fa`/`#1d4ed8`/`#3b82f6`）→ token + popup 别名 + 滚动条统一 + CM 主题桥接。
+- ✅ token 地基 + `index.css` 载入 + 起步组件 + 主色 hex（`#2563eb`/`#60a5fa`/`#1d4ed8`/`#3b82f6`）→ token + popup 别名 + 滚动条统一 + CM 主题 token 化。
 - ✅ 窗口样式全量对齐 popup 模板：accent rgba 色阶（hover/选中/焦点环）→ `--color-hover`/`--color-selected`/`--color-focus-ring`/`--color-accent-fill`；中性 hex → `--color-surface*`/`--color-text*`/`--color-border*`；各窗口 `@media (prefers-color-scheme: dark)` 块与窗口级 reset 删除，dark 统一由 `semantic.css` 兜底；`base.css` 上移 `body` 背景色与 `button/input` 字体继承。`accent.ts` 常量桥接保留（CM 静态编译限制）。
 - ✅ 新增 danger 语义 token 组（`--color-danger`/`--color-danger-hover`/`--color-danger-fill`/`--color-danger-fill-strong`，light+dark，与 accent 对称）+ `--color-success` + chat 气泡 token（`--color-bubble-user-*`/`--color-bubble-ai-bg`）。`primitives.css` 补 `--danger-400`。`components.css` 的 `.fn-btn--danger`/`.fn-menu__item--danger` 改用语义 token。
 - ✅ 历史窗口：工具栏/删除/加载更多切到 `createButton`，清理时间菜单切到 `createMenu`；移除 `.history-icon-btn` / `.history-clear-options` 重复样式。

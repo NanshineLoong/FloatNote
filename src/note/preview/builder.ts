@@ -15,7 +15,6 @@ import { inboxMetadata } from "../annotations/state";
 import { isSafeUrl } from "../inline";
 import { olOrdinal } from "../list-indent";
 import { IconReadyEffect, iconStateKeyFor } from "./icons";
-import { ACCENT, ACCENT_HOVER } from "../../styles/accent";
 import { imageSourceField, SetImageSourceEffect } from "../image-interaction";
 import {
   BulletWidget,
@@ -557,13 +556,13 @@ const previewTheme = EditorView.theme({
   ".cm-preview-h5": { fontSize: "1em", fontWeight: "600" },
   ".cm-preview-h6": { fontSize: "0.9em", fontWeight: "600" },
   ".cm-preview-blockquote": {
-    borderLeft: "3px solid #9ca3af",
+    borderLeft: "3px solid var(--color-border-strong)",
     paddingLeft: "10px",
-    color: "#6b7280",
+    color: "var(--color-text-muted)",
     fontStyle: "italic",
   },
   ".cm-preview-inline-code": {
-    background: "rgba(0,0,0,0.07)",
+    background: "var(--color-surface-3)",
     borderRadius: "3px",
     padding: "0 3px",
     fontFamily: "ui-monospace, 'SF Mono', monospace",
@@ -572,7 +571,7 @@ const previewTheme = EditorView.theme({
   ".cm-preview-hr": {
     display: "inline-block",
     width: "100%",
-    borderTop: "1px solid rgba(0,0,0,0.18)",
+    borderTop: "1px solid var(--color-divider)",
     verticalAlign: "middle",
   },
   ".cm-preview-figure": { display: "flex", justifyContent: "flex-start", width: "100%", margin: "0" },
@@ -580,7 +579,7 @@ const previewTheme = EditorView.theme({
   ".cm-preview-figure.img-right": { justifyContent: "flex-end" },
   ".cm-img-content": { display: "inline-flex", flexDirection: "column", alignItems: "stretch", maxWidth: "100%", minWidth: "0" },
   ".cm-preview-img": { maxWidth: "100%", borderRadius: "4px", display: "block" },
-  ".cm-preview-figcaption": { width: "100%", fontSize: "0.85em", lineHeight: "1.4", color: "#6b7280", marginTop: "2px", textAlign: "center", overflowWrap: "anywhere" },
+  ".cm-preview-figcaption": { width: "100%", fontSize: "0.85em", lineHeight: "1.4", color: "var(--color-text-muted)", marginTop: "2px", textAlign: "center", overflowWrap: "anywhere" },
   ".cm-preview-figure.cm-img-editing .cm-preview-figcaption": { display: "none" },
   ".cm-img-wrap": { position: "relative", display: "inline-block", lineHeight: "0" },
   ".cm-preview-checkbox": {
@@ -591,17 +590,17 @@ const previewTheme = EditorView.theme({
   ".cm-preview-table-wrap": { display: "inline-block", width: "100%", margin: "4px 0" },
   ".cm-preview-table": { borderCollapse: "collapse", width: "100%", fontSize: "0.95em" },
   ".cm-preview-table th, .cm-preview-table td": {
-    border: "1px solid rgba(0,0,0,0.15)",
+    border: "1px solid var(--color-border)",
     padding: "4px 8px",
     textAlign: "left",
     cursor: "text",
     minWidth: "2em",
   },
   ".cm-preview-table th:focus, .cm-preview-table td:focus": {
-    outline: `2px solid ${ACCENT}`,
+    outline: "2px solid var(--color-accent)",
     outlineOffset: "-2px",
   },
-  ".cm-preview-table th": { fontWeight: "600", background: "rgba(0,0,0,0.04)" },
+  ".cm-preview-table th": { fontWeight: "600", background: "var(--color-surface-2)" },
   // Code blocks are now editable text (no widget): each line of the block
   // carries `cm-codeblock`, with `cm-codeblock-first`/`-last` rounding only the
   // top/bottom so the grey frame doesn't stack per line. The body stays live
@@ -614,7 +613,7 @@ const previewTheme = EditorView.theme({
   // inherited 1em / 1.6 line-height; only background + horizontal padding +
   // monospace family + corner radius are safe.
   ".cm-codeblock": {
-    background: "rgba(0,0,0,0.05)",
+    background: "var(--color-surface-3)",
     fontFamily: "ui-monospace, 'SF Mono', monospace",
     paddingLeft: "12px",
     paddingRight: "12px",
@@ -628,22 +627,22 @@ const previewTheme = EditorView.theme({
     borderBottomRightRadius: "8px",
   },
   ".cm-code-lang-text": {
-    color: "rgba(0,0,0,0.4)",
+    color: "var(--color-text-subtle)",
     fontFamily: "ui-monospace, 'SF Mono', monospace",
     fontSize: "0.8em",
   },
   ".cm-preview-link": {
-    color: ACCENT,
+    color: "var(--color-accent)",
     textDecoration: "underline",
     cursor: "pointer",
   },
-  ".cm-preview-link:hover": { color: ACCENT_HOVER },
-  ".cm-preview-ol-mark": { color: "#374151", fontWeight: "600" },
+  ".cm-preview-link:hover": { color: "var(--color-accent-hover)" },
+  ".cm-preview-ol-mark": { color: "var(--color-text-muted)", fontWeight: "600" },
   ".cm-preview-list": {
     paddingLeft: "1.5em",
     listStyleType: "none",
   },
-  ".cm-img-wrap.cm-img-active": { outline: `2px solid ${ACCENT}`, borderRadius: "4px" },
+  ".cm-img-wrap.cm-img-active": { outline: "2px solid var(--color-accent)", borderRadius: "4px" },
   ".cm-img-toolbar": {
     position: "absolute",
     top: "-34px",
@@ -673,14 +672,14 @@ const previewTheme = EditorView.theme({
     cursor: "pointer",
   },
   ".cm-img-toolbar button:hover": { background: "var(--color-hover)", color: "var(--color-text)" },
-  ".cm-img-toolbar button[aria-pressed=true]": { background: "var(--color-selected)", color: ACCENT },
+  ".cm-img-toolbar button[aria-pressed=true]": { background: "var(--color-selected)", color: "var(--color-accent)" },
   ".cm-img-handles": { position: "absolute", inset: "0", pointerEvents: "none" },
   ".cm-img-handle": {
     position: "absolute",
     width: "10px",
     height: "10px",
-    background: ACCENT,
-    border: "1px solid #fff",
+    background: "var(--color-accent)",
+    border: "1px solid var(--color-surface)",
     borderRadius: "2px",
     pointerEvents: "auto",
   },
@@ -702,13 +701,13 @@ const previewTheme = EditorView.theme({
     marginTop: "2px",
     fontSize: "0.85em",
     lineHeight: "1.4",
-    color: "#6b7280",
+    color: "var(--color-text-muted)",
     fontFamily: "inherit",
     textAlign: "center",
     boxSizing: "border-box",
     width: "120px",
   },
-  ".cm-img-caption-input::placeholder": { color: "#9ca3af" },
+  ".cm-img-caption-input::placeholder": { color: "var(--color-text-subtle)" },
   ".cm-img-caption-input:focus": { outline: "none" },
 });
 

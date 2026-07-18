@@ -43,10 +43,16 @@
   --gray-900: #111827;
   --gray-950: #0b0b0b;
 
-  /* Dark-mode surfaces (existing dark backgrounds) */
-  --dark-surface-1: #2c2c2c; /* popup dark bg */
-  --dark-surface-2: #2a2a2a; /* menus / inputs */
-  --dark-surface-3: #1e1e1e; /* body / editor */
+  /* Dark-mode reading palette. The canvas recedes, long-form content stays
+     quiet, and chrome/elevated surfaces advance in small luminance steps. */
+  --dark-surface-base: #1e1e1e;
+  --dark-surface-reading: #222325;
+  --dark-surface-chrome: #292a2d;
+  --dark-surface-elevated: #303136;
+  --dark-overlay: rgba(36, 37, 40, 0.96);
+  --dark-text-primary: #e6e8eb;
+  --dark-text-secondary: #b4b9c2;
+  --dark-text-tertiary: #9299a5;
 
   /* ── Tag palette (mirrors shared/note-logic/src/tags/palette.ts) ──
      DO NOT change palette.ts; these are for docs/traceability only and are

@@ -18,6 +18,44 @@ const tokenizedCss = [
 const windowHtml = ["index.html", "settings.html", "popup.html", "history.html"];
 
 describe("design tokens", () => {
+  it("keeps the explicit dark theme complete and on the accessible reading palette", () => {
+    const s = readFileSync(resolve(root, "src/styles/semantic.css"), "utf8");
+    const dark = s.match(/:root\[data-theme="dark"\]\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+
+    for (const declaration of [
+      "--color-bg: var(--dark-surface-base)",
+      "--color-surface: var(--dark-surface-reading)",
+      "--color-surface-2: var(--dark-surface-chrome)",
+      "--color-surface-3: var(--dark-surface-elevated)",
+      "--color-overlay: var(--dark-overlay)",
+      "--color-text: var(--dark-text-primary)",
+      "--color-text-muted: var(--dark-text-secondary)",
+      "--color-text-subtle: var(--dark-text-tertiary)",
+      "--color-danger: var(--danger-500)",
+      "--color-danger-hover: var(--danger-400)",
+      "--color-danger-fill: rgba(248, 113, 113, 0.14)",
+      "--color-danger-fill-strong: rgba(248, 113, 113, 0.22)",
+    ]) {
+      expect(dark).toContain(declaration);
+    }
+  });
+
+  it("defines the recommended dark reading surfaces and text ramp", () => {
+    const p = readFileSync(resolve(root, "src/styles/primitives.css"), "utf8");
+    for (const declaration of [
+      "--dark-surface-base: #1e1e1e",
+      "--dark-surface-reading: #222325",
+      "--dark-surface-chrome: #292a2d",
+      "--dark-surface-elevated: #303136",
+      "--dark-overlay: rgba(36, 37, 40, 0.96)",
+      "--dark-text-primary: #e6e8eb",
+      "--dark-text-secondary: #b4b9c2",
+      "--dark-text-tertiary: #9299a5",
+    ]) {
+      expect(p).toContain(declaration);
+    }
+  });
+
   it("defines the full indigo ramp in primitives.css", () => {
     const p = readFileSync(resolve(root, "src/styles/primitives.css"), "utf8");
     for (const step of [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]) {

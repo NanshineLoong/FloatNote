@@ -20,6 +20,17 @@
   --color-text-subtle:  var(--gray-400);
   --color-text-on-accent: var(--gray-0);
 
+  /* ── Syntax highlighting ── */
+  --color-syntax-comment:     var(--gray-500);
+  --color-syntax-keyword:     #7c3aed;
+  --color-syntax-literal:     #b45309;
+  --color-syntax-string:      #15803d;
+  --color-syntax-variable:    #3730a3;
+  --color-syntax-function:    #1d4ed8;
+  --color-syntax-property:    #0f766e;
+  --color-syntax-type:        #9333ea;
+  --color-syntax-punctuation: var(--gray-500);
+
   /* ── Borders / dividers ──
      Two width systems coexist (assistant/popover 0.5px hairlines vs
      menus/inputs 1px). Both border COLORS are unified here; widths are named
@@ -97,17 +108,27 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="dark"]) {
-    --color-bg:           var(--dark-surface-3);
-    --color-surface:      var(--dark-surface-2);
-    --color-surface-2:    var(--dark-surface-1);
-    --color-surface-3:    #333333;
-    --color-overlay:      rgba(30, 30, 30, 0.95);
+    --color-bg:           var(--dark-surface-base);
+    --color-surface:      var(--dark-surface-reading);
+    --color-surface-2:    var(--dark-surface-chrome);
+    --color-surface-3:    var(--dark-surface-elevated);
+    --color-overlay:      var(--dark-overlay);
     --color-focus-scrim:  rgba(0, 0, 0, 0.48);
 
-    --color-text:         #ececec;
-    --color-text-muted:   var(--gray-400);
-    --color-text-subtle:  var(--gray-500);
+    --color-text:         var(--dark-text-primary);
+    --color-text-muted:   var(--dark-text-secondary);
+    --color-text-subtle:  var(--dark-text-tertiary);
     --color-text-on-accent: var(--gray-0);
+
+    --color-syntax-comment:     var(--dark-text-tertiary);
+    --color-syntax-keyword:     #c4b5fd;
+    --color-syntax-literal:     #fbbf24;
+    --color-syntax-string:      #86efac;
+    --color-syntax-variable:    #c7d2fe;
+    --color-syntax-function:    #93c5fd;
+    --color-syntax-property:    #5eead4;
+    --color-syntax-type:        #d8b4fe;
+    --color-syntax-punctuation: var(--dark-text-secondary);
 
     --color-border:        rgba(255, 255, 255, 0.12);
     --color-border-strong: rgba(255, 255, 255, 0.18);
@@ -135,7 +156,7 @@
 
     --color-bubble-user-bg:   #2d3a52;
     --color-bubble-user-text: #cfe0ff;
-    --color-bubble-ai-bg:     #2c2c2e;
+    --color-bubble-ai-bg:     var(--dark-surface-elevated);
 
     --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.30);
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);
@@ -152,14 +173,24 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-bg: var(--dark-surface-3);
-  --color-surface: var(--dark-surface-2);
-  --color-surface-2: var(--dark-surface-1);
-  --color-surface-3: #333333;
+  --color-bg: var(--dark-surface-base);
+  --color-surface: var(--dark-surface-reading);
+  --color-surface-2: var(--dark-surface-chrome);
+  --color-surface-3: var(--dark-surface-elevated);
+  --color-overlay: var(--dark-overlay);
   --color-focus-scrim: rgba(0, 0, 0, 0.48);
-  --color-text: #ececec;
-  --color-text-muted: var(--gray-400);
-  --color-text-subtle: var(--gray-500);
+  --color-text: var(--dark-text-primary);
+  --color-text-muted: var(--dark-text-secondary);
+  --color-text-subtle: var(--dark-text-tertiary);
+  --color-syntax-comment: var(--dark-text-tertiary);
+  --color-syntax-keyword: #c4b5fd;
+  --color-syntax-literal: #fbbf24;
+  --color-syntax-string: #86efac;
+  --color-syntax-variable: #c7d2fe;
+  --color-syntax-function: #93c5fd;
+  --color-syntax-property: #5eead4;
+  --color-syntax-type: #d8b4fe;
+  --color-syntax-punctuation: var(--dark-text-secondary);
   --color-border: rgba(255,255,255,.12);
   --color-border-strong: rgba(255,255,255,.18);
   --color-divider: rgba(255,255,255,.1);
@@ -172,11 +203,15 @@
   --color-hover: rgba(255,255,255,.08);
   --color-hover-strong: rgba(255,255,255,.1);
   --color-selected: var(--indigo-accent-fill-dark);
+  --color-danger: var(--danger-500);
+  --color-danger-hover: var(--danger-400);
+  --color-danger-fill: rgba(248, 113, 113, 0.14);
+  --color-danger-fill-strong: rgba(248, 113, 113, 0.22);
   --color-warning: #fbbf24;
   --color-success: #34d399;
   --color-bubble-user-bg: #2d3a52;
   --color-bubble-user-text: #cfe0ff;
-  --color-bubble-ai-bg: #2c2c2e;
+  --color-bubble-ai-bg: var(--dark-surface-elevated);
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.30);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.42);

@@ -347,7 +347,7 @@ body {
   min-height: 0;
   flex: 1 1 auto;
   overflow: visible;
-  /* 与 body 底色一致，消除正文列与左右边距之间的接缝。 */
+  /* 阅读面只比窗口底色略亮：保留内容层级，同时避免明显的深色竖向色带。 */
   background: var(--color-surface);
 }
 
