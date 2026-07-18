@@ -5,7 +5,6 @@ export function settingsShellMarkup(): string {
     <header class="settings-titlebar" data-tauri-drag-region aria-hidden="true"></header>
     <div class="settings-shell">
       <nav class="settings-nav" aria-label="设置分类">
-        <div class="settings-brand" aria-hidden="true"><span class="settings-brand-mark">F</span><span>FloatNote</span></div>
         <button class="settings-tab is-active" data-tab="general" aria-current="page">${createIcon({ phosphor: "ph ph-sliders-horizontal" }).outerHTML}<span>通用</span></button>
         <button class="settings-tab" data-tab="ai">${createIcon({ phosphor: "ph ph-sparkle" }).outerHTML}<span>AI</span></button>
         <button class="settings-tab" data-tab="shortcuts">${createIcon({ phosphor: "ph ph-keyboard" }).outerHTML}<span>快捷键</span></button>
