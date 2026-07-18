@@ -36,7 +36,7 @@ export function reconcileMessages(
     if (
       node
       && message.role === "user"
-      && node.querySelector(".chat-user-message-text")?.textContent !== message.text
+      && node.dataset.messageText !== message.text
     ) {
       const replacement = renderMessage(message, outputMode);
       node.replaceWith(replacement);

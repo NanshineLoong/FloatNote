@@ -134,6 +134,9 @@ export function renderMessage(message: ChatMessage, outputMode: AssistantOutputM
   el.className = `chat-msg chat-${message.role}`;
   el.dataset.messageId = message.id;
   if (message.role === "user") {
+    // 用户气泡可能把原始消息投影为问题正文 + 划线引用卡片；保留原文，
+    // 以便增量协调时判定是否真的发生过内容变更。
+    el.dataset.messageText = message.text;
     const body = document.createElement("div");
     body.className = "chat-msg-text";
     if (message.references?.length) {

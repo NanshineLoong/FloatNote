@@ -37,6 +37,21 @@ describe("reconcileMessages", () => {
     expect(after.dataset.marker).toBe("kept");
   });
 
+  it("keeps a selection user bubble stable while the assistant streams", () => {
+    const scroll = makeScroll();
+    const map = new Map<string, HTMLElement>();
+    const selection = "Why?\n\n> [!selection] Source\n> quoted text";
+    const initial = run([{ type: "user", text: selection }]);
+    reconcileMessages(scroll, initial.messages, map);
+    const user = scroll.querySelector<HTMLElement>(".chat-msg.chat-user")!;
+    user.dataset.marker = "kept";
+
+    const streaming = reduceEvents(initial, { type: "delta", requestId: "r1", text: "Answer" });
+    reconcileMessages(scroll, streaming.messages, map);
+
+    expect(scroll.querySelector<HTMLElement>(".chat-msg.chat-user")?.dataset.marker).toBe("kept");
+  });
+
   it("reuses a text block node and updates content without rebuilding", () => {
     const scroll = makeScroll();
     const map = new Map<string, HTMLElement>();
