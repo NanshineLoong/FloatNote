@@ -17,4 +17,7 @@ mkdirSync(dirname(resource), { recursive: true });
 mkdirSync(dirname(binary), { recursive: true });
 copyFileSync(resolve(sidecarRoot, "dist/floatnote-agent.mjs"), resource);
 copyFileSync(runtime, binary);
+// Tauri re-signs external binaries inside the finished macOS app bundle, so
+// remove the copied runtime's local symbols before that final signing step.
+if (process.platform === "darwin") execFileSync("strip", ["-S", "-x", binary]);
 if (process.platform !== "win32") chmodSync(binary, 0o755);

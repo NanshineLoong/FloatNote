@@ -18,5 +18,6 @@ await build({
       "const require = __createRequire(import.meta.url);",
     ].join("\n"),
   },
-  sourcemap: true,
+  minify: true,
+  sourcemap: false,
 });
