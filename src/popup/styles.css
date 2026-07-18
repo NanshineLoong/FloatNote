@@ -162,7 +162,7 @@ body {
   cursor: pointer;
 }
 
-.popup-text-action:hover { background: var(--popup-hover); }
+.popup-text-action:is(:hover, .is-passive-hover) { background: var(--popup-hover); }
 .popup-text-action:disabled { opacity: .5; cursor: default; }
 
 @keyframes popup-spin { to { transform: rotate(360deg); } }
@@ -209,7 +209,7 @@ body {
   color: var(--popup-accent);
 }
 
-.popup-bar .fn-btn:not(:disabled):hover {
+.popup-bar .fn-btn:not(:disabled):is(:hover, .is-passive-hover) {
   border-color: transparent;
   background: var(--popup-accent-fill);
   color: var(--popup-accent);

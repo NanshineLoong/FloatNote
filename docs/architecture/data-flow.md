@@ -81,6 +81,8 @@ CGEvent mouse down/up
   → NSPasteboard 全 item/type 恢复；文本相符时附加 HTML
   → popup cache（generationId）
   → selection-popup WebView（测量 → resize → clamp/place → 不主动聚焦 show）
+  → popup_hover（仅窗口可见时转发 30Hz 合并后的全局 mouse-move）
+  → WebView 局部按钮命中 → `.is-passive-hover`
   → submit_popup_capture
   → quote-captured → inbox editor
 ```

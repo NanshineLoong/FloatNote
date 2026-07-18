@@ -10,6 +10,7 @@ import { initializeAppearance } from "../shared/appearance";
 import { createPopupState, reducePopupState, type PopupState } from "./state";
 import { createLatestTaskQueue } from "./latest-task";
 import { shouldSendPopupQuestion } from "./keyboard";
+import { passiveHoverTargetAt, type PassiveHoverPoint, type PassiveHoverTarget } from "./passive-hover";
 import {
   popupSelectionSnapshot,
   translatePopupSelection,
@@ -47,6 +48,8 @@ let hideTimer: number | null = null;
 let activePayload: PopupPayload | null = null;
 let state: PopupState | null = null;
 let selectionSummary = "";
+let popupWindowOrigin: PassiveHoverPoint | null = null;
+let passiveHoveredButton: HTMLButtonElement | null = null;
 const layoutQueue = createLatestTaskQueue();
 
 function actionButton(variant: "primary" | "secondary", icon: string, label: string): HTMLButtonElement {
@@ -85,8 +88,35 @@ function clearHideTimer(): void {
   hideTimer = null;
 }
 
+function setPassiveHoveredButton(button: HTMLButtonElement | null): void {
+  if (passiveHoveredButton === button) return;
+  passiveHoveredButton?.classList.remove("is-passive-hover");
+  passiveHoveredButton = button;
+  passiveHoveredButton?.classList.add("is-passive-hover");
+}
+
+function updatePassiveHover(cursor: PassiveHoverPoint): void {
+  if (!popupWindowOrigin) {
+    setPassiveHoveredButton(null);
+    return;
+  }
+  const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>("button"));
+  const targets: PassiveHoverTarget[] = buttons.map((button, index) => {
+    const rect = button.getBoundingClientRect();
+    return {
+      id: String(index),
+      disabled: button.disabled || rect.width === 0 || rect.height === 0,
+      rect,
+    };
+  });
+  const targetId = passiveHoverTargetAt(cursor, popupWindowOrigin, targets);
+  setPassiveHoveredButton(targetId === null ? null : buttons[Number(targetId)] ?? null);
+}
+
 async function dismiss(): Promise<void> {
   clearHideTimer();
+  popupWindowOrigin = null;
+  setPassiveHoveredButton(null);
   root.classList.remove("is-visible");
   try { await invoke("dismiss_popup", { generationId: state?.generationId ?? null }); } catch { /* already hidden */ }
 }
@@ -130,6 +160,7 @@ async function resizeAndPlace(content: HTMLElement, taskIsCurrent: () => boolean
   });
   await win.setPosition(new LogicalPosition(placed.x, placed.y));
   if (!isCurrent()) return;
+  popupWindowOrigin = placed;
   root.classList.remove("is-measuring");
   await win.show();
   requestAnimationFrame(() => root.classList.add("is-visible"));
@@ -294,6 +325,8 @@ async function sendQuestion(): Promise<void> {
 async function showAt(payload: PopupPayload): Promise<void> {
   if (payload.origin === "auto" && !payload.hasText) return;
   activePayload = payload;
+  popupWindowOrigin = null;
+  setPassiveHoveredButton(null);
   selectionSummary = "";
   state = createPopupState(payload.generationId);
   root.classList.remove("is-visible");
@@ -312,6 +345,7 @@ async function showAt(payload: PopupPayload): Promise<void> {
 
 async function setupListeners(): Promise<void> {
   await listen<PopupPayload>("popup-payload", (event) => void showAt(event.payload));
+  await listen<PassiveHoverPoint>("popup-hover-move", (event) => updatePassiveHover(event.payload));
   await listen<PopupQuestionResult>("popup-question-result", async (event) => {
     if (!state || state.view.kind !== "question-sending") return;
     const result = event.payload;

@@ -8,6 +8,7 @@ mod notes;
 mod paths;
 mod platform;
 mod popup;
+mod popup_hover;
 mod project;
 mod selection_intent;
 mod selection_monitor;
@@ -133,11 +134,6 @@ pub fn run() {
             let _ = app
                 .handle()
                 .set_activation_policy(tauri::ActivationPolicy::Accessory);
-
-            #[cfg(target_os = "macos")]
-            if let Some(popup_win) = app.get_webview_window("selection-popup") {
-                windows::enable_popup_mouse_moved_events(&popup_win)?;
-            }
 
             // Hide instead of close the note window so it can be re-opened later.
             if let Some(note_win) = app.get_webview_window("main") {

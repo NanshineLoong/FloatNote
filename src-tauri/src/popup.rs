@@ -216,9 +216,7 @@ pub fn complete_popup_question(
         .complete(generation_id)
         .then_some(())
         .ok_or_else(|| "选区已失效，请重新选择".to_string())?;
-    if let Some(popup) = app.get_webview_window("selection-popup") {
-        let _ = popup.hide();
-    }
+    hide_popup(&app);
     Ok(())
 }
 
@@ -310,9 +308,7 @@ pub fn submit_popup_capture(
         .map_err(|e| format!("emit failed: {e}"))?;
 
     // Hide the popup window (do not destroy it).
-    if let Some(popup) = app.get_webview_window("selection-popup") {
-        let _ = popup.hide();
-    }
+    hide_popup(&app);
     Ok(())
 }
 
@@ -330,9 +326,7 @@ pub fn dismiss_popup(
         true
     };
     if should_hide {
-        if let Some(popup) = app.get_webview_window("selection-popup") {
-            let _ = popup.hide();
-        }
+        hide_popup(&app);
     }
     Ok(())
 }
@@ -403,7 +397,13 @@ fn run_popup_capture_with_origin(
         origin,
         has_text,
     };
-    let _ = app.emit_to("selection-popup", "popup-payload", payload);
+    crate::popup_hover::activate(app);
+    if app
+        .emit_to("selection-popup", "popup-payload", payload)
+        .is_err()
+    {
+        crate::popup_hover::deactivate();
+    }
 }
 
 /// Helper: stash the captured text + html + source into the managed AppState.
@@ -428,6 +428,11 @@ pub fn dismiss_active(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
         state.popup_cache.clear();
     }
+    hide_popup(app);
+}
+
+fn hide_popup(app: &AppHandle) {
+    crate::popup_hover::deactivate();
     if let Some(popup) = app.get_webview_window("selection-popup") {
         let _ = popup.hide();
     }

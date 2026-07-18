@@ -34,9 +34,9 @@ entry that calls `floatnote::run()`.
 - `selection_intent.rs`, `selection_probe.rs`, `selection_monitor.rs` — pure
   mouse-selection state, macOS Accessibility text extraction, and the dedicated
   listen-only event-tap thread/worker boundary.
-- `popup.rs`, `shortcuts.rs`, `tray.rs`, `windows.rs`, `config.rs` —
-  generation-aware popup cache, global shortcuts, tray menu, window management,
-  and config load/save.
+- `popup.rs`, `popup_hover.rs`, `shortcuts.rs`, `tray.rs`, `windows.rs`,
+  `config.rs` — generation-aware popup cache, macOS passive hover relay, global
+  shortcuts, tray menu, window management, and config load/save.
 - `testutil.rs` — `#[cfg(test)]` shared `TempDir`/`tempdir()` for tests.
 
 AI settings are one fixed `AiSettings` aggregate in `config.rs`: six provider

@@ -24,8 +24,11 @@
 session 都保留下来；从未形成持久 session 的空白“新对话”不进入历史列表。
 
 划词弹窗显示时不主动聚焦，但允许用户首次点击时成为 key window 并立即
-执行按钮。自动、弹窗快捷键与直接采集入口都会在 AX 和剪贴板操作前拒绝
-FloatNote 自身 PID，因此本软件任意窗口内的划词捕获均静默无效。外部应用
+执行按钮。macOS 由 `popup_hover.rs` 在弹窗可见期间单独启用 listen-only
+mouse-move event tap，以有界通道和 30Hz 节流向 WebView 转发坐标；它不与
+`selection_monitor.rs` 的 down/up/key 队列共享容量。自动、弹窗快捷键与
+直接采集入口都会在 AX 和剪贴板操作前拒绝 FloatNote 自身 PID，因此本软件
+任意窗口内的划词捕获均静默无效。外部应用
 共用 AX-first 捕获并允许定向 `Cmd+C` 兜底；自动失败静默，专用快捷键在外部
 应用无有效选区时仍允许显示短暂的空结果反馈。已缓存的外部选区可在弹窗成为
 前台窗口后正常提交。

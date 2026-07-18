@@ -17,7 +17,7 @@ describe("selection popup action bar", () => {
   });
 
   it("gives every enabled action a visible accent hover state", () => {
-    expect(cssSource).toMatch(/\.popup-bar \.fn-btn:not\(:disabled\):hover\s*\{[^}]*background:\s*var\(--popup-accent-fill\)/s);
-    expect(cssSource).toMatch(/\.popup-bar \.fn-btn:not\(:disabled\):hover\s*\{[^}]*color:\s*var\(--popup-accent\)/s);
+    expect(cssSource).toMatch(/\.popup-bar \.fn-btn:not\(:disabled\):is\(:hover, \.is-passive-hover\)\s*\{[^}]*background:\s*var\(--popup-accent-fill\)/s);
+    expect(cssSource).toMatch(/\.popup-bar \.fn-btn:not\(:disabled\):is\(:hover, \.is-passive-hover\)\s*\{[^}]*color:\s*var\(--popup-accent\)/s);
   });
 });
