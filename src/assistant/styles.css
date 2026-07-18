@@ -1,5 +1,5 @@
 /* 助手 UI 样式：纯白 AI 气泡 + 浅蓝用户气泡 + 机器人 dock（输入框按需展开）。
-   配色通过语义 token 协调（src/styles/semantic.css），dark 跟随系统，无独立 dark 块。
+   配色通过语义 token 协调（src/styles/semantic.css），主题由全局外观设置控制，无独立 dark 块。
    助手始终活在笔记窗内：inline 占右边距一栏，floating 浮成右下角小人（见 src/styles.css）。 */
 
 .assistant {

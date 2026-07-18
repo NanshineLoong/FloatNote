@@ -22,7 +22,10 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 
 - **主色 = 墨蓝 Indigo**：浅 `#4F46E5`（`--indigo-600`）、深 `#818CF8`（`--indigo-400`），hover `#4338CA`/`#A5B4FC`，pressed `#3730A3`。经 `--color-accent` 等语义 token 贯穿按钮/选中/焦点环/链接。
 - Indigo **不在 tag 调色板**中，故主操作不会与标签 chip 混淆。
-- **暗色仅跟随系统** `@media (prefers-color-scheme: dark)`，本轮无应用内主题切换、无 Rust 配置字段。
+- **主题**：通用设置提供“跟随系统 / 浅色 / 深色”。`Config.theme` 默认 `system`；
+  `src/shared/appearance.ts` 在每个窗口初始化时读取配置，并订阅 Rust 广播的
+  `theme-changed` 事件。`system` 使用 `@media (prefers-color-scheme: dark)`；
+  显式浅色或深色选择会覆盖该媒体查询。
 - CodeMirror 主题（`src/note/preview/builder.ts`）无法运行时读 CSS 变量，经 `src/styles/accent.ts` 常量桥接（单一来源，与 `primitives.css` 同步）。
 
 ## 载入契约

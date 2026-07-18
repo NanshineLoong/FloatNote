@@ -12,8 +12,8 @@ export function settingsShellMarkup(): string {
       </nav>
       <section class="settings-content" aria-live="polite">
         <div class="settings-pane" data-pane="general">
-          <header class="settings-page-heading"><span>FloatNote</span><h1>通用设置</h1><p>管理 FloatNote 如何随系统启动。</p></header>
-          <section class="settings-section" aria-labelledby="general-startup-title"><h2 id="general-startup-title">启动</h2><div id="general-settings"></div></section>
+          <header class="settings-page-heading"><span>FloatNote</span><h1>通用设置</h1><p>管理 FloatNote 的外观和启动方式。</p></header>
+          <section class="settings-section" aria-labelledby="general-title"><h2 id="general-title">通用</h2><div id="general-settings"></div></section>
         </div>
         <div class="settings-pane" data-pane="ai" hidden>
           <header class="settings-page-heading"><span>FloatNote</span><h1>AI</h1><p>配置模型提供商，并管理助手可使用的 Skills。</p></header>

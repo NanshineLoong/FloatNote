@@ -51,5 +51,6 @@ Skill 目录清单由 Rust host 直接从打包资源、debug `resources/skills`
 元数据和重名后递归复制整个目录；符号链接被拒绝，复制先写临时目录再原子重命名。
 启停状态先写 `disabled_skills`，sidecar 重载只是随后发生的运行时同步。
 
-`Config` 不再包含应用主题或界面字号字段。Serde 会忽略旧配置中的 `theme` 与
-`font_size`，后续原子保存自然清除遗留键，不需要破坏性迁移。
+`Config.theme` 持久化 `system`、`light` 或 `dark`，未知值回退为 `system`；成功保存
+主题变更后 host 广播 `theme-changed`。Serde 会忽略旧配置中的 `font_size`，后续原子
+保存自然清除遗留键，不需要破坏性迁移。

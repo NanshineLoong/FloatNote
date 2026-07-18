@@ -20,7 +20,7 @@ FloatNote 使用 Vite 多页面应用：根目录 HTML 是各 WebView 入口。`
 - `src/history/`、`src/popup/`、`src/settings/` 分别是历史、选中文本弹窗和设置窗口的 UI。划词弹窗由 `state.ts` 的显式状态机在操作条、翻译结果和提问输入间切换；每次异步结果同时校验 `generationId` 与 `popupRequestId`。Assistant 暴露 `startConversationWithPrompt`，由 note controller 为划词提问强制创建独立会话；首条 callout 在当前气泡与历史恢复时都投影为问题和可展开引用卡。
 
 设置窗口由 `src/settings/main.ts` 装配，`shell.ts` 管理原生标题栏下的侧栏与分类
-切换，`general.ts` 只管理开机启动，`skills.ts` 管理目录清单、启停与导入，
+切换，`general.ts` 管理主题与开机启动，`skills.ts` 管理目录清单、启停与导入，
 `shortcuts.ts` 管理录制器、渐进披露和冲突反馈。模块通过 `Config` 与显式保存
 回调协作，不跨模块查询 DOM。AI 提供商仍由 `provider-settings.ts` 管理六个固定档案，`output-mode.ts` 负责助手简洁/详细显示设置并在保存失败时恢复旧选择。
 Skill 候选和设置列表显示目录清单中的 `displayName` 与 `displayDescription`，
@@ -30,8 +30,9 @@ FloatNote 展示元数据时，host 已将显示字段回退到标准 `name` 与
 发生变化时才允许显式保存。启用开关与展开状态独立，未保存 API Key 与模型的
 档案不可启用，Base URL 只对 OpenAI、Anthropic 与阿里云百炼显示。
 
-外观仅跟随操作系统。`Config` DTO 不含 `theme` 或 `font_size`，各窗口的
-`initializeAppearance` 也不读取配置或订阅 appearance 事件；编辑器不再注册
+外观由 `Config.theme`（`system`、`light`、`dark`）控制，设置窗口的通用页负责保存
+选择。各窗口的 `initializeAppearance` 会先使用安全的 `system` 默认值，再读取配置并
+订阅 `theme-changed` 事件，以即时同步显式主题切换；编辑器不再注册
 Cmd/Ctrl 加减号的应用级字号调整链路。
 
 `shared/note-logic/` 是前端和 sidecar 共享的 workspace package，包含 Inbox v2

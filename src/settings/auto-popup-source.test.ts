@@ -29,7 +29,9 @@ describe("selection popup settings", () => {
     expect(source).not.toContain("AI 导师");
     expect(source).toContain("开机启动");
     expect(source).not.toContain("界面字号");
-    expect(source).not.toContain("跟随系统");
+    expect(source).toContain("跟随系统");
+    expect(source).toContain('value="light"');
+    expect(source).toContain('value="dark"');
     expect(source).toContain('id="popup-shortcut-row"');
     expect(source).toContain('config.auto_popup_mode === "shortcut"');
     expect(source).toContain("自动弹出");

@@ -1,7 +1,7 @@
 use crate::state::AppState;
 use crate::{config::Config, notes, project, versions};
 use std::path::PathBuf;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 #[path = "commands/agent.rs"]
 mod agent;
@@ -22,13 +22,22 @@ pub fn get_config(state: State<AppState>) -> Config {
 }
 
 #[tauri::command]
-pub async fn set_config(state: State<'_, AppState>, new_config: Config) -> Result<(), String> {
+pub async fn set_config(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    new_config: Config,
+) -> Result<(), String> {
     let _transaction = state.ai_settings_tx.lock().await;
-    let current_ai_settings = state.config.lock().unwrap().ai_settings.clone();
+    let current = state.config.lock().unwrap().clone();
     let mut candidate = new_config;
-    candidate.ai_settings = current_ai_settings;
+    candidate.ai_settings = current.ai_settings;
+    let theme_changed = current.theme != candidate.theme;
+    let theme = candidate.theme;
     crate::config::save(&state.config_path, &candidate).map_err(|error| error.to_string())?;
     *state.config.lock().unwrap() = candidate;
+    if theme_changed {
+        let _ = app.emit("theme-changed", theme);
+    }
     Ok(())
 }
 

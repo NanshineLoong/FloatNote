@@ -1,4 +1,5 @@
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { applyAppearance, type Theme } from "../shared/appearance";
 import type { Config, SaveConfig } from "./types";
 
 interface AutostartDependencies {
@@ -29,6 +30,11 @@ export async function persistAutostart(enabled: boolean, dependencies: Autostart
 export function mountGeneralSettings(root: HTMLElement, config: Config, save: SaveConfig): void {
   root.innerHTML = `<div class="settings-card">
     <div class="settings-line">
+      <div><label for="theme"><strong>外观</strong></label><small>选择 FloatNote 的显示模式</small></div>
+      <span class="select-wrap"><select id="theme" class="fn-control" aria-describedby="theme-error"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></span>
+    </div>
+    <p id="theme-error" class="settings-inline-error" role="alert"></p>
+    <div class="settings-line">
       <div><label for="autostart"><strong>开机启动</strong></label><small>登录系统后自动打开 FloatNote</small></div>
       <label class="settings-toggle"><input id="autostart" type="checkbox" ${config.launch_at_login ? "checked" : ""} aria-describedby="autostart-error"/><span class="settings-toggle-track" aria-hidden="true"></span></label>
     </div>
@@ -36,6 +42,27 @@ export function mountGeneralSettings(root: HTMLElement, config: Config, save: Sa
   </div>`;
   const input = root.querySelector<HTMLInputElement>("#autostart")!;
   const error = root.querySelector<HTMLElement>("#autostart-error")!;
+  const theme = root.querySelector<HTMLSelectElement>("#theme")!;
+  const themeError = root.querySelector<HTMLElement>("#theme-error")!;
+  theme.value = config.theme;
+  theme.addEventListener("change", async () => {
+    const previous = config.theme;
+    const selected = theme.value as Theme;
+    theme.disabled = true;
+    themeError.textContent = "";
+    applyAppearance(selected);
+    config.theme = selected;
+    try {
+      await save();
+    } catch (reason) {
+      config.theme = previous;
+      theme.value = previous;
+      applyAppearance(previous);
+      themeError.textContent = `无法更新外观：${String(reason)}`;
+    } finally {
+      theme.disabled = false;
+    }
+  });
   input.addEventListener("change", async () => {
     const previous = config.launch_at_login;
     input.disabled = true;

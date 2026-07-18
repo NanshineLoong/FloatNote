@@ -52,8 +52,10 @@ migration.
 Skill catalog discovery and safe directory import belong to
 `commands/agent.rs` on the Rust host. Listing must remain available without a
 sidecar; `agent_reload_skills` only synchronizes the already-persisted catalog
-state into a live runtime. `Config` has no theme or configurable UI font-size
-fields; legacy JSON keys are ignored and disappear on the next save.
+state into a live runtime. `Config.theme` is `system`, `light`, or `dark` and
+defaults/falls back to `system`; after a successful generic `set_config` save,
+a changed value emits `theme-changed` to every webview. Legacy `font_size`
+JSON is ignored and disappears on the next save.
 
 ## Conventions
 

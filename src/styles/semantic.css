@@ -1,6 +1,7 @@
 /* ── Semantic tokens ──────────────────────────────────────────────────────
-   Purpose aliases consumed by components and window styles. Dark mode is
-   OS-driven only (`@media (prefers-color-scheme: dark)`) — no in-app toggle.
+   Purpose aliases consumed by components and window styles. Dark mode follows
+   the OS for `data-theme="system"`, while explicit light and dark choices
+   override the media query.
    This generalizes the `--popup-*` pattern from `src/popup/styles.css` to all
    windows. Component CSS references these, never the primitives. */
 
@@ -95,7 +96,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
     --color-bg:           var(--dark-surface-3);
     --color-surface:      var(--dark-surface-2);
     --color-surface-2:    var(--dark-surface-1);
@@ -162,8 +163,23 @@
   --color-border: rgba(255,255,255,.12);
   --color-border-strong: rgba(255,255,255,.18);
   --color-divider: rgba(255,255,255,.1);
+  --color-border-hair: rgba(255,255,255,.10);
+  --color-accent: var(--indigo-400);
+  --color-accent-hover: var(--indigo-300);
+  --color-accent-pressed: var(--indigo-400);
+  --color-accent-fill: var(--indigo-accent-fill-dark);
+  --color-focus-ring: var(--indigo-focus-ring-dark);
   --color-hover: rgba(255,255,255,.08);
   --color-hover-strong: rgba(255,255,255,.1);
   --color-selected: var(--indigo-accent-fill-dark);
   --color-warning: #fbbf24;
+  --color-success: #34d399;
+  --color-bubble-user-bg: #2d3a52;
+  --color-bubble-user-text: #cfe0ff;
+  --color-bubble-ai-bg: #2c2c2e;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.42);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.42), 0 1px 3px rgba(0, 0, 0, 0.30);
+  --shadow-xl: 0 10px 28px rgba(0, 0, 0, 0.50), 0 1px 3px rgba(0, 0, 0, 0.40);
 }

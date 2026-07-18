@@ -11,6 +11,29 @@ pub enum AssistantOutputMode {
     Detailed,
 }
 
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl<'de> Deserialize<'de> for Theme {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Ok(match value.as_str() {
+            Some("light") => Self::Light,
+            Some("dark") => Self::Dark,
+            _ => Self::System,
+        })
+    }
+}
+
 impl<'de> Deserialize<'de> for AssistantOutputMode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -176,6 +199,8 @@ pub struct Config {
     /// 笔记窗内快捷键（窗口聚焦时生效，纯前端分派）。默认值见 WindowShortcuts::default。
     pub window_shortcuts: WindowShortcuts,
     pub launch_at_login: bool,
+    /// Application appearance preference. System is the default and follows the OS scheme.
+    pub theme: Theme,
     /// 助手是否展开显示（折叠则隐藏）。助手始终活在笔记窗内，按窗宽自动 inline/floating。
     pub assistant_open: bool,
     /// Assistant process projection. Full session history is independent of this display setting.
@@ -202,6 +227,7 @@ impl Default for Config {
             auto_popup_mode: "auto".to_string(),
             window_shortcuts: WindowShortcuts::default(),
             launch_at_login: false,
+            theme: Theme::System,
             assistant_open: false,
             assistant_output_mode: AssistantOutputMode::Compact,
             recent_projects: Vec::new(),
@@ -325,14 +351,23 @@ mod tests {
     }
 
     #[test]
-    fn legacy_appearance_fields_are_ignored_and_not_saved() {
+    fn theme_is_preserved_while_legacy_font_size_is_ignored() {
         let config: Config =
             serde_json::from_str(r#"{"theme":"dark","font_size":20,"launch_at_login":true}"#)
                 .unwrap();
         assert!(config.launch_at_login);
         let saved = serde_json::to_value(config).unwrap();
-        assert!(saved.get("theme").is_none());
+        assert_eq!(saved.get("theme"), Some(&serde_json::Value::String("dark".into())));
         assert!(saved.get("font_size").is_none());
+    }
+
+    #[test]
+    fn theme_defaults_to_system_and_invalid_values_fall_back_to_system() {
+        let default_config: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(serde_json::to_value(default_config).unwrap()["theme"], "system");
+
+        let invalid: Config = serde_json::from_str(r#"{"theme":"sepia"}"#).unwrap();
+        assert_eq!(serde_json::to_value(invalid).unwrap()["theme"], "system");
     }
 
     #[test]
