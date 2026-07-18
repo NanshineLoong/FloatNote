@@ -409,17 +409,25 @@ fn handle_sidecar_msg(app: &AppHandle, msg: SidecarToHost) {
             conversation_id,
             title,
         } => {
-            if let Ok(store) = crate::chat_history::ChatHistoryStore::default_for_user() {
-                let _ = store.update_generated_title(&conversation_id, &title);
+            let persisted = crate::chat_history::ChatHistoryStore::default_for_user()
+                .ok()
+                .and_then(|store| store.update_generated_title(&conversation_id, &title).ok())
+                .flatten()
+                .is_some_and(|entry| {
+                    entry.title_state == crate::chat_history::ChatTitleState::Generated
+                        && entry.title == title
+                });
+            if persisted {
+                let _ = crate::tray::refresh_menu(app);
+                let _ = app.emit("chat://history-changed", ());
+                let _ = app.emit(
+                    "agent://event",
+                    &SidecarToHost::Title {
+                        conversation_id,
+                        title,
+                    },
+                );
             }
-            let _ = crate::tray::refresh_menu(app);
-            let _ = app.emit(
-                "agent://event",
-                &SidecarToHost::Title {
-                    conversation_id,
-                    title,
-                },
-            );
         }
         other => {
             // Delta / Tool / Done / Error 直接转发给前端。

@@ -368,6 +368,38 @@ describe("AgentRunner", () => {
     ]);
   });
 
+  it("generates one twenty-character title from the first non-empty user turn without reasoning", async () => {
+    const sent: SidecarToHost[] = [];
+    const titleCalls: Array<{ model: unknown; context: unknown; options: unknown }> = [];
+    const { session } = fakeSession((emit) => {
+      emit(ev({ type: "agent_end", messages: [], willRetry: false }));
+    });
+    const runner = new AgentRunner({
+      send: (message) => sent.push(message),
+      createSession: async () => session,
+      completeTitle: async (model, context, options) => {
+        titleCalls.push({ model, context, options });
+        return { content: [{ type: "text", text: "这是一个超过二十个字的标题，用于验证截断行为" }] } as Awaited<ReturnType<typeof import("@earendil-works/pi-ai/compat").completeSimple>>;
+      },
+    });
+    await runner.configure({ provider: "openai", model: "gpt-5", apiKey: "k" });
+    await runner.newSession({ conversationId: "c1", cwd: process.cwd(), sessionDir: "/tmp/floatnote-test-sessions" });
+
+    await runner.prompt({ requestId: "r1", conversationId: "c1", userText: "  第一条需求  " });
+    await runner.prompt({ requestId: "r2", conversationId: "c1", userText: "第二条补充" });
+    await Promise.resolve();
+
+    expect(titleCalls).toHaveLength(1);
+    expect(titleCalls[0].context).toMatchObject({
+      messages: [{ role: "user", content: "  第一条需求  " }],
+    });
+    expect(titleCalls[0].model).toMatchObject({ reasoning: false });
+    expect(titleCalls[0].options).toMatchObject({ maxTokens: 32 });
+    expect(sent.filter((message) => message.type === "title")).toEqual([
+      { type: "title", conversationId: "c1", title: "这是一个超过二十个字的标题，用于验证截断" },
+    ]);
+  });
+
   it("assigns distinct thinking block ids when Pi restarts content indices after a tool", async () => {
     const sent: SidecarToHost[] = [];
     const { session } = fakeSession((emit) => {

@@ -1,4 +1,4 @@
-import { complete } from "@earendil-works/pi-ai/compat";
+import { complete, completeSimple } from "@earendil-works/pi-ai/compat";
 import { existsSync, rmSync } from "node:fs";
 import type { Context } from "@earendil-works/pi-ai";
 import {
@@ -59,6 +59,8 @@ export interface AgentRunnerOptions {
   send: (msg: SidecarToHost) => void;
   /** Override session creation in tests. Defaults to a real Pi session. */
   createSession?: SessionFactory;
+  /** Override the lightweight title completion in tests. */
+  completeTitle?: typeof completeSimple;
 }
 
 export interface PromptRequest {
@@ -100,6 +102,7 @@ interface PendingCall<T> {
 export class AgentRunner {
   private readonly send: (msg: SidecarToHost) => void;
   private readonly factory: SessionFactory;
+  private readonly completeTitle: typeof completeSimple;
   private cfg?: AgentConfig;
   private readonly sessions = new Map<string, SessionLike>();
   private readonly sessionManagers = new Map<string, PiSessionManager>();
@@ -108,6 +111,8 @@ export class AgentRunner {
   private readonly dirtySkillSessions = new Map<string, SkillSnapshot>();
   private readonly activeConversations = new Map<string, string>();
   private readonly discardedConversations = new Set<string>();
+  /** Conversations that have already claimed their one title-generation attempt. */
+  private readonly titleGenerationStarted = new Set<string>();
   private readonly mutationCoordinators = new Map<string, MutationCoordinator>();
   private callSeq = 0;
   private readonly pendingWorkspaceLists = new Map<string, PendingCall<WorkspaceEntry[]>>();
@@ -118,6 +123,7 @@ export class AgentRunner {
   constructor(options: AgentRunnerOptions) {
     this.send = options.send;
     this.factory = options.createSession ?? defaultCreateSession;
+    this.completeTitle = options.completeTitle ?? completeSimple;
   }
 
   async configure(cfg: AgentConfig): Promise<void> {
@@ -201,6 +207,7 @@ export class AgentRunner {
 
   async newSession(req: NewSessionRequest): Promise<void> {
     this.discardedConversations.delete(req.conversationId);
+    this.titleGenerationStarted.delete(req.conversationId);
     const sessionManager = SessionManager.create(req.cwd, req.sessionDir, { id: req.conversationId });
     await this.installSession(req.conversationId, sessionManager);
   }
@@ -220,6 +227,7 @@ export class AgentRunner {
     this.sessionManagers.delete(conversationId);
     this.skillViews.delete(conversationId);
     this.dirtySkillSessions.delete(conversationId);
+    this.titleGenerationStarted.delete(conversationId);
     this.mutationCoordinators.get(conversationId)?.clear();
     this.mutationCoordinators.delete(conversationId);
     this.rejectConversationCalls(conversationId, "对话已关闭");
@@ -270,7 +278,9 @@ export class AgentRunner {
       // 原生展开，文件引用追加 [引用] 块。无引用时原样透传（向后兼容）。
       await session.prompt(composePromptText(req));
       this.emitSessionSynced(req.conversationId);
-      void this.generateTitle(req.conversationId, req.userText);
+      if (this.claimTitleGeneration(req.conversationId, req.userText)) {
+        void this.generateTitle(req.conversationId, req.userText);
+      }
     } finally {
       unsubscribe();
       this.activeConversations.delete(req.requestId);
@@ -353,6 +363,9 @@ export class AgentRunner {
     this.skillViews.set(conversationId, skillView);
     this.mutationCoordinators.get(conversationId)?.clear();
     this.mutationCoordinators.set(conversationId, coordinator);
+    if (displayMessagesFromSession(session).some((message) => message.role === "user")) {
+      this.titleGenerationStarted.add(conversationId);
+    }
     const sessionFile = session.sessionFile ?? session.sessionManager?.getSessionFile() ?? sessionManager.getSessionFile();
     if (!sessionFile) {
       throw new Error("persistent session file unavailable");
@@ -422,29 +435,37 @@ export class AgentRunner {
   }
 
   private async generateTitle(conversationId: string, userText: string): Promise<void> {
-    if (!this.cfg || !userText.trim()) return;
+    if (!this.cfg) return;
     try {
       const context: Context = {
-        systemPrompt: "为下面的用户请求生成简短明确的中文对话标题。只返回标题，不使用 Markdown，不超过 24 个字符。",
+        systemPrompt: "为下面的用户请求生成简短明确的中文对话标题。只返回标题，不使用 Markdown，不超过 10 个字。",
         messages: [{ role: "user", content: userText, timestamp: Date.now() }],
       };
-      const response = await complete(buildAgentModel(this.cfg), context, {
+      const titleModel = { ...buildAgentModel(this.cfg), reasoning: false };
+      const response = await this.completeTitle(titleModel, context, {
         apiKey: this.cfg.apiKey,
         maxTokens: 32,
         cacheRetention: "none",
       });
-      const title = response.content
+      const title = [...response.content
         .filter((block) => block.type === "text")
         .map((block) => block.text)
         .join("")
         .replace(/[\n\r]+/g, " ")
         .replace(/[*_`#>]/g, "")
-        .trim()
-        .slice(0, 24);
+        .trim()]
+        .slice(0, 20)
+        .join("");
       if (title) this.send({ type: "title", conversationId, title });
     } catch {
       // 标题生成是增强功能；失败不影响持久会话和回复。
     }
+  }
+
+  private claimTitleGeneration(conversationId: string, userText: string): boolean {
+    if (!userText.trim() || this.titleGenerationStarted.has(conversationId)) return false;
+    this.titleGenerationStarted.add(conversationId);
+    return true;
   }
 
   private listWorkspace(conversationId: string): Promise<WorkspaceEntry[]> {
