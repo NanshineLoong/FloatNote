@@ -42,14 +42,70 @@ export const WINDOW_SHORTCUT_DEFAULTS: Record<WindowShortcutId, string> = {
 
 export const WINDOW_SHORTCUT_LABELS: Record<WindowShortcutId, string> = {
   assistant: "切换 AI 助手",
-  assistant_bubble: "切换 AI 对话气泡",
-  action_panel: "切换行动面板",
-  add_action: "添加下一项行动",
+  assistant_bubble: "展开 / 收起 AI 消息",
+  action_panel: "打开 / 关闭待办面板",
+  add_action: "新建待办",
   new_conversation: "新对话",
-  view_inbox: "视图·采集",
-  view_piece: "视图·写作",
-  view_split: "视图·双栏",
+  view_inbox: "切换到采集视图",
+  view_piece: "切换到写作视图",
+  view_split: "切换到双栏视图",
 };
+
+/** 将内部快捷键字符串格式化为平台友好的显示文本。Mac 用符号（⌥ ⌘ C），Windows 用文字（Alt + Cmd + C）。 */
+export function formatComboForDisplay(combo: string): string {
+  if (!combo) return combo;
+  const parts = combo.split("+");
+  if (isMac) {
+    return parts.map((p) => {
+      switch (p) {
+        case "Alt": return "⌥";
+        case "Cmd": case "Meta": case "Mod": return "⌘";
+        case "Shift": return "⇧";
+        case "Ctrl": case "Control": return "⌃";
+        case " ": return "␣";
+        default: return p;
+      }
+    }).join(" ");
+  }
+  return parts.map((p) => {
+    switch (p) {
+      case "Meta": case "Mod": return "Win";
+      case "Control": return "Ctrl";
+      default: return p;
+    }
+  }).join(" + ");
+}
+
+const MAC_ICON_MAP: Record<string, string> = {
+  Alt: "ph ph-option",
+  Cmd: "ph ph-command",
+  Meta: "ph ph-command",
+  Mod: "ph ph-command",
+  Shift: "ph ph-arrow-fat-up",
+  Ctrl: "ph ph-control",
+  Control: "ph ph-control",
+};
+
+/** 将内部快捷键字符串格式化为带 Phosphor 图标的 HTML（Mac 用图标，Windows 用文字）。 */
+export function formatComboHtml(combo: string): string {
+  if (!combo) return "";
+  const parts = combo.split("+");
+  if (isMac) {
+    return parts.map((p) => {
+      const icon = MAC_ICON_MAP[p];
+      if (icon) return `<i class="${icon}" aria-hidden="true"></i>`;
+      if (p === " ") return `<span class="combo-key">␣</span>`;
+      return `<span class="combo-key">${p}</span>`;
+    }).join("");
+  }
+  return parts.map((p) => {
+    switch (p) {
+      case "Meta": case "Mod": return "<span class=\"combo-key\">Win</span>";
+      case "Control": return "<span class=\"combo-key\">Ctrl</span>";
+      default: return `<span class="combo-key">${p}</span>`;
+    }
+  }).join("<span class=\"combo-sep\">+</span>");
+}
 
 function keyName(key: string): string {
   switch (key) {
@@ -105,29 +161,29 @@ interface ReservedEntry {
 
 const RAW_RESERVED: ReservedEntry[] = [
   // CodeMirror defaultKeymap + historyKeymap 占用（实测 editor.ts:50）
-  { combo: "Mod+A", reason: "与编辑器「全选」冲突" },
-  { combo: "Mod+I", reason: "与编辑器快捷键冲突" },
-  { combo: "Mod+U", reason: "与编辑器「选区撤销」冲突" },
-  { combo: "Mod+Shift+U", reason: "与编辑器「选区重做」冲突" },
-  { combo: "Mod+Y", reason: "与编辑器「重做」冲突" },
-  { combo: "Mod+Z", reason: "与编辑器「撤销」冲突" },
-  { combo: "Mod+Shift+Z", reason: "与编辑器「重做」冲突" },
-  { combo: "Mod+[", reason: "与编辑器「减少缩进」冲突" },
-  { combo: "Mod+]", reason: "与编辑器「增加缩进」冲突" },
-  { combo: "Mod+/", reason: "与编辑器「注释」冲突" },
-  { combo: "Mod+Enter", reason: "与编辑器快捷键冲突" },
-  { combo: "Shift+Mod+K", reason: "与编辑器快捷键冲突" },
+  { combo: "Mod+A", reason: "与编辑器「全选」相同，无法使用" },
+  { combo: "Mod+I", reason: "该组合键已被编辑器占用" },
+  { combo: "Mod+U", reason: "与编辑器「选区撤销」相同，无法使用" },
+  { combo: "Mod+Shift+U", reason: "与编辑器「选区重做」相同，无法使用" },
+  { combo: "Mod+Y", reason: "与编辑器「重做」相同，无法使用" },
+  { combo: "Mod+Z", reason: "与编辑器「撤销」相同，无法使用" },
+  { combo: "Mod+Shift+Z", reason: "与编辑器「重做」相同，无法使用" },
+  { combo: "Mod+[", reason: "与编辑器「减少缩进」相同，无法使用" },
+  { combo: "Mod+]", reason: "与编辑器「增加缩进」相同，无法使用" },
+  { combo: "Mod+/", reason: "与编辑器「注释」相同，无法使用" },
+  { combo: "Mod+Enter", reason: "该组合键已被编辑器占用" },
+  { combo: "Shift+Mod+K", reason: "该组合键已被编辑器占用" },
   // 系统/平台保留
-  { combo: "Mod+Q", reason: "与系统「退出」冲突" },
-  { combo: "Mod+W", reason: "与系统「关闭窗口」冲突" },
-  { combo: "Mod+M", reason: "与系统「最小化」冲突" },
-  { combo: "Mod+H", reason: "与系统「隐藏」冲突" },
-  { combo: "Mod+N", reason: "与系统「新窗口」冲突" },
-  { combo: "Mod+R", reason: "与系统「刷新」冲突" },
+  { combo: "Mod+Q", reason: "与系统「退出应用」相同，无法使用" },
+  { combo: "Mod+W", reason: "与系统「关闭窗口」相同，无法使用" },
+  { combo: "Mod+M", reason: "与系统「最小化」相同，无法使用" },
+  { combo: "Mod+H", reason: "与系统「隐藏」相同，无法使用" },
+  { combo: "Mod+N", reason: "与系统「新窗口」相同，无法使用" },
+  { combo: "Mod+R", reason: "与系统「刷新」相同，无法使用" },
   // 复制粘贴
-  { combo: "Mod+C", reason: "与「复制」冲突" },
-  { combo: "Mod+V", reason: "与「粘贴」冲突" },
-  { combo: "Mod+X", reason: "与「剪切」冲突" },
+  { combo: "Mod+C", reason: "与「复制」相同，无法使用" },
+  { combo: "Mod+V", reason: "与「粘贴」相同，无法使用" },
+  { combo: "Mod+X", reason: "与「剪切」相同，无法使用" },
 ];
 
 const RESERVED_MAP = new Map<string, string>(
@@ -153,17 +209,17 @@ export function checkConflict(input: ConflictInput): ConflictResult | null {
   for (const id of WINDOW_SHORTCUT_IDS) {
     if (id === input.id) continue;
     if (input.all[id] && canonicalize(input.all[id]) === c) {
-      return { kind: "window", message: `与「${WINDOW_SHORTCUT_LABELS[id]}」重复` };
+      return { kind: "window", message: `与「${WINDOW_SHORTCUT_LABELS[id]}」相同` };
     }
   }
   const labels: Array<[string, string]> = [
-    [input.globals.capture, "划线引用"],
-    [input.globals.toggle, "显示/隐藏"],
-    [input.globals.popup, "划词弹窗"],
+    [input.globals.capture, "划词采集"],
+    [input.globals.toggle, "显示/隐藏窗口"],
+    [input.globals.popup, "选中文字弹窗"],
   ];
   for (const [combo, label] of labels) {
     if (combo && canonicalize(combo) === c) {
-      return { kind: "global", message: `与全局快捷键「${label}」重复（窗口聚焦时会双重触发）` };
+      return { kind: "global", message: `与系统快捷键「${label}」相同，会同时触发两个操作` };
     }
   }
   return null;
@@ -188,7 +244,7 @@ export function findShortcutConflicts(
   globals: { capture: string; toggle: string; popup: string },
 ): Partial<Record<ShortcutFieldId, ConflictResult>> {
   const conflicts: Partial<Record<ShortcutFieldId, ConflictResult>> = findAllConflicts(all, globals);
-  const globalLabels = { capture: "划线引用", toggle: "显示 / 隐藏", popup: "唤起划词弹窗" };
+  const globalLabels = { capture: "划词采集", toggle: "显示 / 隐藏窗口", popup: "打开选中文字弹窗" };
   for (const globalId of ["capture", "toggle", "popup"] as const) {
     const value = globals[globalId];
     const reserved = RESERVED_MAP.get(canonicalize(value));
@@ -198,16 +254,16 @@ export function findShortcutConflicts(
     }
     for (const windowId of WINDOW_SHORTCUT_IDS) {
       if (canonicalize(all[windowId]) === canonicalize(value)) {
-        conflicts[globalId] = { kind: "window", message: `与「${WINDOW_SHORTCUT_LABELS[windowId]}」重复` };
+        conflicts[globalId] = { kind: "window", message: `与「${WINDOW_SHORTCUT_LABELS[windowId]}」相同` };
         conflicts[windowId] = {
           kind: "global",
-          message: `与全局快捷键「${globalLabels[globalId]}」重复（窗口聚焦时会双重触发）`,
+          message: `与系统快捷键「${globalLabels[globalId]}」相同，会同时触发两个操作`,
         };
       }
     }
     for (const otherId of ["capture", "toggle", "popup"] as const) {
       if (otherId !== globalId && canonicalize(globals[otherId]) === canonicalize(value)) {
-        conflicts[globalId] = { kind: "global", message: `与「${globalLabels[otherId]}」重复` };
+        conflicts[globalId] = { kind: "global", message: `与「${globalLabels[otherId]}」相同` };
       }
     }
   }

@@ -34,28 +34,28 @@ export function mountSkills(root: HTMLElement, importButton: HTMLButtonElement, 
             config.disabled_skills = previous;
             input.checked = !input.checked;
             updateSkillLabel(input, displayName);
-            notice.textContent = `无法保存 Skill 状态：${String(reason)}`;
+            notice.textContent = `无法保存技能设置：${String(reason)}`;
             input.disabled = false;
             return;
           }
           try {
             await invoke("agent_reload_skills");
           } catch {
-            notice.textContent = "设置已保存，将在 AI 运行时恢复后生效。";
+            notice.textContent = "已保存，AI 助手重新连接后生效。";
           }
           updateSkillLabel(input, displayName);
           input.disabled = false;
         });
       });
     } catch (reason) {
-      root.innerHTML = `<div class="settings-empty-error" role="alert"><strong>无法读取 Skills</strong><span>${escapeHtml(String(reason))}</span><button id="retry-skills" type="button">重试</button></div>`;
+      root.innerHTML = `<div class="settings-empty-error" role="alert"><strong>无法读取技能列表</strong><span>${escapeHtml(String(reason))}</span><button id="retry-skills" type="button">重试</button></div>`;
       root.querySelector<HTMLButtonElement>("#retry-skills")!.onclick = () => void load();
     }
   };
 
   importButton.addEventListener("click", async () => {
     notice.textContent = "";
-    const chosen = await open({ title: "选择包含 SKILL.md 的 Skill 目录", directory: true, multiple: false });
+    const chosen = await open({ title: "选择技能文件夹", directory: true, multiple: false });
     if (!chosen || Array.isArray(chosen)) return;
     importButton.disabled = true;
     try {
@@ -64,7 +64,7 @@ export function mountSkills(root: HTMLElement, importButton: HTMLButtonElement, 
       try {
         await invoke("agent_reload_skills");
       } catch {
-        notice.textContent = "Skill 已导入，将在 AI 运行时恢复后生效。";
+        notice.textContent = "技能已导入，AI 助手重新连接后生效。";
       }
     } catch (reason) {
       notice.textContent = String(reason);
@@ -87,5 +87,5 @@ export function renderSkills(root: HTMLElement, skills: SkillSummary[]): void {
     <span class="skill-copy"><span class="skill-title"><strong>${escapeHtml(displayName)}</strong><span class="skill-source">${skill.source === "builtin" ? "内置" : "已导入"}</span></span><small>${escapeHtml(displayDescription)}</small></span>
     <span class="settings-toggle"><input type="checkbox" data-skill="${escapeHtml(skill.name)}" data-skill-display-name="${escapeHtml(displayName)}" ${skill.enabled ? "checked" : ""} aria-label="${skill.enabled ? "停用" : "启用"} ${escapeHtml(displayName)}"/><span class="settings-toggle-track" aria-hidden="true"></span></span>
   </label>`;
-  }).join("")}</div>` : `<span class="settings-muted">暂无可用 Skill</span>`;
+  }).join("")}</div>` : `<span class="settings-muted">暂无可用技能</span>`;
 }

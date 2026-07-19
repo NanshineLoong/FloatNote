@@ -30,7 +30,7 @@ export async function persistAutostart(enabled: boolean, dependencies: Autostart
 export function mountGeneralSettings(root: HTMLElement, config: Config, save: SaveConfig): void {
   root.innerHTML = `<div class="settings-card">
     <div class="settings-line">
-      <div><label for="theme"><strong>外观</strong></label><small>选择 FloatNote 的显示模式</small></div>
+      <div><label for="theme"><strong>外观</strong></label><small>切换浅色或深色外观</small></div>
       <span class="select-wrap"><select id="theme" class="fn-control" aria-describedby="theme-error"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></span>
     </div>
     <p id="theme-error" class="settings-inline-error" role="alert"></p>

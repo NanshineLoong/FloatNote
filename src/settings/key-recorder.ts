@@ -8,7 +8,7 @@
  * 可选第三参 onChange 在录制值变化后调用（Task 8 用于实时冲突检测）。
  */
 
-import { eventToCombo } from "../shared/shortcuts";
+import { eventToCombo, formatComboHtml } from "../shared/shortcuts";
 
 export class KeyRecorder {
   private readonly el: HTMLElement;
@@ -45,14 +45,14 @@ export class KeyRecorder {
     if (this.recording) {
       this.el.classList.add("recording");
       this.el.classList.remove("has-value");
-      this.labelEl.textContent = "按下快捷键…";
+      this.labelEl.textContent = "按下新的组合键…";
     } else if (this._value) {
       this.el.classList.remove("recording");
       this.el.classList.add("has-value");
-      this.labelEl.textContent = this._value;
+      this.labelEl.innerHTML = formatComboHtml(this._value);
     } else {
       this.el.classList.remove("recording", "has-value");
-      this.labelEl.textContent = "点击录制";
+      this.labelEl.textContent = "点击设置";
     }
   }
 
@@ -74,7 +74,9 @@ export class KeyRecorder {
 
       const combo = eventToCombo(e);
       if (combo === null) {
-        this.labelEl.textContent = "需要修饰键 (Ctrl/Alt/Shift/Cmd)…";
+        this.labelEl.textContent = this.isMacPlatform()
+          ? "请搭配 ⌃ / ⌥ / ⇧ / ⌘ 使用…"
+          : "请搭配 Ctrl / Alt / Shift / Win 使用…";
         return;
       }
       this._value = combo;
@@ -100,5 +102,9 @@ export class KeyRecorder {
   private stopRecording(): void {
     this.recording = false;
     this.render();
+  }
+
+  private isMacPlatform(): boolean {
+    return typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
   }
 }

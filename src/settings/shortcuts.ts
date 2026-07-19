@@ -1,17 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
-import { escapeHtml } from "../shared/escape";
-import { findShortcutConflicts, WINDOW_SHORTCUT_DEFAULTS, WINDOW_SHORTCUT_IDS, WINDOW_SHORTCUT_LABELS, type ShortcutFieldId, type WindowShortcutId } from "../shared/shortcuts";
+import { findShortcutConflicts, formatComboHtml, WINDOW_SHORTCUT_DEFAULTS, WINDOW_SHORTCUT_IDS, WINDOW_SHORTCUT_LABELS, type ShortcutFieldId, type WindowShortcutId } from "../shared/shortcuts";
 import { KeyRecorder } from "./key-recorder";
 import type { Config } from "./types";
 
 export function mountShortcutSettings(root: HTMLElement, config: Config): void {
-  root.innerHTML = `<section class="settings-section" aria-labelledby="global-shortcuts-title"><h2 id="global-shortcuts-title">全局快捷键</h2><div class="settings-card">
-    ${shortcutMarkup("capture", "划线引用", config.shortcut_capture)}
-    ${shortcutMarkup("toggle", "显示 / 隐藏", config.shortcut_toggle)}
+  root.innerHTML = `<section class="settings-section" aria-labelledby="global-shortcuts-title"><h2 id="global-shortcuts-title">系统快捷键</h2><div class="settings-card">
+    ${shortcutMarkup("capture", "划词采集", config.shortcut_capture)}
+    ${shortcutMarkup("toggle", "显示 / 隐藏窗口", config.shortcut_toggle)}
   </div></section>
-  <section class="settings-section" aria-labelledby="popup-trigger-title"><h2 id="popup-trigger-title">划词悬浮窗</h2><div class="settings-card">
-    <div class="settings-line"><div><label for="auto-popup-mode"><strong>触发方式</strong></label><small>${isMac() ? "选择文字后自动显示，或使用快捷键唤起" : "自动弹出当前仅受 macOS 支持；可使用快捷键唤起"}</small></div><span class="select-wrap"><select id="auto-popup-mode" class="fn-control"><option value="auto">自动弹出</option><option value="shortcut">快捷键</option><option value="off">关闭</option></select></span></div>
-    <div id="popup-shortcut-row" class="popup-shortcut-row" ${config.auto_popup_mode === "shortcut" ? "" : "hidden"}>${shortcutMarkup("popup", "唤起划词弹窗", config.shortcut_popup)}</div>
+  <section class="settings-section" aria-labelledby="popup-trigger-title"><h2 id="popup-trigger-title">选中文字弹窗</h2><div class="settings-card">
+    <div class="settings-line"><div><label for="auto-popup-mode"><strong>触发方式</strong></label><small>${isMac() ? "选中文字后自动弹出，或手动按键唤出" : "自动弹出暂仅支持 macOS，可改用快捷键唤出"}</small></div><span class="select-wrap"><select id="auto-popup-mode" class="fn-control"><option value="auto">自动弹出</option><option value="shortcut">快捷键</option><option value="off">关闭</option></select></span></div>
+    <div id="popup-shortcut-row" class="popup-shortcut-row" ${config.auto_popup_mode === "shortcut" ? "" : "hidden"}>${shortcutMarkup("popup", "打开选中文字弹窗", config.shortcut_popup)}</div>
     <p id="popup-mode-error" class="settings-inline-error" role="alert"></p>
   </div></section>
   <section class="settings-section" aria-labelledby="window-shortcuts-title"><h2 id="window-shortcuts-title">窗口快捷键</h2><div class="settings-card">${WINDOW_SHORTCUT_IDS.map((id) => shortcutMarkup(id, WINDOW_SHORTCUT_LABELS[id], config.window_shortcuts?.[id] ?? WINDOW_SHORTCUT_DEFAULTS[id])).join("")}</div></section>`;
@@ -66,7 +65,7 @@ export function mountShortcutSettings(root: HTMLElement, config: Config): void {
 }
 
 function shortcutMarkup(id: ShortcutFieldId, label: string, value: string): string {
-  return `<div class="shortcut-line"><div><strong>${label}</strong><span id="shortcut-error-${id}" class="shortcut-error" data-shortcut="${id}" role="alert"></span></div><div id="recorder-${id}" class="key-recorder" role="button" tabindex="0" aria-label="录制${label}快捷键" aria-describedby="shortcut-error-${id}"><span class="key-recorder-label">${escapeHtml(value)}</span></div></div>`;
+  return `<div class="shortcut-line"><div><strong>${label}</strong><span id="shortcut-error-${id}" class="shortcut-error" data-shortcut="${id}" role="alert"></span></div><div id="recorder-${id}" class="key-recorder" role="button" tabindex="0" aria-label="录制${label}快捷键" aria-describedby="shortcut-error-${id}"><span class="key-recorder-label">${formatComboHtml(value)}</span></div></div>`;
 }
 
 function isMac(): boolean {

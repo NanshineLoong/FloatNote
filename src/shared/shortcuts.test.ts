@@ -1,10 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   canonicalize,
   checkConflict,
   findAllConflicts,
   findShortcutConflicts,
   eventToCombo,
+  formatComboForDisplay,
+  formatComboHtml,
   WINDOW_SHORTCUT_DEFAULTS,
   WINDOW_SHORTCUT_IDS,
   type WindowShortcutId,
@@ -78,7 +80,7 @@ describe("checkConflict", () => {
   it("撞全局快捷键", () => {
     const r = checkConflict({ combo: "Alt+Cmd+C", id: "assistant", all: all(), globals });
     expect(r?.kind).toBe("global");
-    expect(r?.message).toContain("划线引用");
+    expect(r?.message).toContain("划词采集");
   });
   it("合法组合返回 null", () => {
     expect(checkConflict({ combo: "Cmd+J", id: "assistant", all: all(), globals })).toBeNull();
@@ -108,7 +110,7 @@ describe("findShortcutConflicts", () => {
     const windows = { ...WINDOW_SHORTCUT_DEFAULTS };
     const globals = { capture: "Cmd+J", toggle: "Alt+Cmd+N", popup: "Alt+Cmd+P" };
     const conflicts = findShortcutConflicts(windows, globals);
-    expect(conflicts.assistant?.message).toContain("划线引用");
+    expect(conflicts.assistant?.message).toContain("划词采集");
     expect(conflicts.capture?.message).toContain("切换 AI 助手");
   });
 });
@@ -119,5 +121,91 @@ describe("defaults", () => {
     for (const id of WINDOW_SHORTCUT_IDS) {
       expect(typeof WINDOW_SHORTCUT_DEFAULTS[id as WindowShortcutId]).toBe("string");
     }
+  });
+});
+
+describe("formatComboForDisplay", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("Windows 环境：文字 + 空格连接", async () => {
+    vi.stubGlobal("navigator", { platform: "Win32" });
+    vi.resetModules();
+    const mod = await import("./shortcuts");
+    expect(mod.formatComboForDisplay("Alt+Cmd+C")).toBe("Alt + Cmd + C");
+    expect(mod.formatComboForDisplay("Cmd+J")).toBe("Cmd + J");
+    expect(mod.formatComboForDisplay("Ctrl+Shift+K")).toBe("Ctrl + Shift + K");
+  });
+
+  it("Windows：Mod/Meta 显示为 Win", async () => {
+    vi.stubGlobal("navigator", { platform: "Win32" });
+    vi.resetModules();
+    const mod = await import("./shortcuts");
+    expect(mod.formatComboForDisplay("Mod+A")).toBe("Win + A");
+    expect(mod.formatComboForDisplay("Meta+B")).toBe("Win + B");
+  });
+
+  it("Mac 环境：符号 + 空格连接", async () => {
+    vi.stubGlobal("navigator", { platform: "MacIntel" });
+    vi.resetModules();
+    const mod = await import("./shortcuts");
+    expect(mod.formatComboForDisplay("Alt+Cmd+C")).toBe("⌥ ⌘ C");
+    expect(mod.formatComboForDisplay("Cmd+J")).toBe("⌘ J");
+    expect(mod.formatComboForDisplay("Ctrl+Shift+K")).toBe("⌃ ⇧ K");
+  });
+
+  it("Mac：Mod/Meta 显示为 ⌘", async () => {
+    vi.stubGlobal("navigator", { platform: "MacIntel" });
+    vi.resetModules();
+    const mod = await import("./shortcuts");
+    expect(mod.formatComboForDisplay("Mod+A")).toBe("⌘ A");
+    expect(mod.formatComboForDisplay("Meta+B")).toBe("⌘ B");
+  });
+
+  it("空字符串原样返回", () => {
+    expect(formatComboForDisplay("")).toBe("");
+  });
+});
+
+describe("formatComboHtml", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("Mac 环境：修饰键用 Phosphor 图标", async () => {
+    vi.stubGlobal("navigator", { platform: "MacIntel" });
+    vi.resetModules();
+    const mod = await import("./shortcuts");
+    const html = mod.formatComboHtml("Alt+Cmd+C");
+    expect(html).toContain("ph-option");
+    expect(html).toContain("ph-command");
+    expect(html).toContain("combo-key\">C</span>");
+  });
+
+  it("Mac：Shift 用 arrow-fat-up 图标", async () => {
+    vi.stubGlobal("navigator", { platform: "MacIntel" });
+    vi.resetModules();
+    const mod = await import("./shortcuts");
+    const html = mod.formatComboHtml("Ctrl+Shift+K");
+    expect(html).toContain("ph-control");
+    expect(html).toContain("ph-arrow-fat-up");
+    expect(html).toContain("combo-key\">K</span>");
+  });
+
+  it("Windows 环境：文字 + 分隔符", async () => {
+    vi.stubGlobal("navigator", { platform: "Win32" });
+    vi.resetModules();
+    const mod = await import("./shortcuts");
+    const html = mod.formatComboHtml("Alt+Cmd+C");
+    expect(html).toContain("combo-key\">Alt</span>");
+    expect(html).toContain("combo-key\">Cmd</span>");
+    expect(html).toContain("combo-sep\">+</span>");
+  });
+
+  it("空字符串返回空", () => {
+    expect(formatComboHtml("")).toBe("");
   });
 });

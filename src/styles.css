@@ -752,12 +752,59 @@ body {
 
 .seg-btn:disabled {
   color: var(--color-text-subtle);
-  cursor: default;
+  opacity: 0.55;
 }
 
-/* 窄窗：双栏档变暗、不可达（按钮 disabled + 方向键 maxReachableIdx 限制）。 */
+/* 窄窗：双栏档变暗、不可达（按钮 disabled + 方向键 maxReachableIdx 限制）。
+   锁图标在 disabled 时显示，提示用户该档不可用。 */
 .view-seg[data-reach="narrow"] .seg-btn[data-view="split"] {
   color: var(--color-text-subtle);
+  opacity: 0.55;
+}
+
+.seg-btn .seg-lock {
+  display: none;
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  line-height: 1;
+}
+
+.seg-btn:disabled .seg-lock {
+  display: block;
+}
+
+/* 轻量 CSS tooltip：data-tip 存在时，hover 150ms 后在按钮下方显示提示气泡。 */
+.seg-btn[data-tip] {
+  position: relative;
+}
+
+.seg-btn[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.92);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--color-overlay);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s ease, transform .12s ease;
+  transition-delay: 0s;
+  z-index: 100;
+}
+
+.seg-btn[data-tip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+  transition-delay: 150ms;
 }
 
 /* 玻璃胶囊钮：嵌在凹槽里、几乎填满一档（左右各留 2px 缝），顶面带当前段名。

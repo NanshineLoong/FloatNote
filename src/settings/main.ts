@@ -1,3 +1,4 @@
+import "@phosphor-icons/web/regular";
 import { invoke } from "@tauri-apps/api/core";
 import { initializeAppearance } from "../shared/appearance";
 import { createEmptyAiSettings } from "./provider-profiles";

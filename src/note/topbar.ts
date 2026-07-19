@@ -63,7 +63,7 @@ export function renderTopbar(root: HTMLElement, callbacks: TopbarCallbacks) {
         <div class="seg-track" id="seg-track">
           <button class="seg-btn active" data-view="inbox" data-idx="0">采集</button>
           <button class="seg-btn"        data-view="piece" data-idx="1">写作</button>
-          <button class="seg-btn"        data-view="split" data-idx="2" title="双栏（采集 ｜ 写作）">双栏</button>
+          <button class="seg-btn"        data-view="split" data-idx="2" title="双栏（采集 ｜ 写作）">双栏<span class="seg-lock">${createIcon({ phosphor: "ph ph-lock-simple", size: 10 }).outerHTML}</span></button>
           <div class="seg-knob" id="seg-knob" role="presentation" aria-hidden="true">采集</div>
         </div>
       </div>
@@ -103,8 +103,16 @@ export function setViewSeg(view: ViewSeg, splitAllowed: boolean) {
     const v = btn.dataset.view as ViewSeg;
     const active = v === view;
     btn.classList.toggle("active", active);
-    if (v === "split") btn.disabled = !splitAllowed;
-    if (active) label = btn.textContent ?? "";
+    if (v === "split") {
+      btn.disabled = !splitAllowed;
+      btn.title = splitAllowed ? "双栏（采集 ｜ 写作）" : "";
+      if (splitAllowed) {
+        btn.removeAttribute("data-tip");
+      } else {
+        btn.dataset.tip = "窗口过窄，拉宽后可用双栏";
+      }
+    }
+    if (active) label = btn.childNodes[0]?.textContent ?? "";
   });
   if (knob) knob.textContent = label;
 }
