@@ -229,6 +229,8 @@ export function createTasksPanel(parent: HTMLElement, host: TasksPanelHost) {
     syncLayout();
   }
 
+  // 阻止 mousedown 默认行为，避免输入框 blur 抢先关闭表单后 click toggle 又重开。
+  addBtn.addEventListener("mousedown", (e) => e.preventDefault());
   addBtn.onclick = () => setAdding(form.hidden);
 
   form.onsubmit = (e) => {
