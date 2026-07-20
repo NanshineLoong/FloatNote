@@ -359,9 +359,13 @@ function mountPieceHeader() {
         const oldPath = session.currentDocument?.path;
         session.currentDocument = entry;
         pieceHeader?.setLabel(entry.name);
+        // 顶栏项目按钮显示的是文档名，改名后同步刷新（切换菜单里的改名路径同样调它）。
+        setProjectLabel(entry.name);
         if (oldPath && oldPath !== entry.path) {
           session.recentDocuments = session.recentDocuments.map((p) => (p === oldPath ? entry.path : p));
           void setRecentDocuments(session.recentDocuments);
+          // 活动笔记随改名指向新路径，避免 AI apply_write 落到已不存在的旧文件。
+          void invoke("set_active_note", { dir: parentDir(entry.path), noteId: entry.name, path: entry.path, kind: "doc" });
         }
       } else {
         await openPiece(entry);
@@ -1038,6 +1042,8 @@ async function showProjectSwitcher(anchor: HTMLElement) {
                     session.currentDocument = { name, path: newPath };
                     setProjectLabel(name);
                     pieceHeader?.setLabel(name);
+                    // 活动笔记随改名指向新路径，避免 AI apply_write 落到已不存在的旧文件。
+                    void invoke("set_active_note", { dir: parentDir(newPath), noteId: name, path: newPath, kind: "doc" });
                   }
                 }),
             },
