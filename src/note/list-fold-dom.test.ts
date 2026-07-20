@@ -21,12 +21,30 @@ function mount(doc: string, selection: number): EditorView {
 }
 
 describe("list fold editor interaction", () => {
-  it("applies the full first-level list inset through the final CodeMirror theme", () => {
+  it("keeps the first-level marker on the original inset with a hanging content slot", () => {
     const view = mount("- item\n", 2);
     const line = view.dom.querySelector<HTMLElement>(".cm-preview-list");
 
     expect(line).toBeTruthy();
-    expect(getComputedStyle(line!).paddingLeft).toBe("1.5em");
+    expect(getComputedStyle(line!).paddingLeft)
+      .toBe("calc(3em + var(--list-depth, 0) * 1em)");
+    expect(getComputedStyle(line!).textIndent)
+      .toBe("calc(-1.5em - var(--list-depth, 0) * 1em)");
+    view.destroy();
+  });
+
+  it("keeps wrapped nested-list text aligned with its own content column", () => {
+    const doc = "- parent\n    - nested content that wraps\n- tail\n";
+    const view = mount(doc, doc.indexOf("tail"));
+    const nestedLine = Array.from(view.dom.querySelectorAll<HTMLElement>(".cm-preview-list"))
+      .find((line) => line.textContent?.includes("nested content"));
+
+    expect(nestedLine).toBeTruthy();
+    expect(nestedLine!.style.getPropertyValue("--list-depth")).toBe("1");
+    expect(getComputedStyle(nestedLine!).paddingLeft)
+      .toBe("calc(3em + var(--list-depth, 0) * 1em)");
+    expect(getComputedStyle(nestedLine!).textIndent)
+      .toBe("calc(-1.5em - var(--list-depth, 0) * 1em)");
     view.destroy();
   });
 
@@ -63,6 +81,13 @@ describe("list fold editor interaction", () => {
     expect(marker).toBeTruthy();
     expect(marker!.querySelector(".cm-preview-ol-number")?.textContent).toBe("1");
     expect(marker!.querySelector(".cm-preview-ol-delim")?.textContent).toBe(".");
+    expect(getComputedStyle(marker!).textIndent).toBe("0");
+    const line = marker!.closest<HTMLElement>(".cm-preview-list");
+    expect(line?.classList.contains("cm-preview-list-ordered")).toBe(true);
+    expect(getComputedStyle(line!).paddingLeft)
+      .toBe("calc(2.75em + var(--list-depth, 0) * 1em)");
+    expect(getComputedStyle(line!).textIndent)
+      .toBe("calc(-1.25em - var(--list-depth, 0) * 1em)");
     view.destroy();
   });
 
@@ -78,7 +103,11 @@ describe("list fold editor interaction", () => {
 
     expect(siblingLine).toBeTruthy();
     expect(siblingLine!.classList.contains("cm-preview-list")).toBe(true);
-    expect(getComputedStyle(siblingLine!).paddingLeft).toBe("1.5em");
+    expect(siblingLine!.classList.contains("cm-preview-list-ordered")).toBe(true);
+    expect(getComputedStyle(siblingLine!).paddingLeft)
+      .toBe("calc(2.75em + var(--list-depth, 0) * 1em)");
+    expect(getComputedStyle(siblingLine!).textIndent)
+      .toBe("calc(-1.25em - var(--list-depth, 0) * 1em)");
     view.destroy();
   });
 

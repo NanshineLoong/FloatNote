@@ -96,6 +96,7 @@ function buildDecorations(state: EditorState): DecorationSet {
    *  iterating ListItems; applied as a single line decoration per line so we
    *  don't rely on multi-line-decoration merge semantics for nested items. */
   const listLineDepth = new Map<number, number>();
+  const orderedListLines = new Set<number>();
   const activeFencedCode: Array<{ from: number; to: number }> = [];
   syntaxTree(state).iterate({
     enter(node) {
@@ -242,6 +243,7 @@ function buildDecorations(state: EditorState): DecorationSet {
             // preserved (saved file keeps what the user typed).
             const raw = doc.sliceString(node.from, node.to);
             const delim = raw.replace(/^\d+/, ""); // "." | ")" — keep user delimiter
+            orderedListLines.add(doc.lineAt(node.from).number);
             entries.push({
               from: node.from,
               to: node.to,
@@ -425,11 +427,12 @@ function buildDecorations(state: EditorState): DecorationSet {
     },
   });
 
-  // List line styling. `--list-depth` is still recorded (harmless) but no
-  // longer drives padding: per-level indent comes solely from the 4-space
-  // source whitespace CM6 renders, so visual level === source level and a
-  // single Backspace unit retreats exactly one level. `cm-preview-list` gives
-  // list lines a uniform `0.6em` marker-side baseline.
+  // List line styling. Source whitespace places the marker on the first visual
+  // row, while padding keeps soft-wrapped rows at the same nesting depth. The
+  // negative first-line indent prevents that source whitespace from doubling
+  // the block-level depth inset. A marker-specific hanging slot (1.5em for
+  // bullets, 1.25em for ordered markers) makes wrapped prose resume at the
+  // item's content column rather than its marker.
   for (const [lineNo, depth] of listLineDepth) {
     const cl = doc.line(lineNo);
     if (lineNo < vpFrom || lineNo > vpTo) continue;
@@ -437,7 +440,9 @@ function buildDecorations(state: EditorState): DecorationSet {
       from: cl.from,
       to: cl.from,
       deco: Decoration.line({
-        class: "cm-preview-list",
+        class: orderedListLines.has(lineNo)
+          ? "cm-preview-list cm-preview-list-ordered"
+          : "cm-preview-list",
         attributes: { style: `--list-depth:${depth}` },
       }),
     });
@@ -637,10 +642,19 @@ const previewTheme = EditorView.theme({
     cursor: "pointer",
   },
   ".cm-preview-link:hover": { color: "var(--color-accent-hover)" },
-  ".cm-preview-ol-mark": { color: "var(--color-text-muted)", fontWeight: "600" },
+  ".cm-preview-ol-mark": {
+    color: "var(--color-text-muted)",
+    fontWeight: "600",
+    textIndent: "0",
+  },
   ".cm-preview-list": {
-    paddingLeft: "1.5em",
+    paddingLeft: "calc(3em + var(--list-depth, 0) * 1em)",
+    textIndent: "calc(-1.5em - var(--list-depth, 0) * 1em)",
     listStyleType: "none",
+  },
+  ".cm-preview-list-ordered": {
+    paddingLeft: "calc(2.75em + var(--list-depth, 0) * 1em)",
+    textIndent: "calc(-1.25em - var(--list-depth, 0) * 1em)",
   },
   ".cm-img-wrap.cm-img-active": { outline: "2px solid var(--color-accent)", borderRadius: "4px" },
   ".cm-img-toolbar": {
