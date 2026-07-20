@@ -4,11 +4,13 @@ import {
   inboxEntry,
   scheduleSave,
   saveImmediate,
+  settleAllPendingWrites,
   settlePendingWrites,
   flushAll,
   isDirty,
   lastKnownMtime,
   onConflict,
+  onSaveGaveUp,
   setLastKnown,
   discardPending,
   loadNote,
@@ -213,6 +215,62 @@ describe("save scheduling", () => {
     await settlePendingWrites("/a.md");
 
     expect(mockedInvoke).toHaveBeenCalledTimes(2);
+    expect(isDirty("/a.md")).toBe(false);
+  });
+
+  it("settleAllPendingWrites flushes every pending path and resolves after completion", async () => {
+    mockedInvoke.mockResolvedValue(okWrite(100));
+    scheduleSave("/a.md", "A");
+    scheduleSave("/b.md", "B");
+
+    await settleAllPendingWrites();
+
+    expect(mockedInvoke).toHaveBeenCalledWith("write_note", {
+      path: "/a.md",
+      content: "A",
+      expectedMtime: null,
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith("write_note", {
+      path: "/b.md",
+      content: "B",
+      expectedMtime: null,
+    });
+    expect(isDirty("/a.md")).toBe(false);
+    expect(isDirty("/b.md")).toBe(false);
+  });
+
+  it("onSaveGaveUp fires once retries are exhausted; pending is retained for the UI to decide", async () => {
+    mockedInvoke.mockRejectedValue(new Error("io"));
+    const gaveUp = vi.fn();
+    onSaveGaveUp(gaveUp);
+    scheduleSave("/a.md", "x");
+
+    await vi.advanceTimersByTimeAsync(500); // 首次失败
+    await vi.advanceTimersByTimeAsync(500); // 退避 1 失败
+    await vi.advanceTimersByTimeAsync(1000); // 退避 2 失败
+    expect(gaveUp).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2000); // 退避 3 失败 → 放弃
+    expect(gaveUp).toHaveBeenCalledTimes(1);
+    expect(gaveUp).toHaveBeenCalledWith("/a.md", "x");
+    // notes-state 不擅自丢用户内容：pending 保留，由 UI 兜底丢弃。
+    expect(isDirty("/a.md")).toBe(true);
+  });
+
+  it("does not report gave-up when a retry eventually succeeds", async () => {
+    mockedInvoke
+      .mockRejectedValueOnce(new Error("io"))
+      .mockRejectedValueOnce(new Error("io"))
+      .mockResolvedValueOnce(okWrite(7));
+    const gaveUp = vi.fn();
+    onSaveGaveUp(gaveUp);
+    scheduleSave("/a.md", "x");
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(gaveUp).not.toHaveBeenCalled();
     expect(isDirty("/a.md")).toBe(false);
   });
 });

@@ -210,6 +210,7 @@ const lastKnown = new Map<string, number | null>();
 let conflictHandler:
   | ((path: string, content: string) => void | Promise<void>)
   | null = null;
+let gaveUpHandler: ((path: string, content: string) => void) | null = null;
 
 const DEBOUNCE_MS = 500;
 const MAX_RETRIES = 3;
@@ -234,6 +235,12 @@ export function onConflict(
   handler: (path: string, content: string) => void | Promise<void>,
 ): void {
   conflictHandler = handler;
+}
+
+/** 注册"写入放弃"处理器：重试耗尽（多为路径已失效）时回调，由 UI 决定兜底
+ * （丢弃 pending / 重新定位）。notes-state 本身保留 pending，不擅自丢用户内容。 */
+export function onSaveGaveUp(handler: (path: string, content: string) => void): void {
+  gaveUpHandler = handler;
 }
 
 /** 丢弃某路径的待保存状态（用户选择"保留磁盘版本"后调用）。 */
@@ -296,6 +303,14 @@ export function flushAll(): void {
     entry.timer = null;
     void runFlush(path);
   }
+}
+
+/** 立即触发并等待所有 pending 写入与冲突处理落定。重命名/移动等会使现有路径
+ * 失效的操作前调用：保证磁盘内容最新，之后才能安全地按新路径重载编辑器。 */
+export async function settleAllPendingWrites(): Promise<void> {
+  flushAll();
+  const paths = new Set([...inFlight.keys(), ...conflictResolutions.keys()]);
+  await Promise.all([...paths].map((path) => settlePendingWrites(path)));
 }
 
 function runFlush(path: string, force = false): Promise<void> {
@@ -384,8 +399,11 @@ async function flushPath(
         cur.timer = null;
         void runFlush(path, force);
       }, backoff);
+    } else {
+      // 重试耗尽：多为路径已失效。保留 pending（内容仍在编辑器里，不能擅自丢），
+      // 通知 UI 兜底（丢弃 pending / 重新定位），否则死路径会让写入永远空转。
+      gaveUpHandler?.(path, cur.content);
     }
-    // 重试耗尽：保留 pending，下次 scheduleSave 会重置 retry 续写。
     return null;
   }
 }
@@ -400,4 +418,5 @@ export function __resetSaveStateForTests(): void {
   conflictResolutions.clear();
   lastKnown.clear();
   conflictHandler = null;
+  gaveUpHandler = null;
 }

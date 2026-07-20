@@ -4,6 +4,8 @@
 
 笔记窗口从 feature 内的调用点（例如 `notes-state.ts`）调用 Rust command。共享的 agent/chat DTO 与事件入口位于 `src/platform/`。`notes-state.ts` 为每个路径维护防抖保存队列，并把上次读取的 mtime 作为写入前置条件。Rust 检查 mtime、原子写文件，并在写入前登记 watcher 自写抑制；外部变更再以事件返回 WebView。
 
+路径可能整体失效（项目文件夹被改名、移动或删除）。重命名当前活动项目时，前端先把全部 pending 落盘到旧路径，改名成功后用新路径重新走一遍打开项目流程，编辑器引用、watcher 与 active note 一并迁移。若写入重试耗尽、或冲突解决时写读双向都失败，前端丢弃该路径的 pending 并按归属恢复：当前项目的系统文件失效则重新 bootstrap 定位，当前 piece/文档失效则复用“当前文件消失”流程，避免死路径上的保存无限重试、冲突弹窗无限循环。
+
 项目窗口会把当前可编辑笔记注册给 Rust。项目空间中，inbox、tasks 和 piece 都通过同一笔记读写路径处理；独立 Markdown 文件不拥有项目 tasks 面板。
 
 Inbox 在 WebView 内有明确的 raw/clean 边界：磁盘 `_inbox.md` 读取后由

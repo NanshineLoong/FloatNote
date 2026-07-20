@@ -48,6 +48,7 @@ import {
   listProjects,
   loadNote,
   onConflict,
+  onSaveGaveUp,
   openDocumentFromFile,
   openExistingProject,
   renameNote,
@@ -57,6 +58,7 @@ import {
   saveImmediate,
   scheduleSave,
   setLastKnown,
+  settleAllPendingWrites,
   settlePendingWrites,
   setRecentDocuments,
   setRecentProjects,
@@ -701,6 +703,40 @@ void onFileChanged(async (changedPath) => {
   }
 });
 
+/** 路径已失效（目录被外部改名/移动/删除，写读双向失败）时的恢复：丢弃不可能
+ * 落盘的 pending，按路径归属恢复——当前项目的系统文件（_inbox/_tasks）→ 项目
+ * 目录已失效，重新 bootstrap 定位；当前 piece/文档 → 复用"当前文件消失"流程；
+ * 其余路径仅提示。stalePathHandling 去重：同一路径的恢复不并发重入（冲突处理与
+ * 写入放弃回调可能先后命中同一路径）。 */
+const stalePathHandling = new Set<string>();
+async function handleStaleSavePath(path: string): Promise<void> {
+  if (stalePathHandling.has(path)) return;
+  stalePathHandling.add(path);
+  try {
+    discardPending(path);
+    const activeFile = activePieceFile();
+    const isProjectSystemFile =
+      session.currentProject !== null &&
+      (path === session.currentInbox?.entry.path ||
+        path === tasksPath(session.currentProject.path));
+    if (isProjectSystemFile) {
+      showToast("项目文件夹已被移动或删除，正在重新定位…");
+      session.currentInbox = null;
+      session.currentProject = null;
+      await bootstrapProjects(await getConfig());
+      return;
+    }
+    if (activeFile && path === activeFile.path) {
+      showToast("当前文件已被移动或删除");
+      await handleActivePieceGone();
+      return;
+    }
+    showToast("保存失败：文件路径已失效（可能已被移动或删除）");
+  } finally {
+    stalePathHandling.delete(path);
+  }
+}
+
 // 保存冲突：磁盘被外部改动而本地有未保存编辑时，由 write_note 的 mtime 守卫触发。
 onConflict(async (path, localContent) => {
   const keepMine = await confirmDialog(
@@ -708,25 +744,43 @@ onConflict(async (path, localContent) => {
     "保存冲突",
   );
   if (keepMine) {
-    await saveImmediate(path, localContent, { force: true });
-    return;
-  }
-  // 保留磁盘版本：先丢弃本地 pending（清掉 dirty，避免后续重载被跳过），再按路径把
-  // 磁盘内容重新注入对应编辑器。路由必须与 onFileChanged 一致——否则 tasks 文件或
-  // 已切换项目的旧路径会被错误地塞进 pieceEditor 而覆盖 piece 内容。
-  discardPending(path);
-  const activeFile = activePieceFile();
-  if (session.currentInbox && path === session.currentInbox.entry.path) {
-    applyRemoteDoc(await loadNote(path));
-  } else if (activeFile && path === activeFile.path) {
-    pieceHeader?.exitVersionPreview();
-    applyRemoteTo(pieceEditor, await loadNote(path));
-  } else if (session.currentProject && path === tasksPath(session.currentProject.path)) {
-    tasksPanel.reload();
+    try {
+      await saveImmediate(path, localContent, { force: true });
+      return;
+    } catch {
+      // 覆盖写入失败：目标路径已不存在（目录被改名/移动/删除）。落入失效兜底，
+      // 否则 pending 永远落不了盘，每次编辑都会重弹本对话框。
+    }
   } else {
-    // 路径已失效（如项目已切换）—— 仅刷新 lastKnown，无对应编辑器需要更新。
-    await loadNote(path);
+    // 保留磁盘版本：先丢弃本地 pending（清掉 dirty，避免后续重载被跳过），再按路径把
+    // 磁盘内容重新注入对应编辑器。路由必须与 onFileChanged 一致——否则 tasks 文件或
+    // 已切换项目的旧路径会被错误地塞进 pieceEditor 而覆盖 piece 内容。
+    discardPending(path);
+    try {
+      const activeFile = activePieceFile();
+      if (session.currentInbox && path === session.currentInbox.entry.path) {
+        applyRemoteDoc(await loadNote(path));
+      } else if (activeFile && path === activeFile.path) {
+        pieceHeader?.exitVersionPreview();
+        applyRemoteTo(pieceEditor, await loadNote(path));
+      } else if (session.currentProject && path === tasksPath(session.currentProject.path)) {
+        tasksPanel.reload();
+      } else {
+        // 路径已失效（如项目已切换）—— 仅刷新 lastKnown，无对应编辑器需要更新。
+        await loadNote(path);
+      }
+      return;
+    } catch {
+      // 磁盘版本也读不到：文件已不存在 → 同样落入失效兜底。
+    }
   }
+  await handleStaleSavePath(path);
+});
+
+// 写入重试耗尽（非冲突路径，多为目录被外部移动/删除）：走同一套失效兜底，
+// 避免死路径上的写入永远空转、且下次编辑又撞出冲突弹窗。
+onSaveGaveUp((path) => {
+  void handleStaleSavePath(path);
 });
 
 // 关闭/隐藏前尽量把 pending 写盘（窗口关闭被后端改为隐藏，webview 存活，invoke 可完成）。
@@ -984,12 +1038,25 @@ async function showProjectSwitcher(anchor: HTMLElement) {
               icon: "ph-pencil-simple",
               onClick: (host) =>
                 void promptRename(host, project.name, async (name) => {
+                  const isCurrent = session.currentProject?.path === project.path;
+                  const isActive = isCurrent && session.mode === "project";
+                  if (isActive) {
+                    // 重命名会使旧路径整体失效：先把未落盘编辑写到旧路径（此刻旧目录
+                    // 还在，写必然成功），否则后面重开会话时用磁盘内容重载编辑器会
+                    // 丢掉这些未保存编辑。
+                    await settleAllPendingWrites();
+                  }
                   const newPath = await renameProject(project.path, name);
                   session.recentProjects = session.recentProjects.map((p) => (p === project.path ? newPath : p));
                   await setRecentProjects(session.recentProjects);
-                  if (session.mode === "project" && session.currentProject?.path === project.path) {
+                  if (isActive) {
+                    // 活动项目等价于重新打开：currentInbox / currentPiece / watcher /
+                    // active_note 全部重建到新路径。否则编辑器继续往已不存在的旧目录
+                    // 写盘，每次保存都被 mtime 守卫误判为外部冲突，冲突弹窗无限循环。
+                    await openProject({ name, path: newPath });
+                  } else if (isCurrent) {
+                    // 文档模式下项目只是后台引用：同步路径即可，不打扰当前文档会话。
                     session.currentProject = { name, path: newPath };
-                    setProjectLabel(name);
                   }
                 }),
             },
