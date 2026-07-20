@@ -119,7 +119,7 @@ describe("replaceDocWithoutHistory", () => {
 });
 
 describe("editor selection rendering", () => {
-  it("uses native text selection and adds a cue for selected line breaks", () => {
+  it("uses CodeMirror's measured selection and cursor layer", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const view = createEditor(host, () => {});
@@ -127,8 +127,9 @@ describe("editor selection rendering", () => {
       setDoc(view, "alpha\n\nomega");
       view.dispatch({ selection: { anchor: 1, head: 8 } });
 
-      expect(view.dom.querySelector(".cm-selectionLayer")).toBeNull();
-      expect(view.dom.querySelectorAll(".cm-selected-line-break")).toHaveLength(2);
+      expect(view.dom.querySelector(".cm-selectionLayer")).toBeTruthy();
+      expect(view.dom.querySelector(".cm-cursorLayer")).toBeTruthy();
+      expect(view.dom.querySelector(".cm-selected-line-break")).toBeNull();
     } finally {
       view.destroy();
       host.remove();

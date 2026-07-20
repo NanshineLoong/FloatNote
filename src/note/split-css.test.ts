@@ -42,11 +42,11 @@ describe("split view CSS placement", () => {
     );
   });
 
-  it("aligns the writing title with editor content and keeps selected line-break marks compact", () => {
+  it("aligns the writing title with editor content and leaves selection rendering to CodeMirror", () => {
     expect(css).toMatch(/#piece-doc-header\s*{[^}]*padding-left:\s*var\(--piece-content-inset\);/s);
     expect(editorSource).toContain('padding: "16px var(--piece-content-inset, 0px)"');
-    expect(css).toMatch(/\.cm-selected-line-break\s*{[^}]*width:\s*0\.45em;/s);
-    expect(css).toMatch(/\.cm-selected-line-break\s*{[^}]*background:\s*var\(--color-selected\);/s);
+    expect(editorSource).toContain("drawSelection({ cursorBlinkRate: 1200 })");
+    expect(css).not.toContain(".cm-selected-line-break");
   });
 
   it("removes the Inbox block gutter and handle surface", () => {

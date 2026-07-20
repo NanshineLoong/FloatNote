@@ -2,7 +2,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import { Compartment, EditorState, Transaction, type Extension } from "@codemirror/state";
-import { EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { drawSelection, EditorView, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { livePreview, setNoteDir } from "./preview";
 import { listFold } from "./list-fold";
@@ -12,7 +12,6 @@ import { tableKeymap } from "./table-keymap";
 import { htmlPasteHandler, imagePasteHandler } from "./paste";
 import { imageDropHandler } from "./image-drop";
 import { markdownInputKeymap } from "./markdown-keymap";
-import { preciseSelectionRendering } from "./selection-render";
 import { hardBreakSpacing } from "./hard-break-spacing";
 import { sharedMarkdownExtensions } from "../shared/markdown/editor";
 
@@ -159,7 +158,7 @@ export function createEditor(
     extensions: [
       history(),
       readOnlyCompartment.of(EditorState.readOnly.of(false)),
-      preciseSelectionRendering,
+      drawSelection({ cursorBlinkRate: 1200 }),
       hardBreakSpacing,
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ extensions: sharedMarkdownExtensions, codeLanguages }),
