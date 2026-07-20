@@ -1,5 +1,12 @@
 import { insertNewlineContinueMarkup } from "@codemirror/lang-markdown";
-import { Prec, type Extension } from "@codemirror/state";
+import {
+  ChangeSet,
+  EditorSelection,
+  Prec,
+  type ChangeSpec,
+  type EditorState,
+  type Extension,
+} from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { showToast } from "../shared/toast";
 import {
@@ -7,8 +14,6 @@ import {
   isListItemLine,
   lineDepth,
   outdentLine,
-  prevListItemDepth,
-  listSubtreeEnd,
   leadingColumns,
   orderedListMarkerChanges,
 } from "./list-indent";
@@ -16,11 +21,35 @@ import {
 const INDENT = "    ";
 const CAP_MSG = "列表相邻项最多相差一级";
 
-/** All line texts as a 0-based array, for prevListItemDepth. */
-function docLines(doc: { line(n: number): { text: string }; lines: number }): string[] {
-  const out: string[] = [];
-  for (let i = 1; i <= doc.lines; i++) out.push(doc.line(i).text);
-  return out;
+function previousListItemDepth(doc: EditorState["doc"], currentLine: number): number | null {
+  for (let lineNumber = currentLine - 1; lineNumber >= 1; lineNumber -= 1) {
+    const text = doc.line(lineNumber).text;
+    if (text.trim() === "") continue;
+    return isListItemLine(text) ? lineDepth(text) : null;
+  }
+  return null;
+}
+
+function listSubtreeEndLine(doc: EditorState["doc"], startLine: number): number {
+  const start = doc.line(startLine);
+  if (!isListItemLine(start.text)) return startLine;
+  const depth = lineDepth(start.text);
+  let endLine = startLine;
+  for (let lineNumber = startLine + 1; lineNumber <= doc.lines; lineNumber += 1) {
+    const text = doc.line(lineNumber).text;
+    if (text.trim() === "") {
+      endLine = lineNumber;
+      continue;
+    }
+    if (isListItemLine(text)) {
+      if (lineDepth(text) <= depth) break;
+      endLine = lineNumber;
+      continue;
+    }
+    if (leadingColumns(text) <= depth * 4) break;
+    endLine = lineNumber;
+  }
+  return endLine;
 }
 
 /** Tab/Shift-Tab operate on every selected line. If the last selected line is
@@ -33,10 +62,30 @@ function selectedLineIndexes(view: EditorView): { start: number; end: number } {
   if (sel.from !== sel.to && sel.to === endLine.from && endLine.number > startLine.number) {
     endLine = doc.line(endLine.number - 1);
   }
-  const lines = docLines(doc);
   let end = endLine.number - 1;
-  if (isListItemLine(lines[end] ?? "")) end = listSubtreeEnd(lines, end);
+  if (isListItemLine(endLine.text)) end = listSubtreeEndLine(doc, endLine.number) - 1;
   return { start: startLine.number - 1, end };
+}
+
+/** Compose indentation and ordered-marker normalization without materializing
+ * a throwaway EditorState. State fields therefore update only for the single
+ * transaction that is actually dispatched. */
+function dispatchListChanges(
+  view: EditorView,
+  changes: ChangeSpec,
+  selection = view.state.selection,
+  scrollIntoView = false,
+): void {
+  const state = view.state;
+  const primary = state.changes(changes);
+  const changedDoc = primary.apply(state.doc);
+  const normalizationSpecs = orderedListMarkerChanges(changedDoc.toString());
+  const normalization = normalizationSpecs.length > 0
+    ? ChangeSet.of(normalizationSpecs, changedDoc.length)
+    : ChangeSet.empty(changedDoc.length);
+  const combined = primary.compose(normalization);
+  const mappedSelection = selection.map(primary, 1).map(normalization, 1);
+  view.dispatch({ changes: combined, selection: mappedSelection, scrollIntoView });
 }
 
 function dispatchIndent(view: EditorView, direction: "indent" | "outdent"): boolean {
@@ -58,18 +107,7 @@ function dispatchIndent(view: EditorView, direction: "indent" | "outdent"): bool
     }
   }
   if (changes.length === 0) return false;
-  const indentTransaction = view.state.update({ changes });
-  const indentedState = indentTransaction.state;
-  const selection = view.state.selection.map(indentTransaction.changes, 1);
-  const normalization = orderedListMarkerChanges(indentedState.doc.toString());
-  if (normalization.length === 0) {
-    view.dispatch({ changes, selection, scrollIntoView: true });
-  } else {
-    view.dispatch(
-      { changes, selection, scrollIntoView: true },
-      { changes: normalization, sequential: true },
-    );
-  }
+  dispatchListChanges(view, changes, view.state.selection, true);
   return true;
 }
 
@@ -79,7 +117,7 @@ export function handleTab(view: EditorView): boolean {
   const line = state.doc.lineAt(sel.from);
   if (isListItemLine(line.text)) {
     const curDepth = lineDepth(line.text);
-    const prevDepth = prevListItemDepth(docLines(state.doc), line.number - 1);
+    const prevDepth = previousListItemDepth(state.doc, line.number);
     if (!canDemote(prevDepth, curDepth)) {
       showToast(CAP_MSG);
       return true;
@@ -106,17 +144,7 @@ export function handleBackspace(view: EditorView): boolean {
   const removed = line.text.length - before.length;
   if (removed === 0) return false;
   const changes = { from: line.from, to: line.from + removed, insert: "" };
-  const selection = { anchor: line.from };
-  const outdentedState = state.update({ changes, selection }).state;
-  const normalization = orderedListMarkerChanges(outdentedState.doc.toString());
-  if (normalization.length === 0) {
-    view.dispatch({ changes, selection });
-  } else {
-    view.dispatch(
-      { changes, selection },
-      { changes: normalization, sequential: true },
-    );
-  }
+  dispatchListChanges(view, changes, EditorSelection.single(line.from));
   return true;
 }
 

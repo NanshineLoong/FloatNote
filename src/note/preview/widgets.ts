@@ -6,23 +6,45 @@ import { parseImage, type ImageAlign } from "../image-attrs";
 import { imageSrc } from "../image-fs";
 import { ensureIcon } from "./icons";
 import { wireOpenUrlLink } from "../../platform/open-url";
+import { isListFolded } from "../list-fold";
+
+function applyFoldTarget(marker: HTMLElement, view: EditorView, id: string | null): void {
+  marker.classList.toggle("cm-list-fold-marker", id !== null);
+  marker.classList.toggle("cm-list-fold-marker-folded", id !== null && isListFolded(view.state, id));
+  if (id) marker.dataset.listFoldId = id;
+  else delete marker.dataset.listFoldId;
+}
 
 class BulletWidget extends WidgetType {
-  toDOM(): HTMLElement {
+  constructor(readonly foldTargetId: string | null = null) { super(); }
+  eq(other: BulletWidget): boolean { return other.foldTargetId === this.foldTargetId; }
+  toDOM(view: EditorView): HTMLElement {
     const span = document.createElement("span");
     span.className = "cm-list-leaf-dot";
     span.setAttribute("aria-hidden", "true");
+    applyFoldTarget(span, view, this.foldTargetId);
     return span;
+  }
+  updateDOM(dom: HTMLElement, view: EditorView): boolean {
+    applyFoldTarget(dom, view, this.foldTargetId);
+    return true;
   }
 }
 
-/** Ordered-list marker: shows the ordinal computed from the list tree (via
- *  olOrdinal) instead of the literal source digits, so indent/outdent
- *  re-numbers automatically. Keeps the user's delimiter (`.` or `)`). */
+/** Ordered-list marker: shows the ordinal computed from the list tree instead
+ *  of the literal source digits, so indent/outdent re-numbers automatically.
+ *  Keeps the user's delimiter (`.` or `)`). */
 class OlNumberWidget extends WidgetType {
-  constructor(readonly ordinal: number, readonly delim: string) { super(); }
-  eq(o: OlNumberWidget): boolean { return o.ordinal === this.ordinal && o.delim === this.delim; }
-  toDOM(): HTMLElement {
+  constructor(
+    readonly ordinal: number,
+    readonly delim: string,
+    readonly foldTargetId: string | null = null,
+  ) { super(); }
+  eq(o: OlNumberWidget): boolean {
+    return o.ordinal === this.ordinal && o.delim === this.delim &&
+      o.foldTargetId === this.foldTargetId;
+  }
+  toDOM(view: EditorView): HTMLElement {
     const span = document.createElement("span");
     span.className = "cm-preview-ol-mark";
     const number = document.createElement("span");
@@ -32,7 +54,17 @@ class OlNumberWidget extends WidgetType {
     delim.className = "cm-preview-ol-delim";
     delim.textContent = this.delim;
     span.append(number, delim);
+    applyFoldTarget(span, view, this.foldTargetId);
     return span;
+  }
+  updateDOM(dom: HTMLElement, view: EditorView): boolean {
+    const number = dom.querySelector<HTMLElement>(".cm-preview-ol-number");
+    const delim = dom.querySelector<HTMLElement>(".cm-preview-ol-delim");
+    if (!number || !delim) return false;
+    number.textContent = String(this.ordinal);
+    delim.textContent = this.delim;
+    applyFoldTarget(dom, view, this.foldTargetId);
+    return true;
   }
   ignoreEvent() { return true; }
 }

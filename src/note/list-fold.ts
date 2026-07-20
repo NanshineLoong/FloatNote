@@ -1,16 +1,19 @@
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import {
+  Facet,
   RangeSetBuilder,
   StateEffect,
   StateField,
   type EditorState,
   type Extension,
+  type Text,
 } from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
   EditorView,
   ViewPlugin,
+  type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
@@ -44,9 +47,14 @@ export interface ListFoldItem {
   text: string;
   /** ListItem 祖先数，顶层=0。 */
   depth: number;
+  /** ListItem subtree 中的后代项数量。 */
+  descendantCount: number;
 }
 
 export const ListFoldEffect = StateEffect.define<{ id: string; folded: boolean }>();
+export const listFoldEnabled = Facet.define<boolean, boolean>({
+  combine: (values) => values.some(Boolean),
+});
 
 const LIST_CONTAINER = new Set(["BulletList", "OrderedList"]);
 
@@ -69,37 +77,50 @@ function findChild(node: SyntaxNode, names: Set<string>): SyntaxNode | null {
   return null;
 }
 
+function listFoldItem(doc: Text, node: SyntaxNode): ListFoldItem {
+  const depth = listDepthOf(node);
+  const listMark = findChild(node, new Set(["ListMark"]));
+  const nested = findChild(node, LIST_CONTAINER);
+  const firstLine = doc.lineAt(node.from);
+  const markTo = listMark ? listMark.to : node.from;
+  const text = stripBidMarker(doc.sliceString(markTo, firstLine.to).trim());
+  return {
+    id: `list:${depth}:${node.from}:${text}`,
+    fallbackId: `${depth}:${text}`,
+    from: node.from,
+    childFrom: nested ? doc.lineAt(nested.from).from : node.to,
+    childTo: nested?.to ?? node.to,
+    hasChildren: !!nested,
+    text,
+    depth,
+    descendantCount: 0,
+  };
+}
+
+/** Fold target carried by preview marker widgets, avoiding a post-render DOM scan. */
+export function listFoldTargetForMarker(doc: Text, listMark: SyntaxNode): string | null {
+  const item = listMark.parent;
+  if (item?.name !== "ListItem") return null;
+  const info = listFoldItem(doc, item);
+  return info.hasChildren ? info.id : null;
+}
+
 /** Walk the Lezer tree, collecting one ListFoldItem per ListItem. Exported for tests. */
 export function parseListItems(state: EditorState): ListFoldItem[] {
   const doc = state.doc;
   const tree = ensureSyntaxTree(state, doc.length) ?? syntaxTree(state);
   const items: ListFoldItem[] = [];
+  const openItems: number[] = [];
   tree.iterate({
     enter(node) {
       if (node.name !== "ListItem") return;
-      const sn = node.node;
-      const depth = listDepthOf(sn);
-      const listMark = findChild(sn, new Set(["ListMark"]));
-      const nested = findChild(sn, LIST_CONTAINER);
-      const firstLine = doc.lineAt(node.from);
-      const markTo = listMark ? listMark.to : node.from;
-      const text = stripBidMarker(doc.sliceString(markTo, firstLine.to).trim());
-      let childFrom = node.to;
-      let childTo = node.to;
-      if (nested) {
-        childFrom = doc.lineAt(nested.from).from;
-        childTo = nested.to;
-      }
-      items.push({
-        id: `list:${depth}:${node.from}:${text}`,
-        fallbackId: `${depth}:${text}`,
-        from: node.from,
-        childFrom,
-        childTo,
-        hasChildren: !!nested,
-        text,
-        depth,
-      });
+      openItems.push(items.length);
+      items.push(listFoldItem(doc, node.node));
+    },
+    leave(node) {
+      if (node.name !== "ListItem") return;
+      const index = openItems.pop();
+      if (index !== undefined) items[index].descendantCount = items.length - index - 1;
     },
   });
   return items;
@@ -135,14 +156,12 @@ function buildDecorations(
   const doc = state.doc;
   for (const it of items) {
     if (!it.hasChildren) continue;
-    const descendantCount = items.filter((candidate) =>
-      candidate.from >= it.childFrom && candidate.from < it.childTo && candidate.depth > it.depth).length;
     entries.push({
       from: it.from,
       to: it.from,
       deco: Decoration.widget({
         side: -1,
-        widget: new ListFoldToggleWidget(it.id, folded.has(it.id), descendantCount),
+        widget: new ListFoldToggleWidget(it.id, folded.has(it.id), it.descendantCount),
       }),
     });
     // A line class cannot override CodeMirror's measured minimum line height,
@@ -221,12 +240,17 @@ export function listFoldTargetId(
 
   const marker = target?.closest<HTMLElement>(".cm-list-leaf-dot, .cm-preview-ol-mark");
   if (!marker) return null;
+  if (marker.dataset?.listFoldId) return marker.dataset.listFoldId;
   const position = view.posAtDOM(marker, 0);
   const items = view.state.field(listFoldField, false)?.items ?? parseListItems(view.state);
   const line = view.state.doc.lineAt(position);
   const item = items.find((candidate) =>
     candidate.hasChildren && candidate.from >= line.from && candidate.from <= line.to);
   return item?.id ?? null;
+}
+
+export function isListFolded(state: EditorState, id: string): boolean {
+  return state.field(listFoldField, false)?.folded.has(id) ?? false;
 }
 
 /** bullet 旁的折叠箭头。 */
@@ -288,33 +312,21 @@ const listFoldPlugin = ViewPlugin.fromClass(
       // marker click is stopped before the editor can move its selection.
       view.dom.addEventListener("mousedown", this.onMouseDown, true);
       view.dom.addEventListener("click", this.onClick, true);
-      this.syncMarkerTargets();
     }
 
-    update() {
-      this.syncMarkerTargets();
-    }
-
-    private syncMarkerTargets(): void {
-      this.view.requestMeasure({
-        read: (view) => {
-          const folded = view.state.field(listFoldField).folded;
-          return Array.from(view.dom.querySelectorAll<HTMLElement>(
-            ".cm-list-leaf-dot, .cm-preview-ol-mark",
-          )).map((marker) => {
-            const id = listFoldTargetId(view, marker);
-            return { marker, id, folded: !!id && folded.has(id) };
-          });
-        },
-        write: (markers) => {
-          for (const { marker, id, folded } of markers) {
-            marker.classList.toggle("cm-list-fold-marker", !!id);
-            marker.classList.toggle("cm-list-fold-marker-folded", folded);
-            if (id) marker.dataset.listFoldId = id;
-            else delete marker.dataset.listFoldId;
+    update(update: ViewUpdate) {
+      for (const transaction of update.transactions) {
+        for (const effect of transaction.effects) {
+          if (!effect.is(ListFoldEffect)) continue;
+          for (const marker of this.view.dom.querySelectorAll<HTMLElement>(
+            ".cm-list-fold-marker[data-list-fold-id]",
+          )) {
+            if (marker.dataset.listFoldId === effect.value.id) {
+              marker.classList.toggle("cm-list-fold-marker-folded", effect.value.folded);
+            }
           }
-        },
-      });
+        }
+      }
     }
 
     destroy(): void {
@@ -325,5 +337,5 @@ const listFoldPlugin = ViewPlugin.fromClass(
 );
 
 export function listFold(): Extension[] {
-  return [listFoldField, listFoldPlugin];
+  return [listFoldEnabled.of(true), listFoldField, listFoldPlugin];
 }

@@ -49,6 +49,18 @@ describe("parseListItems", () => {
     expect(byText(items, "b").hasChildren).toBe(false);
   });
 
+  it("computes descendant counts while walking the tree", () => {
+    const items = parseListItems(
+      state("- a\n  - a1\n  - a2\n    - a2x\n- b\n"),
+    );
+
+    expect(byText(items, "a").descendantCount).toBe(3);
+    expect(byText(items, "a2").descendantCount).toBe(1);
+    expect(byText(items, "a1").descendantCount).toBe(0);
+    expect(byText(items, "a2x").descendantCount).toBe(0);
+    expect(byText(items, "b").descendantCount).toBe(0);
+  });
+
   it("computes depth and the nested-subtree replacement span", () => {
     const doc = "- a\n  - a1\n  - a2\n    - a2x\n- b\n";
     const items = parseListItems(state(doc));

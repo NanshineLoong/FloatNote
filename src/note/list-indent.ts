@@ -39,34 +39,35 @@ export function canDemote(prevDepth: number | null, curDepth: number): boolean {
   return curDepth <= prevDepth;
 }
 
-/** 有序列表 ListMark 在其所属列表中的 1 基序号。沿父 ListItem 的
- *  prevSibling 链统计 ListItem 前驱个数 +1；不同 OrderedList 父节点之间
- *  prevSibling 链自然在边界断开 → 自动从 1 重计。无状态、按节点自洽，
- *  与源码里写什么数字无关。 */
-export function olOrdinal(listMark: SyntaxNode): number {
-  const item = listMark.parent;
-  if (!item) return 1;
-  let count = 0;
-  let s = item.prevSibling;
-  while (s) {
-    if (s.name === "ListItem") count++;
-    s = s.prevSibling;
-  }
-  return count + 1;
+/** Stateful O(1) ordinal lookup for callers already walking a syntax tree in
+ * document order. Counters are isolated per OrderedList container. */
+export function orderedListOrdinalCounter(): (listMark: SyntaxNode) => number {
+  const counters = new Map<string, number>();
+  return (listMark) => {
+    const item = listMark.parent;
+    const list = item?.parent;
+    if (item?.name !== "ListItem" || list?.name !== "OrderedList") return 1;
+    const key = `${list.from}:${list.to}`;
+    const ordinal = (counters.get(key) ?? 0) + 1;
+    counters.set(key, ordinal);
+    return ordinal;
+  };
 }
 
 /** Source edits that synchronize ordered-list markers with the parsed list
  * hierarchy while preserving each marker's delimiter (`.` or `)`). */
 export function orderedListMarkerChanges(source: string): Array<{ from: number; to: number; insert: string }> {
+  if (!/\d+[.)][ \t]/.test(source)) return [];
   const changes: Array<{ from: number; to: number; insert: string }> = [];
   const tree = parser.parse(source);
+  const nextOrdinal = orderedListOrdinalCounter();
   tree.iterate({
     enter(node) {
-      if (node.name !== "ListMark" || node.node.parent?.name !== "ListItem") return;
+      if (node.name !== "ListMark" || node.node.parent?.parent?.name !== "OrderedList") return;
       const marker = source.slice(node.from, node.to);
       const match = /^(\d+)([.)])$/.exec(marker);
       if (!match) return;
-      const insert = `${olOrdinal(node.node)}${match[2]}`;
+      const insert = `${nextOrdinal(node.node)}${match[2]}`;
       if (insert !== marker) changes.push({ from: node.from, to: node.to, insert });
     },
   });

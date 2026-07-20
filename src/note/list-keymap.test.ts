@@ -1,19 +1,36 @@
 // @vitest-environment jsdom
-import { EditorState } from "@codemirror/state";
+import { EditorState, StateField, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
 import { handleBackspace, handleOutdent, handleTab } from "./list-keymap";
 
-function mount(doc: string, anchor: number, head = anchor): EditorView {
+function mount(doc: string, anchor: number, head = anchor, extensions: Extension[] = []): EditorView {
   const parent = document.createElement("div");
   document.body.appendChild(parent);
   return new EditorView({
     parent,
-    state: EditorState.create({ doc, selection: { anchor, head } }),
+    state: EditorState.create({ doc, selection: { anchor, head }, extensions }),
   });
 }
 
 describe("list keymap indentation", () => {
+  it("updates configured state fields only once per indentation command", () => {
+    let docUpdates = 0;
+    const updateCounter = StateField.define<null>({
+      create: () => null,
+      update(value, transaction) {
+        if (transaction.docChanged) docUpdates += 1;
+        return value;
+      },
+    });
+    const doc = "- previous\n- item";
+    const view = mount(doc, doc.indexOf("item"), undefined, [updateCounter]);
+
+    expect(handleTab(view)).toBe(true);
+    expect(docUpdates).toBe(1);
+    view.destroy();
+  });
+
   it("indents the current list item with its descendants", () => {
     const doc = "- previous\n- parent\n    - child\n- next";
     const view = mount(doc, doc.indexOf("parent"));

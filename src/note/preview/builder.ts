@@ -13,7 +13,8 @@ import {
 } from "@codemirror/view";
 import { inboxMetadata } from "../annotations/state";
 import { isSafeUrl } from "../inline";
-import { olOrdinal } from "../list-indent";
+import { orderedListOrdinalCounter } from "../list-indent";
+import { listFoldEnabled, listFoldTargetForMarker } from "../list-fold";
 import { IconReadyEffect, iconStateKeyFor } from "./icons";
 import { imageSourceField, SetImageSourceEffect } from "../image-interaction";
 import {
@@ -66,6 +67,9 @@ function buildDecorations(state: EditorState): DecorationSet {
   const entries: Array<{ from: number; to: number; deco: Decoration }> = [];
   const hide = Decoration.replace({});
   const doc = state.doc;
+  const tree = syntaxTree(state);
+  const nextOrderedOrdinal = orderedListOrdinalCounter();
+  const foldingEnabled = state.facet(listFoldEnabled);
   const imageSource = state.field(imageSourceField, false);
   // Live-preview decorations include block widgets (tables, code blocks) and
   // line-break-spanning replacements, which CodeMirror only permits from a
@@ -98,7 +102,7 @@ function buildDecorations(state: EditorState): DecorationSet {
   const listLineDepth = new Map<number, number>();
   const orderedListLines = new Set<number>();
   const activeFencedCode: Array<{ from: number; to: number }> = [];
-  syntaxTree(state).iterate({
+  tree.iterate({
     enter(node) {
       if (node.name !== "FencedCode") return;
       if (rangeTouchesSelection(selRanges, node.from, node.to)) {
@@ -134,7 +138,7 @@ function buildDecorations(state: EditorState): DecorationSet {
     }
   }
 
-  syntaxTree(state).iterate({
+  tree.iterate({
     from: vpFrom,
     to: vpTo,
     enter(node) {
@@ -227,6 +231,7 @@ function buildDecorations(state: EditorState): DecorationSet {
         case "ListMark": {
           if (touches(node.from, node.to)) return false;
           const ch = doc.sliceString(node.from, node.to);
+          const foldTargetId = foldingEnabled ? listFoldTargetForMarker(doc, node.node) : null;
           if (ch === "-" || ch === "*" || ch === "+") {
             entries.push({
               from: node.from,
@@ -234,7 +239,7 @@ function buildDecorations(state: EditorState): DecorationSet {
               // A parent item keeps the same bullet as a leaf item. The fold
               // control is inserted before it, so adding a third level no
               // longer changes how the second level is rendered.
-              deco: Decoration.replace({ widget: new BulletWidget() }),
+              deco: Decoration.replace({ widget: new BulletWidget(foldTargetId) }),
             });
           } else {
             // Ordered list marker (`1.`, `2.` …): replace the literal digits
@@ -247,7 +252,9 @@ function buildDecorations(state: EditorState): DecorationSet {
             entries.push({
               from: node.from,
               to: node.to,
-              deco: Decoration.replace({ widget: new OlNumberWidget(olOrdinal(node.node), delim) }),
+              deco: Decoration.replace({
+                widget: new OlNumberWidget(nextOrderedOrdinal(node.node), delim, foldTargetId),
+              }),
             });
           }
           return false;

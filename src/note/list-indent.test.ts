@@ -6,7 +6,8 @@ import {
   canDemote,
   isListItemLine,
   lineDepth,
-  olOrdinal,
+  orderedListOrdinalCounter,
+  orderedListMarkerChanges,
   renumberOrderedListMarkers,
   outdentLine,
   prevListItemDepth,
@@ -139,19 +140,20 @@ describe("structural list indentation", () => {
 function ordinals(doc: string): number[] {
   const s = EditorState.create({ doc, extensions: [markdown()] });
   const out: number[] = [];
+  const nextOrdinal = orderedListOrdinalCounter();
   syntaxTree(s).iterate({
     enter(node) {
       if (node.name !== "ListMark") return;
       const text = s.doc.sliceString(node.from, node.to);
       if (!/\d/.test(text)) return; // skip unordered markers
       if (node.node.parent?.name !== "ListItem") return;
-      out.push(olOrdinal(node.node));
+      out.push(nextOrdinal(node.node));
     },
   });
   return out;
 }
 
-describe("olOrdinal", () => {
+describe("orderedListOrdinalCounter", () => {
   it("numbers a single ordered list 1..n", () => {
     expect(ordinals("1. a\n2. b\n3. c")).toEqual([1, 2, 3]);
   });
@@ -168,6 +170,15 @@ describe("olOrdinal", () => {
 });
 
 describe("renumberOrderedListMarkers", () => {
+  it("scales linearly across a long flat ordered list", () => {
+    const source = Array.from({ length: 10_000 }, (_, index) => `${index + 1}. item`)
+      .join("\n");
+    const startedAt = performance.now();
+
+    expect(orderedListMarkerChanges(source)).toEqual([]);
+    expect(performance.now() - startedAt).toBeLessThan(500);
+  });
+
   it("rewrites source markers to match their ordered-list hierarchy", () => {
     expect(renumberOrderedListMarkers("1. first\n2. second\n    3. child\n3. third"))
       .toBe("1. first\n2. second\n    1. child\n3. third");
@@ -176,5 +187,10 @@ describe("renumberOrderedListMarkers", () => {
   it("preserves each marker's delimiter", () => {
     expect(renumberOrderedListMarkers("8) first\n4) second\n    9. child"))
       .toBe("1) first\n2) second\n    1. child");
+  });
+
+  it("renumbers an ordered list nested inside a blockquote", () => {
+    expect(renumberOrderedListMarkers("> 9. first\n> 4. second"))
+      .toBe("> 1. first\n> 2. second");
   });
 });

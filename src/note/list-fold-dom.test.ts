@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorView } from "@codemirror/view";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { listFold, listFoldField, ListFoldEffect } from "./list-fold";
 import { livePreview } from "./preview";
 
@@ -21,6 +21,55 @@ function mount(doc: string, selection: number): EditorView {
 }
 
 describe("list fold editor interaction", () => {
+  it("keeps standalone live preview markers inert", () => {
+    const parent = document.createElement("div");
+    document.body.replaceChildren(parent);
+    const doc = "- parent\n  - child\n- tail\n";
+    const view = new EditorView({
+      parent,
+      state: EditorState.create({
+        doc,
+        selection: { anchor: doc.indexOf("tail") },
+        extensions: [markdown(), ...livePreview()],
+      }),
+    });
+
+    const marker = view.dom.querySelector<HTMLElement>(".cm-list-leaf-dot");
+    expect(marker?.classList.contains("cm-list-fold-marker")).toBe(false);
+    expect(marker?.dataset.listFoldId).toBeUndefined();
+    view.destroy();
+  });
+
+  it("tags foldable markers without scheduling a deferred DOM scan", () => {
+    const doc = "- parent\n  - child\n- tail\n";
+    const view = mount(doc, doc.indexOf("tail"));
+    const requestMeasure = vi.spyOn(view, "requestMeasure");
+
+    view.dispatch({ changes: { from: doc.indexOf("child") + 5, insert: "!" } });
+
+    const parentMarker = view.dom.querySelector<HTMLElement>(".cm-list-leaf-dot");
+    expect(parentMarker?.classList.contains("cm-list-fold-marker")).toBe(true);
+    expect(parentMarker?.dataset.listFoldId).toBeTruthy();
+    expect(requestMeasure.mock.calls.some(([request]) => request && typeof request === "object"))
+      .toBe(false);
+    view.destroy();
+  });
+
+  it("updates a shifted fold target without replacing its marker DOM", () => {
+    const doc = "- parent\n  - child\n- tail\n";
+    const view = mount(doc, doc.indexOf("tail"));
+    const before = view.dom.querySelector<HTMLElement>(".cm-list-leaf-dot")!;
+    const previousId = before.dataset.listFoldId;
+
+    view.dispatch({ changes: { from: doc.indexOf("parent") + "parent".length, insert: "!" } });
+
+    const after = view.dom.querySelector<HTMLElement>(".cm-list-leaf-dot")!;
+    expect(after).toBe(before);
+    expect(after.dataset.listFoldId).not.toBe(previousId);
+    view.destroy();
+  });
+
+
   it("keeps the first-level marker on the original inset with a hanging content slot", () => {
     const view = mount("- item\n", 2);
     const line = view.dom.querySelector<HTMLElement>(".cm-preview-list");
