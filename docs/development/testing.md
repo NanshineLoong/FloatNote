@@ -9,12 +9,32 @@
 | `npm run build:sidecar` | sidecar TypeScript 编译 |
 | `npm run smoke:sidecar` | ESM bundle 的 JSONL ready 握手 |
 | `npm run check` | 全部 JS/TS 测试、构建与 sidecar smoke |
+| `npm run ci:local` | 从 `npm ci` 开始，随后执行版本一致性检查与完整 JS/TS 门禁 |
+| `npm run release:check -- --tag vX.Y.Z` | 校验发布标签、完整 JS/TS 门禁、sidecar staging 与全部 Rust 门禁 |
 | `cargo test --lib` | Rust 领域、协议和 adapter 单测 |
 | `cargo check --release` | 发布分支（包括 external sidecar 启动路径）编译 |
 | `npm run review:ui` | Chrome 中挂载真实前端组件，回归 UI 与交互状态 |
 | `npm run review:native:doctor` | 从当前源码启动 Tauri dev，探测 embedded WebDriver 状态和会话生命周期 |
 
 文件系统删除测试在无 Finder/桌面会话的 CI 或沙箱中应使用可替换的 trash adapter；不要把 OS 自动化失败误判为领域逻辑回归。
+
+## 本地 CI 分层
+
+开发中可先运行受影响的单测；Agent 或开发者准备声明改动完成时，从仓库根目录运行：
+
+```bash
+npm run ci:local
+```
+
+这条命令首先执行 `npm ci`，因此不仅验证当前 `node_modules`，也验证 `package.json` 与 `package-lock.json` 能否完成全新安装。随后执行 `npm run version:check` 和 `npm run check`。依赖或 lockfile 变更不得只用已有依赖目录下的 `npm run check` 作为完成证据。
+
+涉及 Rust 的普通开发仍按改动范围补充 `cargo test --lib`、`cargo check` 和 `cargo check --release`。准备版本标签时，改用发布预检命令统一执行这些步骤：
+
+```bash
+npm run release:check -- --tag v0.2.0
+```
+
+本地命令跨 macOS 与 Windows 使用相同的 Node 编排；Windows 会调用 `npm.cmd`。GitHub Actions 的 macOS/Windows runner 仍是平台差异的最终验证环境。
 
 ## 浏览器 UI 回归
 

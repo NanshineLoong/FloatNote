@@ -44,6 +44,12 @@ Four components; module-specific guidance exists where it is most needed:
 - `npm run build` builds the frontend and sidecar.
 - `npm test` runs frontend/shared and sidecar unit tests.
 - `npm run check` runs tests, builds, and the sidecar JSONL smoke test.
+- `npm run ci:local` starts from `npm ci`, then runs the version check and
+  complete JavaScript/TypeScript gate. Agents must run it before declaring
+  dependency or JavaScript/TypeScript changes complete.
+- `npm run release:check -- --tag vX.Y.Z` runs the clean-install gate,
+  validates the release tag, stages the sidecar, and runs Rust library,
+  debug, and release checks. Run it before creating a release tag.
 - `npm run review:ui` runs browser-mode UI regressions against real frontend components without a Tauri binary.
 - `npm run review:native:doctor` starts the current Tauri dev source and probes the embedded WebDriver lifecycle.
 - `npm run package:sidecar` stages the release sidecar resource/runtime.

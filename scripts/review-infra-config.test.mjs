@@ -70,10 +70,13 @@ test("preview releases use the root package version, DMG bundles, and ad-hoc sig
 });
 
 test("GitHub Actions validate changes and publish both native macOS architectures", async () => {
+  const pkg = await json("package.json");
   const ci = await readFile(new URL(".github/workflows/ci.yml", root), "utf8");
   const release = await readFile(new URL(".github/workflows/release.yml", root), "utf8");
   const rustJob = ci.match(/(?:^|\n)  rust:\n[\s\S]*?(?=\n  [a-zA-Z0-9_-]+:\n|$)/)?.[0];
 
+  assert.equal(pkg.scripts["ci:local"], "node ./scripts/local-ci.mjs ci");
+  assert.equal(pkg.scripts["release:check"], "node ./scripts/local-ci.mjs release");
   assert.match(ci, /npm ci/);
   assert.match(ci, /npm run check/);
   assert.ok(rustJob, "CI must define a rust job");

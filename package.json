@@ -30,6 +30,8 @@
     "package:sidecar": "npm run package:sidecar --workspace=floatnote-agent-sidecar",
     "version:check": "node ./scripts/release-version.mjs check",
     "version:set": "node ./scripts/release-version.mjs set",
+    "ci:local": "node ./scripts/local-ci.mjs ci",
+    "release:check": "node ./scripts/local-ci.mjs release",
     "check": "npm run test && npm run build && npm run smoke:sidecar",
     "review:ui": "node ./scripts/review-ui.mjs",
     "review:native:doctor": "node ./scripts/native-review-doctor.mjs"
