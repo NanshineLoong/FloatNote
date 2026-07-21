@@ -7,6 +7,7 @@ import { imageSrc } from "../image-fs";
 import { ensureIcon } from "./icons";
 import { wireOpenUrlLink } from "../../platform/open-url";
 import { isListFolded } from "../list-fold";
+import { renderMath } from "../../shared/markdown/math";
 
 function applyFoldTarget(marker: HTMLElement, view: EditorView, id: string | null): void {
   marker.classList.toggle("cm-list-fold-marker", id !== null);
@@ -76,6 +77,28 @@ class HrWidget extends WidgetType {
     return span;
   }
   ignoreEvent() { return true; }
+}
+
+class MathWidget extends WidgetType {
+  constructor(
+    readonly expression: string,
+    readonly display: boolean,
+    readonly from: number,
+  ) { super(); }
+  eq(other: MathWidget): boolean {
+    return other.expression === this.expression && other.display === this.display && other.from === this.from;
+  }
+  toDOM(view: EditorView): HTMLElement {
+    const element = document.createElement(this.display ? "div" : "span");
+    element.className = this.display ? "cm-preview-math cm-preview-math-block" : "cm-preview-math";
+    element.innerHTML = renderMath(this.expression, this.display);
+    element.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      view.dispatch({ selection: { anchor: this.from + (this.display ? 2 : 1) } });
+    });
+    return element;
+  }
+  ignoreEvent() { return false; }
 }
 
 /** Per-editor note directory, set by editor.ts so ImgWidget can resolve
@@ -323,4 +346,5 @@ export {
   CheckboxWidget,
   TableWidget,
   QuoteCardWidget,
+  MathWidget,
 };

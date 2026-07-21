@@ -74,10 +74,11 @@ src/styles/primitives.css   src/styles/semantic.css   src/styles/components.css
 ## Markdown 表面
 
 AI/用户消息气泡、`create_note` 审查正文和 edit/write 的“新版本预览”统一使用
-`.fn-markdown` 排版层。标题、列表、嵌套引用、只读任务项、代码块和表格只消费
+`.fn-markdown` 排版层。标题、列表、嵌套引用、只读任务项、代码块、表格和 KaTeX 公式只消费
 语义颜色、边框与字体 token；宽表格和代码块在自身表面横向滚动，不扩大气泡或
-纸张。原始 HTML 与自动图片加载关闭，外部链接通过 Rust `open_url` allowlist
-打开，不能导航当前 WebView。
+纸张；宽块级公式同样在自身表面横向滚动。公式采用 `$...$` 行内语法和独占行的
+`$$...$$` 块级语法，非法公式显示转义后的源码。原始 HTML 与自动图片加载关闭，
+KaTeX 禁止受信命令并限制尺寸和宏展开，外部链接通过 Rust `open_url` allowlist 打开，不能导航当前 WebView。
 
 助手紧凑输入器和聚焦纸张继续共享一个 CodeMirror `EditorView`。它们使用
 `src/shared/markdown/editor.ts` 的 GFM 方言和轻量源码装饰：块层级与内联强调有

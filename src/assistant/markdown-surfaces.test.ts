@@ -21,6 +21,18 @@ function editRequest(): PermissionRequest {
 }
 
 describe("Markdown surfaces", () => {
+  it("renders formulas in assistant output bubbles", () => {
+    const message = renderMessage({
+      id: "a",
+      role: "assistant",
+      streaming: false,
+      blocks: [{ id: "t", kind: "text", text: "Result: $E=mc^2$\n\n$$\n\\sum_{i=1}^n i\n$$" }],
+    });
+
+    expect(message.querySelector(".chat-text-content .katex")).not.toBeNull();
+    expect(message.querySelector(".chat-text-content .katex-display")).not.toBeNull();
+  });
+
   it("renders Markdown in user messages", () => {
     const message = renderMessage({ id: "u", role: "user", text: "> quoted\n\n`code`" });
 

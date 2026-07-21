@@ -99,3 +99,57 @@ describe("nested list preview", () => {
     expect(widgetStarts).toEqual([0, doc.indexOf("- middle"), doc.indexOf("- leaf")]);
   });
 });
+
+describe("math preview", () => {
+  it("replaces complete inline and display formulas when the selection is elsewhere", () => {
+    const doc = "Before $E=mc^2$ after\n\n$$\n\\sum_{i=1}^n i\n$$";
+    const state = EditorState.create({
+      doc,
+      extensions: [markdown(), ...livePreview()],
+      selection: { anchor: 0 },
+    });
+    const widgets = decorations(state.field(previewField))
+      .filter((decoration) => decoration.spec.widget)
+      .map((decoration) => ({
+        from: decoration.from,
+        to: decoration.to,
+        block: decoration.spec.block === true,
+        name: decoration.spec.widget.constructor.name,
+      }));
+
+    expect(widgets).toEqual([
+      { from: doc.indexOf("$E=mc^2$"), to: doc.indexOf("$E=mc^2$") + 8, block: false, name: "MathWidget" },
+      { from: doc.indexOf("$$"), to: doc.length, block: true, name: "MathWidget" },
+    ]);
+  });
+
+  it("keeps formulas as source while selected and ignores code, escaped dollars, and currency", () => {
+    const doc = [
+      "Selected $x^2$ here",
+      "`$inline_code$`",
+      "```tex",
+      "$fenced_code$",
+      "```",
+      "Cost \\$5 or $5 and $10",
+    ].join("\n");
+    const selectedFormula = doc.indexOf("$x^2$");
+    const state = EditorState.create({
+      doc,
+      extensions: [markdown(), ...livePreview()],
+      selection: { anchor: selectedFormula + 2 },
+    });
+
+    expect(decorations(state.field(previewField))
+      .filter((decoration) => decoration.spec.widget?.constructor.name === "MathWidget"))
+      .toEqual([]);
+  });
+
+  it("leaves an incomplete streamed formula visible as source", () => {
+    const doc = "Working on $E=mc";
+    const state = EditorState.create({ doc, extensions: [markdown(), ...livePreview()] });
+
+    expect(decorations(state.field(previewField))
+      .some((decoration) => decoration.spec.widget?.constructor.name === "MathWidget"))
+      .toBe(false);
+  });
+});

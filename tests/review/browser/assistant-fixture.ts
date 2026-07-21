@@ -50,7 +50,7 @@ const permissionRequest: PermissionRequest = {
   conversation_id: "browser-review",
   tool_name: "edit_note",
   old_content: `# 审查\n\n${"这是一段需要在窄窗口内正常换行的普通文本。".repeat(10)}\n\n${"unbreakable".repeat(80)}\n\n旧结论`,
-  new_content: `# 审查\n\n${"这是一段需要在窄窗口内正常换行的普通文本。".repeat(10)}\n\n${"unbreakable".repeat(80)}\n\n新结论`,
+  new_content: `# 审查\n\n${"这是一段需要在窄窗口内正常换行的普通文本。".repeat(10)}\n\n${"unbreakable".repeat(80)}\n\n行内公式 $E=mc^2$\n\n$$\n${Array.from({ length: 30 }, (_, index) => `a_{${index + 1}}`).join(" + ")}\n$$\n\n新结论`,
   preview: { tool: "edit_note", summary: "", detail: { kind: "diff", hunks: "" } },
   can_snapshot: false,
   resolved_path: "/review/piece.md",

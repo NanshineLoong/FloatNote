@@ -106,4 +106,33 @@ describe("permission review responsiveness", () => {
       return displays.unified === "none" && displays.wide === "grid";
     });
   });
+
+  it("loads KaTeX fonts and contains a wide formula in the rendered preview", async () => {
+    await browser.setWindowSize(420, 600);
+    await browser.execute(() => {
+      const open = (window as typeof window & { openPermissionReview?: () => void }).openPermissionReview;
+      if (!open) throw new Error("permission review fixture is missing");
+      open();
+    });
+    await $(".perm-dialog:not([hidden])").waitForDisplayed();
+    const previewTab = await $(".perm-review-tab:last-child");
+    await previewTab.click();
+    await $(".perm-dialog-markdown .katex-display").waitForDisplayed();
+
+    const result = await browser.execute(async () => {
+      await document.fonts.ready;
+      const article = document.querySelector<HTMLElement>(".perm-dialog-markdown")!;
+      const inline = article.querySelector<HTMLElement>(".katex")!;
+      const display = article.querySelector<HTMLElement>(".katex-display")!;
+      return {
+        fontFamily: getComputedStyle(inline).fontFamily,
+        articleFits: article.scrollWidth <= article.clientWidth + 1,
+        formulaScrolls: display.scrollWidth > display.clientWidth,
+      };
+    });
+
+    assert.match(result.fontFamily, /KaTeX_Main/);
+    assert.equal(result.articleFits, true);
+    assert.equal(result.formulaScrolls, true);
+  });
 });

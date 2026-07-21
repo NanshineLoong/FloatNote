@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
 import { isSafeUrl } from "./inline";
+import { mathPlugin } from "./math";
 import { wireOpenUrlLink } from "../../platform/open-url";
 
 function stripUnsafeDestinations(markdown: string): string {
@@ -41,6 +42,7 @@ const markdown = new MarkdownIt({
 
 markdown.validateLink = isSafeUrl;
 markdown.use(taskListPlugin);
+markdown.use(mathPlugin);
 markdown.renderer.rules.softbreak = () => " ";
 markdown.renderer.rules.table_open = () => '<div class="fn-markdown-table-scroll"><table>';
 markdown.renderer.rules.table_close = () => "</table></div>";

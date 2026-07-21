@@ -14,6 +14,33 @@ describe("shared Markdown renderer", () => {
     expect(html).toContain('<code class="language-ts">const x = 1;');
   });
 
+  it("renders inline and display math without interpreting code or escaped dollars", () => {
+    const html = renderMarkdown([
+      "Energy is $E=mc^2$.",
+      "",
+      "$$",
+      "\\int_0^1 x^2 \\, dx",
+      "$$",
+      "",
+      "`$not_math$` and \\$also_not_math$",
+    ].join("\n"));
+
+    expect(html).toContain('class="katex"');
+    expect(html).toContain('class="katex-display"');
+    expect(html).toContain("<code>$not_math$</code>");
+    expect(html).toContain("$also_not_math$");
+    expect(html.match(/class="katex"/g)).toHaveLength(2);
+  });
+
+  it("keeps incomplete and currency-like dollar text as text and safely exposes invalid TeX", () => {
+    const html = renderMarkdown("Streaming $x^2 and prices $5 and $10. Invalid $\\notacommand{$.");
+
+    expect(html).toContain("Streaming $x^2");
+    expect(html).toContain("$5 and $10");
+    expect(html).toContain('class="fn-math-error"');
+    expect(html).not.toContain("<script");
+  });
+
   it("renders GFM tables and read-only task lists", () => {
     const root = document.createElement("div");
     fillMarkdown(root, "| Name | Done |\n| --- | --- |\n| Item | yes |\n\n- [x] shipped\n- [ ] pending");

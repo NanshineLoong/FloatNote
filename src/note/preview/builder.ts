@@ -26,7 +26,9 @@ import {
   CheckboxWidget,
   TableWidget,
   QuoteCardWidget,
+  MathWidget,
 } from "./widgets";
+import { findMathRanges } from "../../shared/markdown/math";
 
 function getCursorLines(state: EditorState): Set<number> {
   const lines = new Set<number>();
@@ -68,6 +70,17 @@ function buildDecorations(state: EditorState): DecorationSet {
   const hide = Decoration.replace({});
   const doc = state.doc;
   const tree = syntaxTree(state);
+  const mathExclusions: Array<{ from: number; to: number }> = [];
+  const mathExclusionNodes = new Set(["FencedCode", "InlineCode", "Image", "Link", "URL", "Autolink", "Table"]);
+  tree.iterate({
+    enter(node) {
+      if (mathExclusionNodes.has(node.name)) {
+        mathExclusions.push({ from: node.from, to: node.to });
+        return false;
+      }
+    },
+  });
+  const mathRanges = findMathRanges(doc.toString(), mathExclusions);
   const nextOrderedOrdinal = orderedListOrdinalCounter();
   const foldingEnabled = state.facet(listFoldEnabled);
   const imageSource = state.field(imageSourceField, false);
@@ -142,6 +155,7 @@ function buildDecorations(state: EditorState): DecorationSet {
     from: vpFrom,
     to: vpTo,
     enter(node) {
+      if (mathRanges.some((range) => node.from >= range.from && node.to <= range.to)) return false;
       switch (node.name) {
         case "ATXHeading1":
         case "ATXHeading2":
@@ -434,6 +448,18 @@ function buildDecorations(state: EditorState): DecorationSet {
     },
   });
 
+  for (const range of mathRanges) {
+    if (touches(range.from, range.to)) continue;
+    entries.push({
+      from: range.from,
+      to: range.to,
+      deco: Decoration.replace({
+        widget: new MathWidget(range.expression, range.display, range.from),
+        block: range.display,
+      }),
+    });
+  }
+
   // List line styling. Source whitespace places the marker on the first visual
   // row, while padding keeps soft-wrapped rows at the same nesting depth. The
   // negative first-line indent prevents that source whitespace from doubling
@@ -586,6 +612,15 @@ const previewTheme = EditorView.theme({
     borderTop: "1px solid var(--color-divider)",
     verticalAlign: "middle",
   },
+  ".cm-preview-math": { display: "inline-block", maxWidth: "100%", verticalAlign: "middle" },
+  ".cm-preview-math-block": {
+    display: "block",
+    width: "100%",
+    padding: "4px 0",
+    overflowX: "auto",
+    textAlign: "center",
+  },
+  ".cm-preview-math-block .katex-display": { margin: "0" },
   ".cm-preview-figure": { display: "flex", justifyContent: "flex-start", width: "100%", margin: "0" },
   ".cm-preview-figure.img-center": { justifyContent: "center" },
   ".cm-preview-figure.img-right": { justifyContent: "flex-end" },
