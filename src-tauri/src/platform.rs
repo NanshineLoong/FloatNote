@@ -40,6 +40,10 @@ pub trait TrashOps: Send + Sync {
     fn move_to_trash(&self, path: &Path) -> std::io::Result<()>;
 }
 
+pub trait FileRevealer: Send + Sync {
+    fn reveal(&self, path: &Path) -> Result<(), String>;
+}
+
 pub struct SystemUrlOpener;
 
 impl UrlOpener for SystemUrlOpener {
@@ -64,5 +68,71 @@ impl UrlOpener for SystemUrlOpener {
         };
         command.status().map_err(|error| error.to_string())?;
         Ok(())
+    }
+}
+
+pub struct SystemFileRevealer;
+
+impl FileRevealer for SystemFileRevealer {
+    fn reveal(&self, path: &Path) -> Result<(), String> {
+        if !path.exists() {
+            return Err("文件或文件夹不存在".into());
+        }
+        let (program, args) = file_reveal_command(path);
+        let status = std::process::Command::new(program)
+            .args(args)
+            .status()
+            .map_err(|error| error.to_string())?;
+        if !status.success() {
+            return Err("无法在文件管理器中显示该位置".into());
+        }
+        Ok(())
+    }
+}
+
+fn file_reveal_command(path: &Path) -> (std::ffi::OsString, Vec<std::ffi::OsString>) {
+    #[cfg(target_os = "macos")]
+    {
+        (
+            "open".into(),
+            vec!["-R".into(), path.as_os_str().to_owned()],
+        )
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut select_arg = std::ffi::OsString::from("/select,");
+        select_arg.push(path.as_os_str());
+        ("explorer.exe".into(), vec![select_arg])
+    }
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        let target = path.parent().unwrap_or(path);
+        ("xdg-open".into(), vec![target.as_os_str().to_owned()])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::file_reveal_command;
+    use std::ffi::OsString;
+    use std::path::Path;
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn finder_reveal_uses_open_r_with_the_path_as_a_separate_argument() {
+        let (program, args) = file_reveal_command(Path::new("/tmp/项目 A/piece.md"));
+        assert_eq!(program, OsString::from("open"));
+        assert_eq!(
+            args,
+            vec![OsString::from("-R"), OsString::from("/tmp/项目 A/piece.md")]
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn explorer_reveal_selects_the_path() {
+        let (program, args) = file_reveal_command(Path::new(r"C:\Notes\piece.md"));
+        assert_eq!(program, OsString::from("explorer.exe"));
+        assert_eq!(args, vec![OsString::from(r"/select,C:\Notes\piece.md")]);
     }
 }

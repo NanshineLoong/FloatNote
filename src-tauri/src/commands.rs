@@ -260,6 +260,16 @@ pub fn open_url(url: String) -> Result<(), String> {
     crate::platform::UrlOpener::open(&crate::platform::SystemUrlOpener, &url)
 }
 
+/// Reveal and select a project folder or standalone document in the native
+/// file manager without changing the active FloatNote session.
+#[tauri::command]
+pub fn reveal_in_file_manager(path: String) -> Result<(), String> {
+    crate::platform::FileRevealer::reveal(
+        &crate::platform::SystemFileRevealer,
+        std::path::Path::new(&path),
+    )
+}
+
 /// Backend defence in depth for links. The renderer has the same allowlist,
 /// but Tauri commands are callable from every WebView and must validate again.
 fn is_safe_external_url(url: &str) -> bool {

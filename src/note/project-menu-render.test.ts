@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { createProjectMenuRenderer } from "./project-menu-render";
+import { createProjectMenuRenderer, fileManagerRevealLabel } from "./project-menu-render";
 
 describe("project menu renderer", () => {
+  it("uses the native file-manager name in the reveal action", () => {
+    expect(fileManagerRevealLabel("MacIntel")).toBe("在 Finder 中显示");
+    expect(fileManagerRevealLabel("Win32")).toBe("在文件资源管理器中显示");
+  });
+
   it("does not submit a rename while an IME confirms text", async () => {
     const closeMenu = vi.fn();
     const renderer = createProjectMenuRenderer({

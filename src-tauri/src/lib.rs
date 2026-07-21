@@ -234,6 +234,7 @@ pub fn run() {
             commands::set_auto_popup_mode,
             commands::get_window_shortcuts,
             commands::open_url,
+            commands::reveal_in_file_manager,
             source::app_icon,
             popup::submit_popup_capture,
             popup::popup_selection_snapshot,

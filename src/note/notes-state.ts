@@ -137,6 +137,11 @@ export async function deleteProject(dir: string): Promise<void> {
   await invoke("delete_project", { dir });
 }
 
+/** Ask the OS file manager to reveal and select a project folder or document. */
+export async function revealInFileManager(path: string): Promise<void> {
+  await invoke("reveal_in_file_manager", { path });
+}
+
 /** Delete a note file (piece or standalone document) plus its version history.
  * `dir` is the containing directory; `name` is the file stem. */
 export async function deleteNote(dir: string, name: string): Promise<void> {
