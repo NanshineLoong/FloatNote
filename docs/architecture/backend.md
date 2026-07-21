@@ -8,6 +8,8 @@
 - `notes.rs`、`project.rs`、`versions.rs` 负责文件、项目空间和版本快照；项目空间文件操作不应写入 command adapter。
 - `agent.rs` 是对 `agent/{protocol,runner,workspace}.rs` 的模块入口；这些模块负责 JSONL 契约、sidecar 生命周期、受限 project-space 解析及 mutation transaction。
 - `chat_history.rs`、`paths.rs`、`watcher.rs` 处理聊天记录、跨平台路径与文件变更。
+- `platform.rs` 封装原生系统边界；`reveal_in_file_manager` command 通过它在 macOS
+  Finder 或 Windows 文件资源管理器中定位项目文件夹和独立文档。
 - `selection_intent.rs` 是纯鼠标选择状态机；`selection_probe.rs` 通过 macOS
   Accessibility 从 focused element、children、ancestors 读取文本；
   `selection_monitor.rs` 在独立 CFRunLoop 上运行 listen-only event tap。FFI

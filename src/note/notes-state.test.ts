@@ -14,6 +14,7 @@ import {
   setLastKnown,
   discardPending,
   loadNote,
+  revealInFileManager,
   __resetSaveStateForTests,
 } from "./notes-state";
 import { invoke } from "@tauri-apps/api/core";
@@ -45,6 +46,19 @@ describe("inboxEntry", () => {
   it("names the entry _inbox and points at the inbox file", () => {
     const entry = inboxEntry({ name: "阅读笔记", path: "/Users/me/proj" });
     expect(entry).toEqual({ name: "_inbox", path: "/Users/me/proj/_inbox.md" });
+  });
+});
+
+describe("revealInFileManager", () => {
+  it("asks the backend to reveal the selected project or document path", async () => {
+    mockedInvoke.mockReset();
+    mockedInvoke.mockResolvedValue(undefined);
+
+    await revealInFileManager("/Users/me/FloatNote/项目 A");
+
+    expect(mockedInvoke).toHaveBeenCalledWith("reveal_in_file_manager", {
+      path: "/Users/me/FloatNote/项目 A",
+    });
   });
 });
 

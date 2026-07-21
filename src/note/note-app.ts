@@ -53,6 +53,7 @@ import {
   openExistingProject,
   renameNote,
   renameProject,
+  revealInFileManager,
   resolveDocuments,
   resolveProjects,
   saveImmediate,
@@ -95,7 +96,7 @@ import {
 import { createVersionPreviewState } from "./version-preview";
 import { attachQuoteCapture } from "./quote-capture";
 import { attachAutomationToasts } from "./automation-toasts";
-import { createProjectMenuRenderer } from "./project-menu-render";
+import { createProjectMenuRenderer, fileManagerRevealLabel } from "./project-menu-render";
 import { createAssistantController } from "./assistant-controller";
 import { createNoteSession } from "./note-session";
 import { resolveAgentWriteNavigation } from "./agent-write-navigation";
@@ -1034,6 +1035,11 @@ async function showProjectSwitcher(anchor: HTMLElement) {
           },
           actions: [
             {
+              label: fileManagerRevealLabel(),
+              icon: "ph-folder-open",
+              onClick: () => void revealPath(project.path),
+            },
+            {
               label: "重命名",
               icon: "ph-pencil-simple",
               onClick: (host) =>
@@ -1098,6 +1104,11 @@ async function showProjectSwitcher(anchor: HTMLElement) {
           },
           actions: [
             {
+              label: fileManagerRevealLabel(),
+              icon: "ph-folder-open",
+              onClick: () => void revealPath(doc.path),
+            },
+            {
               label: "重命名",
               icon: "ph-pencil-simple",
               onClick: (host) =>
@@ -1136,6 +1147,16 @@ async function showProjectSwitcher(anchor: HTMLElement) {
   const rect = anchor.getBoundingClientRect();
   menuEl = handle;
   handle.showAt(rect.left, rect.bottom + 2, items);
+}
+
+async function revealPath(path: string) {
+  closeMenu();
+  try {
+    await revealInFileManager(path);
+  } catch (error) {
+    console.error("reveal in file manager failed", error);
+    showToast("无法在文件管理器中显示该位置");
+  }
 }
 
 async function deleteProjectFlow(project: ProjectEntry) {

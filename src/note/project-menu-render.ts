@@ -1,6 +1,10 @@
 import { isImeComposing } from "../shared/keyboard";
 import { createIcon } from "../shared/ui/icon";
 
+export function fileManagerRevealLabel(platform = navigator.platform): string {
+  return /Mac/i.test(platform) ? "在 Finder 中显示" : "在文件资源管理器中显示";
+}
+
 export interface RowAction {
   label: string;
   /** Phosphor icon class without the `ph ` prefix, e.g. `ph-pencil-simple`. */
