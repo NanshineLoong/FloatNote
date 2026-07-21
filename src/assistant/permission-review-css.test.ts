@@ -49,4 +49,9 @@ describe("permission review CSS", () => {
     expect(css).toMatch(/\.fn-markdown table\s*\{[^}]*min-width:\s*100%;/s);
     expect(css).toMatch(/\.fn-markdown pre\s*\{[^}]*overflow-x:\s*auto;/s);
   });
+
+  it("contains wide display formulas inside narrow Markdown surfaces", () => {
+    expect(css).toMatch(/\.fn-markdown \.katex-display\s*\{[^}]*max-width:\s*100%;[^}]*overflow-x:\s*auto;/s);
+    expect(css).toMatch(/\.fn-math-error\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+  });
 });

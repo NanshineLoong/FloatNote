@@ -33,9 +33,11 @@ into a reconciled message list with incremental DOM updates.
   row model and context folding for both layouts.
 - `permission-allow-button.ts` — normal/split approval control. Snapshot mode
   is an immediate menu action, not a stored select value.
-- `markdown.ts` — compatibility re-export of the safe GFM renderer in
+- `markdown.ts` — compatibility re-export of the safe GFM + KaTeX renderer in
   `src/shared/markdown/render.ts`. Assistant and user bubbles plus permission
-  previews all use the shared `.fn-markdown` surface; never import note
+  previews all use the shared `.fn-markdown` surface. Inline `$...$` and
+  own-line `$$...$$` display formulas share the guarded implementation in
+  `src/shared/markdown/math.ts`; never import note
   internals for read-only rendering.
 - `input/` — the CM6 assistant composer: atomic file/skill chips, unified
   caret-following candidate popover, structured clipboard/send payload, and

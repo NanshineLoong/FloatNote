@@ -328,6 +328,18 @@
 .fn-markdown .fn-markdown-task { margin: 0 5px 0 0; vertical-align: -1px; }
 .fn-markdown .fn-markdown-task-item { list-style: none; }
 .fn-markdown .fn-markdown-image-alt { color: var(--color-text-muted); font-style: italic; }
+.fn-markdown .katex-display {
+  max-width: 100%;
+  margin: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+}
+.fn-math-error {
+  color: var(--color-danger);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
 .fn-markdown pre {
   position: relative;
   margin: 0 0 8px;
