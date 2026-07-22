@@ -3,4 +3,4 @@
 
 - Apple Silicon（M1/M2/M3/M4 及后续芯片）请选择 `.dmg` 文件名包含 `aarch64` 的版本。
 - Intel Mac 请选择 `.dmg` 文件名包含 `x86_64` 的版本。
-- 发布工作流会在 Draft 阶段验证应用签名、公证票据与 Gatekeeper 结果；Draft 经人工检查后才会公开。
+- 发布工作流会在上传前验证应用签名、公证票据与 Gatekeeper 结果。新版本先创建 Draft；重新运行已有 Prerelease 时会直接替换同名产物。

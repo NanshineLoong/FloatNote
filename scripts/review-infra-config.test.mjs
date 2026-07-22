@@ -96,6 +96,9 @@ test("GitHub Actions validate changes and publish both native macOS architecture
   assert.match(release, /-F draft=true/);
   assert.match(release, /-F prerelease=true/);
   assert.match(release, /generate_release_notes=true/);
+  assert.match(release, /if \[ "\$is_prerelease" != "true" \]; then/);
+  assert.doesNotMatch(release, /\$is_draft" != "true"/);
+  assert.doesNotMatch(release, /must remain a draft prerelease/);
   assert.match(release, /FloatNote_\$\{app_version\}_\$\{\{ matrix\.arch \}\}\.dmg/);
   assert.match(release, /FloatNote_\$\{app_version\}_\$\{\{ matrix\.arch \}\}\.app\.tar\.gz/);
   assert.match(release, /prepare_release:/);

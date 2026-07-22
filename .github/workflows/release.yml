@@ -23,7 +23,7 @@ env:
 
 jobs:
   prepare_release:
-    name: Validate tag and prepare draft
+    name: Validate tag and prepare prerelease
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -50,7 +50,7 @@ jobs:
             exit 1
           fi
           echo "TAG_COMMIT=$tag_commit" >> "$GITHUB_ENV"
-      - name: Create or reuse draft release
+      - name: Create or reuse prerelease
         id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -61,8 +61,8 @@ jobs:
             --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | [.id, .draft, .prerelease] | @tsv")
           if [ -n "$release_info" ]; then
             IFS=$'\t' read -r release_id is_draft is_prerelease <<< "$release_info"
-            if [ "$is_draft" != "true" ] || [ "$is_prerelease" != "true" ]; then
-              echo "Existing release $RELEASE_TAG must remain a draft prerelease" >&2
+            if [ "$is_prerelease" != "true" ]; then
+              echo "Existing release $RELEASE_TAG must remain a prerelease" >&2
               exit 1
             fi
           else
@@ -319,5 +319,5 @@ jobs:
               echo "GitHub renamed $asset_name to $uploaded_name." >&2
               exit 1
             fi
-            echo "Uploaded $asset_name to Draft release $RELEASE_TAG."
+            echo "Uploaded $asset_name to prerelease $RELEASE_TAG."
           done
