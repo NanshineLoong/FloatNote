@@ -21,7 +21,7 @@
     "build:sidecar": "npm run build --workspace=floatnote-agent-sidecar",
     "build": "npm run build:frontend && npm run build:sidecar",
     "preview": "vite preview",
-    "tauri": "tauri",
+    "tauri": "node ./scripts/tauri.mjs",
     "test:frontend": "vitest run",
     "test:sidecar": "npm test --workspace=floatnote-agent-sidecar",
     "test:infra": "node --test ./scripts/*.test.mjs",

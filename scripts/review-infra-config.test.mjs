@@ -93,14 +93,61 @@ test("GitHub Actions validate changes and publish both native macOS architecture
   assert.match(release, /aarch64-apple-darwin/);
   assert.match(release, /x86_64-apple-darwin/);
   assert.match(release, /tauri-apps\/tauri-action@v1/);
-  assert.match(release, /releaseDraft: true/);
-  assert.match(release, /prerelease: true/);
+  assert.match(release, /-F draft=true/);
+  assert.match(release, /-F prerelease=true/);
   assert.match(release, /generate_release_notes=true/);
-  assert.match(release, /releaseAssetNamePattern:.*\$\{\{ matrix\.arch \}\}/);
+  assert.match(release, /FloatNote_\$\{app_version\}_\$\{\{ matrix\.arch \}\}\.dmg/);
+  assert.match(release, /FloatNote_\$\{app_version\}_\$\{\{ matrix\.arch \}\}\.app\.tar\.gz/);
   assert.match(release, /prepare_release:/);
   assert.match(release, /gh api --method POST/);
   assert.match(release, /gh api --paginate/);
   assert.doesNotMatch(release, /releases\/tags\/\$RELEASE_TAG/);
   assert.match(release, /needs: prepare_release/);
-  assert.match(release, /releaseId: \$\{\{ needs\.prepare_release\.outputs\.release_id \}\}/);
+  assert.match(release, /RELEASE_ID: \$\{\{ needs\.prepare_release\.outputs\.release_id \}\}/);
+});
+
+test("macOS releases import Developer ID credentials, notarize, and verify artifacts", async () => {
+  const release = await readFile(new URL(".github/workflows/release.yml", root), "utf8");
+
+  assert.match(release, /APPLE_CERTIFICATE: \$\{\{ secrets\.APPLE_CERTIFICATE \}\}/);
+  assert.match(release, /APPLE_CERTIFICATE_PASSWORD: \$\{\{ secrets\.APPLE_CERTIFICATE_PASSWORD \}\}/);
+  assert.match(release, /security create-keychain/);
+  assert.match(release, /security import/);
+  assert.match(release, /Developer ID Application:/);
+  assert.match(release, /APPLE_TEAM_ID: \$\{\{ secrets\.APPLE_TEAM_ID \}\}/);
+  assert.match(release, /APPLE_SIGNING_IDENTITY=.*GITHUB_ENV/);
+
+  assert.match(release, /APPLE_API_PRIVATE_KEY: \$\{\{ secrets\.APPLE_API_PRIVATE_KEY \}\}/);
+  assert.match(release, /AuthKey_\$\{APPLE_API_KEY_ID\}\.p8/);
+  assert.match(release, /APPLE_API_KEY_PATH=.*GITHUB_ENV/);
+  assert.match(release, /APPLE_API_ISSUER: \$\{\{ secrets\.APPLE_API_ISSUER \}\}/);
+  assert.match(release, /APPLE_API_KEY: \$\{\{ secrets\.APPLE_API_KEY_ID \}\}/);
+  assert.match(release, /APPLE_API_KEY_PATH: \$\{\{ env\.APPLE_API_KEY_PATH \}\}/);
+  assert.match(release, /APPLE_SIGNING_IDENTITY: \$\{\{ env\.APPLE_SIGNING_IDENTITY \}\}/);
+
+  assert.match(release, /xcrun notarytool submit "\$dmg_path"/);
+  assert.match(release, /--key "\$APPLE_API_KEY_PATH"/);
+  assert.match(release, /--key-id "\$APPLE_API_KEY_ID"/);
+  assert.match(release, /--issuer "\$APPLE_API_ISSUER"/);
+  assert.match(release, /--wait/);
+  assert.match(release, /xcrun stapler staple "\$dmg_path"/);
+  assert.match(release, /codesign --verify --deep --strict/);
+  assert.match(release, /xcrun stapler validate/);
+  assert.match(release, /spctl --assess --type execute/);
+  assert.match(release, /spctl --assess[\s\\]*--type open/);
+  assert.match(release, /--jq '\.upload_url'/);
+  assert.match(release, /curl --silent --show-error --location/);
+  assert.match(release, /--data-binary "@\$asset_path"/);
+  assert.match(release, /encodeURIComponent\(process\.argv\[1\]\)/);
+  assert.match(release, /\?name=\$encoded_asset_name/);
+
+  const notarizeDmg = release.indexOf('xcrun notarytool submit "$dmg_path"');
+  const stapleDmg = release.indexOf('xcrun stapler staple "$dmg_path"');
+  const validateDmg = release.indexOf('xcrun stapler validate "$dmg_path"');
+  const uploadAssets = release.indexOf("Upload verified release assets");
+  assert.ok(notarizeDmg < stapleDmg, "DMG notarization must happen before stapling");
+  assert.ok(stapleDmg < validateDmg, "DMG stapling must happen before validation");
+  assert.ok(validateDmg < uploadAssets, "DMG validation must happen before upload");
+  assert.doesNotMatch(release, /secrets\.APPLE_ID/);
+  assert.doesNotMatch(release, /secrets\.APPLE_PASSWORD/);
 });

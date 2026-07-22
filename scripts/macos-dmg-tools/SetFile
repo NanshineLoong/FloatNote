@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+# Tauri's create-dmg script copies the App ICNS to .VolumeIcon.icns and then
+# enables the volume's custom-icon bit. FloatNote intentionally leaves that
+# bit disabled so Finder uses the current macOS disk image/volume artwork.
+if [ "$#" -eq 3 ] && [ "$1" = "-c" ] && [ "$2" = "icnC" ]; then
+  case "$3" in
+    */.VolumeIcon.icns) exit 0 ;;
+  esac
+fi
+
+if [ "$#" -eq 3 ] && [ "$1" = "-a" ] && [ "$2" = "C" ]; then
+  if [ -d "$3" ] && [ -f "$3/.VolumeIcon.icns" ]; then
+    rm -f "$3/.VolumeIcon.icns"
+    /usr/bin/SetFile -a c "$3"
+    exit 0
+  fi
+fi
+
+exec /usr/bin/SetFile "$@"
