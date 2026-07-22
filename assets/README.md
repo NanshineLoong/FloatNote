@@ -1,10 +1,11 @@
-# README 视频素材
+# README 展示素材
 
-这个目录用于存放根目录 `README.md` 的产品演示视频，以及 `posters/` 下用于 GitHub 展示的视频封面。根 README 使用 GitHub 附件地址内嵌视频播放器；仓库中的 MP4 保留为可维护的源素材。
+这个目录用于存放根目录 `README.md` 的 Hero 图片、产品演示视频，以及 `posters/` 下用于 GitHub 展示的视频封面。Hero 图片直接引用仓库文件；演示视频使用 GitHub 附件地址内嵌播放器，仓库中的 MP4 保留为可维护的源素材。
 
 | 文件名 | 展示内容 |
 | --- | --- |
-| `01-hero.mp4` | FloatNote 悬浮在真实工作场景中的完整产品印象视频 |
+| `readme-icon.png` | README 标题旁使用的透明圆角 FloatNote 图标 |
+| `01-hero.png` | FloatNote 悬浮在真实工作场景中的完整产品印象图 |
 | `02-capture.mp4` | 同一画面中展示悬浮笔记窗与划词后的采集、翻译、提问操作 |
 | `03-dual-panel.mp4` | 采集区与写作区并排的双栏工作区 |
 | `04-socratic-ai.mp4` | AI 追问过程，以及修改内容前的变更确认 |

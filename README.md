@@ -1,6 +1,5 @@
 <div align="center">
-  <img src="src-tauri/icons/icon.png" alt="FloatNote 应用图标" width="88" height="88">
-  <h1>FloatNote</h1>
+  <h1><img src="assets/readme-icon.png" alt="FloatNote 应用图标" width="44" height="44" style="vertical-align: middle;">&nbsp;FloatNote</h1>
   <p>一款悬浮在桌面上、陪你从捕捉走向写作的本地优先笔记工具。</p>
   <p>
     <a href="https://github.com/NanshineLoong/FloatNote/releases/download/v0.1.0/FloatNote_0.1.0_aarch64.dmg"><strong>下载 macOS 预览版 · Apple Silicon</strong></a>
@@ -11,9 +10,9 @@
   <p>Windows 版本正在准备中</p>
 </div>
 
-<!--
-头图准备好后，在这里加入：assets/01-hero.mp4。
--->
+<p align="center">
+  <img src="assets/01-hero.png" alt="FloatNote 悬浮笔记窗口展示" width="100%">
+</p>
 
 ## 为什么是 FloatNote？
 
