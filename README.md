@@ -1,5 +1,12 @@
 <div align="center">
   <h1><img src="assets/readme-icon.png" alt="FloatNote 应用图标" width="44" height="44" style="vertical-align: middle;">&nbsp;FloatNote</h1>
+</div>
+
+<p align="center">
+  <img src="assets/01-hero.png" alt="FloatNote 悬浮笔记窗口展示" width="80%">
+</p>
+
+<div align="center">
   <p>一款悬浮在桌面上、陪你从捕捉走向写作的本地优先笔记工具。</p>
   <p>
     <a href="https://github.com/NanshineLoong/FloatNote/releases/download/v0.1.0/FloatNote_0.1.0_aarch64.dmg"><strong>下载 macOS 预览版 · Apple Silicon</strong></a>
@@ -9,10 +16,6 @@
   <p>⚠️ 当前版本尚未经过 Apple 公证，首次打开可能被 macOS 阻止。<a href="#首次打开未公证预览版">查看安全说明与打开方法</a></p>
   <p>Windows 版本正在准备中</p>
 </div>
-
-<p align="center">
-  <img src="assets/01-hero.png" alt="FloatNote 悬浮笔记窗口展示" width="100%">
-</p>
 
 ## 为什么是 FloatNote？
 
