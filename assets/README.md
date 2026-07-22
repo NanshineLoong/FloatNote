@@ -1,6 +1,6 @@
 # README 视频素材
 
-这个目录用于存放根目录 `README.md` 的产品演示视频，以及 `posters/` 下用于 GitHub 展示的视频封面。根 README 使用可点击的封面图链接到视频，避免依赖 GitHub 不稳定支持的 `<video>` 标签。
+这个目录用于存放根目录 `README.md` 的产品演示视频，以及 `posters/` 下用于 GitHub 展示的视频封面。根 README 使用 GitHub 附件地址内嵌视频播放器；仓库中的 MP4 保留为可维护的源素材。
 
 | 文件名 | 展示内容 |
 | --- | --- |
@@ -19,6 +19,6 @@
 - 分辨率建议 1920×1080 或更高；标签、行动菜单和版本管理三段局部视频保持相同纵横比。
 - 裁掉与功能无关的桌面区域，但为悬浮窗和菜单保留足够的使用场景。
 - 不要出现真实姓名、私人笔记、文件路径、API Key、访问令牌或其他敏感信息。
-- 使用 MP4（H.264 编码）格式，确保在 GitHub 的文件预览页中可播放。
+- 使用 MP4（H.264 编码），并通过 GitHub 的 Markdown 网页编辑器上传，取得 `github.com/user-attachments/assets/...` 附件地址。
 - 每个视频在 `posters/` 下提供同名 JPEG 封面，例如 `02-capture.mp4` 对应 `posters/02-capture.jpg`。
-- README 中以 `<a>` 包裹 `<img>`，并同时提供“查看演示视频”文字链接；不要直接嵌入 `<video>`。
+- README 中以 `<video>` 引用附件地址，并设置 `controls`、`playsinline`、`preload="metadata"` 和对应的 `poster`；不要引用仓库 MP4 的 `blob` 或 `raw` 地址。

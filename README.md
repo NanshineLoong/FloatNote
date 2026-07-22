@@ -28,11 +28,7 @@
 <p>悬浮置顶的笔记窗始终在手边，无需离开正在使用的应用。划选内容后，可以快速采集、翻译，或带着原文继续向 AI 提问。</p>
 </td>
 <td width="58%" align="center" valign="middle">
-<a href="assets/02-capture.mp4" title="打开悬浮捕捉演示视频">
-<img src="assets/posters/02-capture.jpg" alt="FloatNote 悬浮捕捉、翻译与提问功能演示" width="100%">
-</a>
-<br>
-<a href="assets/02-capture.mp4">▶ 查看演示视频</a>
+<video src="https://github.com/user-attachments/assets/285785c3-c792-4485-b122-fd0899244412" controls muted playsinline preload="metadata" poster="assets/posters/02-capture.jpg" width="100%" aria-label="FloatNote 悬浮捕捉、翻译与提问功能演示"></video>
 </td>
 </tr>
 </table>
@@ -40,11 +36,7 @@
 <table>
 <tr>
 <td width="58%" align="center" valign="middle">
-<a href="assets/03-dual-panel.mp4" title="打开双栏工作区演示视频">
-<img src="assets/posters/03-dual-panel.jpg" alt="FloatNote 采集区与写作区双栏工作区演示" width="100%">
-</a>
-<br>
-<a href="assets/03-dual-panel.mp4">▶ 查看演示视频</a>
+<video src="https://github.com/user-attachments/assets/d316515a-72b4-48e7-87dd-8f72f870322c" controls muted playsinline preload="metadata" poster="assets/posters/03-dual-panel.jpg" width="100%" aria-label="FloatNote 采集区与写作区双栏工作区演示"></video>
 </td>
 <td width="42%" valign="middle">
 <h3>让材料与写作彼此照见</h3>
@@ -60,11 +52,7 @@
 <p>FloatNote 通过追问、梳理、规划和共同写作推动思考。需要修改内容时，它会先展示变更，再由你决定是否应用。</p>
 </td>
 <td width="58%" align="center" valign="middle">
-<a href="assets/04-socratic-ai.mp4" title="打开 AI 追问与变更确认演示视频">
-<img src="assets/posters/04-socratic-ai.jpg" alt="FloatNote AI 追问与变更确认功能演示" width="100%">
-</a>
-<br>
-<a href="assets/04-socratic-ai.mp4">▶ 查看演示视频</a>
+<video src="https://github.com/user-attachments/assets/a6f85cf4-7eec-4f66-ac57-c31e33ce541b" controls muted playsinline preload="metadata" poster="assets/posters/04-socratic-ai.jpg" width="100%" aria-label="FloatNote AI 追问与变更确认功能演示"></video>
 </td>
 </tr>
 </table>
@@ -80,11 +68,7 @@
 <table>
 <tr>
 <td width="58%" align="center" valign="middle">
-<a href="assets/05-local-files.mp4" title="打开本地 Markdown 文件演示视频">
-<img src="assets/posters/05-local-files.jpg" alt="FloatNote 本地 Markdown 文件与项目空间演示" width="100%">
-</a>
-<br>
-<a href="assets/05-local-files.mp4">▶ 查看演示视频</a>
+<video src="https://github.com/user-attachments/assets/9297a1c1-1687-4aad-a3d8-3af3050aeff9" controls muted playsinline preload="metadata" poster="assets/posters/05-local-files.jpg" width="100%" aria-label="FloatNote 本地 Markdown 文件与项目空间演示"></video>
 </td>
 <td width="42%" valign="middle">
 <p>笔记、行动清单和文章直接保存在你选择的本地文件夹中，并使用 Markdown 格式。你可以用熟悉的文件工具查看、备份和迁移，不依赖 FloatNote 才能访问自己的内容。</p>
@@ -98,28 +82,19 @@
 <table>
 <tr>
 <td width="33%" align="center" valign="top">
-<a href="assets/06-tags.mp4" title="打开标签演示视频">
-<img src="assets/posters/06-tags.jpg" alt="FloatNote 标签功能演示" width="100%">
-</a>
+<video src="https://github.com/user-attachments/assets/a2823cd5-0fbf-4358-9153-1ceee3ee8387" controls muted playsinline preload="metadata" poster="assets/posters/06-tags.jpg" width="100%" aria-label="FloatNote 标签功能演示"></video>
 <h3>标签</h3>
 <p>为重要片段添加标签，让零散内容获得清晰的语义。</p>
-<p><a href="assets/06-tags.mp4">▶ 查看演示视频</a></p>
 </td>
 <td width="33%" align="center" valign="top">
-<a href="assets/07-action-menu.mp4" title="打开行动菜单演示视频">
-<img src="assets/posters/07-action-menu.jpg" alt="FloatNote 行动菜单与下一步行动功能演示" width="100%">
-</a>
+<video src="https://github.com/user-attachments/assets/a1aea003-0afa-4770-909c-dad44068dc85" controls muted playsinline preload="metadata" poster="assets/posters/07-action-menu.jpg" width="100%" aria-label="FloatNote 行动菜单与下一步行动功能演示"></video>
 <h3>下一步行动</h3>
 <p>通过行动菜单记下下一步，把想法逐渐变成可以执行的事情。</p>
-<p><a href="assets/07-action-menu.mp4">▶ 查看演示视频</a></p>
 </td>
 <td width="33%" align="center" valign="top">
-<a href="assets/08-versions.mp4" title="打开版本管理演示视频">
-<img src="assets/posters/08-versions.jpg" alt="FloatNote 文章版本管理功能演示" width="100%">
-</a>
+<video src="https://github.com/user-attachments/assets/b6ff4ac7-7e67-4a18-8c58-db65b2c8e00b" controls muted playsinline preload="metadata" poster="assets/posters/08-versions.jpg" width="100%" aria-label="FloatNote 文章版本管理功能演示"></video>
 <h3>版本管理</h3>
 <p>保存并回看文章的不同版本，在修改中保留重要变化。</p>
-<p><a href="assets/08-versions.mp4">▶ 查看演示视频</a></p>
 </td>
 </tr>
 </table>
