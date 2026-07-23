@@ -7,27 +7,30 @@
 </p>
 
 <div align="center">
-  <p>一款悬浮在桌面上、陪你从捕捉走向写作的本地优先笔记工具。</p>
+  <p>一款悬浮在桌面上、帮助你从阅读到写作的本地笔记工具。</p>
   <p>
     <a href="https://github.com/NanshineLoong/FloatNote/releases/download/v0.1.0/FloatNote_0.1.0_aarch64.dmg"><strong>下载 macOS 预览版 · Apple Silicon</strong></a>
     &nbsp;·&nbsp;
     <a href="https://github.com/NanshineLoong/FloatNote/releases/download/v0.1.0/FloatNote_0.1.0_x86_64.dmg"><strong>下载 macOS 预览版 · Intel</strong></a>
   </p>
-  <p>⚠️ 当前版本尚未经过 Apple 公证，首次打开可能被 macOS 阻止。<a href="#首次打开未公证预览版">查看安全说明与打开方法</a></p>
   <p>Windows 版本正在准备中</p>
 </div>
 
 ## 为什么是 FloatNote？
 
-灵感常常出现在阅读、研究和工作途中。FloatNote 停留在当前工作区上方，让收集、整理和写作保持在同一条思考路径里：看到值得留下的内容时随手收集，需要深入理解时继续追问，准备表达时直接展开写作。
+1. 笔记窗口始终悬浮，随时记录，不打断当前工作
+2. 一次只打开一个项目，把注意力留给眼前的内容
+3. 采集区与写作区并排，边看材料，边写观点
+4. 笔记以 Markdown 文件保存在本地，随时可以查看、备份和迁移
+5. AI 通过追问和梳理帮助你想清楚，而不只是给出答案
 
-## 从遇见信息，到形成自己的内容
+## 从阅读到形成自己的观点
 
 <table>
 <tr>
 <td width="42%" valign="middle">
 <h3>随手捕捉，不打断当前工作</h3>
-<p>悬浮置顶的笔记窗始终在手边，无需离开正在使用的应用。划选内容后，可以快速采集、翻译，或带着原文继续向 AI 提问。</p>
+<p>置顶的笔记窗始终在手边，无需离开正在使用的应用。划选内容后，可以快速采集、翻译，或带着原文向 AI 提问。</p>
 </td>
 <td width="58%" align="center" valign="middle">
 <video src="https://github.com/user-attachments/assets/285785c3-c792-4485-b122-fd0899244412" controls muted playsinline preload="metadata" poster="assets/posters/02-capture.jpg" width="100%" aria-label="FloatNote 悬浮捕捉、翻译与提问功能演示"></video>
@@ -41,8 +44,8 @@
 <video src="https://github.com/user-attachments/assets/d316515a-72b4-48e7-87dd-8f72f870322c" controls muted playsinline preload="metadata" poster="assets/posters/03-dual-panel.jpg" width="100%" aria-label="FloatNote 采集区与写作区双栏工作区演示"></video>
 </td>
 <td width="42%" valign="middle">
-<h3>让材料与写作彼此照见</h3>
-<p>采集区保存沿途遇见的线索，写作区承接逐渐形成的观点。双栏工作区让素材和文章并排呈现，不必在多个页面之间来回切换。</p>
+<h3>边看材料，边写观点</h3>
+<p>采集区保存阅读时记下的内容，写作区用来整理和展开自己的观点。材料与文章并排呈现，不必在不同页面之间来回切换。</p>
 </td>
 </tr>
 </table>
@@ -50,8 +53,8 @@
 <table>
 <tr>
 <td width="42%" valign="middle">
-<h3>AI 帮你想清楚，而不是替你思考</h3>
-<p>FloatNote 通过追问、梳理、规划和共同写作推动思考。需要修改内容时，它会先展示变更，再由你决定是否应用。</p>
+<h3>用追问帮助你想清楚</h3>
+<p>FloatNote 的 AI 不只给出答案，也会通过追问、梳理、规划和共同写作，帮助你形成自己的判断。</p>
 </td>
 <td width="58%" align="center" valign="middle">
 <video src="https://github.com/user-attachments/assets/a6f85cf4-7eec-4f66-ac57-c31e33ce541b" controls muted playsinline preload="metadata" poster="assets/posters/04-socratic-ai.jpg" width="100%" aria-label="FloatNote AI 追问与变更确认功能演示"></video>
@@ -65,7 +68,7 @@
 | 内置 Skills | 问到真懂、梳理材料、下一步、写出所想 |
 | AI 提供商 | OpenAI、Anthropic、DeepSeek、Kimi、智谱、阿里云百炼 |
 
-## 把内容留在自己手中
+## 笔记直接保存在本地
 
 <table>
 <tr>
@@ -74,29 +77,28 @@
 </td>
 <td width="42%" valign="middle">
 <p>笔记、行动清单和文章直接保存在你选择的本地文件夹中，并使用 Markdown 格式。你可以用熟悉的文件工具查看、备份和迁移，不依赖 FloatNote 才能访问自己的内容。</p>
-<p><em>使用 AI 功能时，完成请求所需的内容会发送给你配置的 AI 提供商。</em></p>
 </td>
 </tr>
 </table>
 
-## 细节也服务于思考
+## 整理、行动与版本回顾
 
 <table>
 <tr>
 <td width="33%" align="center" valign="top">
 <video src="https://github.com/user-attachments/assets/a2823cd5-0fbf-4358-9153-1ceee3ee8387" controls muted playsinline preload="metadata" poster="assets/posters/06-tags.jpg" width="100%" aria-label="FloatNote 标签功能演示"></video>
 <h3>标签</h3>
-<p>为重要片段添加标签，让零散内容获得清晰的语义。</p>
+<p>为重要片段添加标签，方便整理和查找零散内容。</p>
 </td>
 <td width="33%" align="center" valign="top">
 <video src="https://github.com/user-attachments/assets/a1aea003-0afa-4770-909c-dad44068dc85" controls muted playsinline preload="metadata" poster="assets/posters/07-action-menu.jpg" width="100%" aria-label="FloatNote 行动菜单与下一步行动功能演示"></video>
 <h3>下一步行动</h3>
-<p>通过行动菜单记下下一步，把想法逐渐变成可以执行的事情。</p>
+<p>通过行动菜单明确接下来可以执行的事情。</p>
 </td>
 <td width="33%" align="center" valign="top">
 <video src="https://github.com/user-attachments/assets/b6ff4ac7-7e67-4a18-8c58-db65b2c8e00b" controls muted playsinline preload="metadata" poster="assets/posters/08-versions.jpg" width="100%" aria-label="FloatNote 文章版本管理功能演示"></video>
 <h3>版本管理</h3>
-<p>保存并回看文章的不同版本，在修改中保留重要变化。</p>
+<p>保存并回看文章的不同版本，了解内容是怎样一步步形成的。</p>
 </td>
 </tr>
 </table>
@@ -108,23 +110,6 @@
 - **所有版本**：[查看 GitHub Releases](https://github.com/NanshineLoong/FloatNote/releases)
 - **Windows**：正在准备中。
 - **首次使用**：划词采集需要授予系统辅助功能权限；FloatNote 会在需要时引导你完成设置。
-
-> [!WARNING]
-> 当前 macOS 预览版使用 ad-hoc 签名，尚未经过 Apple 公证。请只从本项目官方 GitHub Releases 下载。首次打开时，macOS 可能阻止应用运行。
-
-### 首次打开未公证预览版
-
-1. 打开 `.dmg`，将 FloatNote 拖入“应用程序”。
-2. 尝试打开 FloatNote 一次。
-3. 打开“系统设置 → 隐私与安全性”，在安全性区域点击“仍要打开”，确认后再次启动。
-
-如果系统没有显示“仍要打开”，且你已经确认应用来自本项目官方 Release，可以在终端执行：
-
-```bash
-xattr -dr com.apple.quarantine /Applications/FloatNote.app
-```
-
-这个命令只应对可信来源的 FloatNote 执行。不要通过全局关闭 Gatekeeper 来运行应用。
 
 ## 从源码运行
 
