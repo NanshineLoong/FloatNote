@@ -195,7 +195,7 @@ jobs:
           APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
         with:
           tauriScript: npm run tauri
-          args: --target ${{ matrix.target }} --bundles dmg
+          args: --target ${{ matrix.target }} --bundles app,dmg
 
       - name: Notarize and verify release artifacts
         env:
@@ -205,16 +205,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          app_path="src-tauri/target/${{ matrix.target }}/release/bundle/macos/FloatNote.app"
-          dmg_directory="src-tauri/target/${{ matrix.target }}/release/bundle/dmg"
+          bundle_directory="src-tauri/target/${{ matrix.target }}/release/bundle"
+          app_path="$bundle_directory/macos/FloatNote.app"
+          dmg_directory="$bundle_directory/dmg"
           dmg_paths=("$dmg_directory"/*.dmg)
 
           if [ ! -d "$app_path" ]; then
             echo "Application bundle not found at $app_path." >&2
+            find "$bundle_directory" -maxdepth 3 -print >&2 || true
             exit 1
           fi
           if [ "${#dmg_paths[@]}" -ne 1 ] || [ ! -f "${dmg_paths[0]}" ]; then
             echo "Expected exactly one DMG in $dmg_directory." >&2
+            find "$bundle_directory" -maxdepth 3 -print >&2 || true
             exit 1
           fi
           dmg_path="${dmg_paths[0]}"

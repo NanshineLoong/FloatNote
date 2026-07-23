@@ -1,6 +1,6 @@
 # 打包
 
-发布前，`npm run tauri build` 的 `beforeBuildCommand` 会先执行 `npm run package:sidecar`，再构建前端和 sidecar TypeScript。macOS 默认 bundle target 是 `.dmg`，使用 hardened runtime 和 `Entitlements.plist`。根包的 Tauri 包装器在 macOS 上为打包进程提供一个范围受限的 `SetFile` shim：它只移除 Tauri 生成的 `.VolumeIcon.icns` 并清除卷的自定义图标标记，让 Finder 使用系统默认磁盘映像/卷图标；应用包仍使用 `src-tauri/icons/icon.icns`。发布工作流通过同一包装器构建，然后完成 Developer ID 签名、公证和验证。
+发布前，`npm run tauri build` 的 `beforeBuildCommand` 会先执行 `npm run package:sidecar`，再构建前端和 sidecar TypeScript。macOS 默认 bundle target 是 `.dmg`，使用 hardened runtime 和 `Entitlements.plist`；GitHub Release 工作流显式构建 `app,dmg`，确保 `.app` 在 DMG 完成后仍保留用于验证和归档。根包的 Tauri 包装器在 macOS 上为打包进程提供一个范围受限的 `SetFile` shim：它只移除 Tauri 生成的 `.VolumeIcon.icns` 并清除卷的自定义图标标记，让 Finder 使用系统默认磁盘映像/卷图标；应用包仍使用 `src-tauri/icons/icon.icns`。发布工作流通过同一包装器构建，然后完成 Developer ID 签名、公证和验证。
 
 `sidecar/scripts/bundle.mjs` 将 sidecar 输出为 `sidecar/dist/floatnote-agent.mjs`。`prepare-tauri.mjs` 将 bundle 复制到 `src-tauri/resources/sidecar/`，并把 Node runtime 复制为符合 Tauri target triple 的 `src-tauri/binaries/floatnote-node-<triple>`。Tauri bundle 配置使用显式目录映射，将 sidecar bundle 与内置 skills 分别放到应用 `resource_dir()/sidecar` 和 `resource_dir()/skills`；Rust 从这些稳定的发布资源路径读取。Node runtime 作为 external binary 打包。
 

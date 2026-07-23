@@ -93,6 +93,11 @@ test("GitHub Actions validate changes and publish both native macOS architecture
   assert.match(release, /aarch64-apple-darwin/);
   assert.match(release, /x86_64-apple-darwin/);
   assert.match(release, /tauri-apps\/tauri-action@v1/);
+  assert.match(
+    release,
+    /args: --target \$\{\{ matrix\.target \}\} --bundles app,dmg/,
+    "release builds must retain the app bundle instead of treating it as a temporary DMG input",
+  );
   assert.match(release, /-F draft=true/);
   assert.match(release, /-F prerelease=true/);
   assert.match(release, /generate_release_notes=true/);
@@ -127,6 +132,7 @@ test("macOS releases import Developer ID credentials, notarize, and verify artif
   assert.match(release, /APPLE_API_KEY: \$\{\{ secrets\.APPLE_API_KEY_ID \}\}/);
   assert.match(release, /APPLE_API_KEY_PATH: \$\{\{ env\.APPLE_API_KEY_PATH \}\}/);
   assert.match(release, /APPLE_SIGNING_IDENTITY: \$\{\{ env\.APPLE_SIGNING_IDENTITY \}\}/);
+  assert.match(release, /find "\$bundle_directory" -maxdepth 3 -print/);
 
   assert.match(release, /xcrun notarytool submit "\$dmg_path"/);
   assert.match(release, /--key "\$APPLE_API_KEY_PATH"/);

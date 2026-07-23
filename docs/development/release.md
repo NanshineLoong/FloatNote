@@ -61,7 +61,7 @@ git push origin v0.2.0
 
 `release.yml` 会校验 `v0.2.0` 与项目版本 `0.2.0` 是否一致；不一致时不会构建或创建 Release。也可以在 GitHub Actions 页面手动运行该工作流，但输入必须是已经存在的版本标签。
 
-双架构 DMG、原生 runner 架构、GitHub 权限、证书导入、Apple 公证、Draft Release 创建与资产上传只能由 GitHub Actions 最终验证。修改 Tauri bundling、resources、entitlements 或签名配置时，还应在匹配架构的 macOS 机器上额外运行 `npm run tauri build`；日常发布预检不重复这项耗时构建。
+双架构 DMG、原生 runner 架构、GitHub 权限、证书导入、Apple 公证、Draft Release 创建与资产上传只能由 GitHub Actions 最终验证。发布任务显式请求 `app,dmg` 两种 bundle；这会让 `.app` 作为最终产物保留到验证和归档阶段，而不是在 DMG 构建后作为中间产物被 Tauri 清理。修改 Tauri bundling、resources、entitlements 或签名配置时，还应在匹配架构的 macOS 机器上额外运行 `npm run tauri build`；日常发布预检不重复这项耗时构建。
 
 ## 审核或更新 Prerelease
 
@@ -80,7 +80,7 @@ git push origin v0.2.0
 - `xcrun stapler validate` 检查 `.app` 和 `.dmg` 的公证票据；
 - `spctl --assess` 检查 Gatekeeper 对 `.app` 和 `.dmg` 的判断。
 
-签名、公证或验证失败时不会上传该架构的资产。上传阶段会按资产名替换同一 Release 中的旧版本。如果目标还是 Draft，上传中途失败时不要人工发布；如果目标已经公开为 Prerelease，重跑期间可能短暂缺少部分架构或只有部分资产完成更新，应在 Actions 全部成功后再通知用户下载。
+签名、公证或验证失败时不会上传该架构的资产。缺少预期的 `.app` 或 DMG 时，工作流会输出该 target 的 bundle 目录树，便于区分构建失败、产物改名和 Tauri 清理行为。上传阶段会按资产名替换同一 Release 中的旧版本。如果目标还是 Draft，上传中途失败时不要人工发布；如果目标已经公开为 Prerelease，重跑期间可能短暂缺少部分架构或只有部分资产完成更新，应在 Actions 全部成功后再通知用户下载。
 
 GitHub 自动生成提交记录；工作流会在正文顶部加入签名公证状态、架构选择和 Draft 审核说明。公开前应人工补充或整理以下内容：
 
