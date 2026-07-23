@@ -28,6 +28,7 @@ import type { ChatScope } from "../../platform/chat-history";
 import type { MentionFile } from "../mention-picker";
 import type { SkillSummary } from "../skill-picker";
 import { markdownEditorExtensions } from "../../shared/markdown/editor";
+import { dragScroll } from "../../shared/drag-scroll";
 
 export interface ComposerOptions {
   /** EditorView 挂载点（取代原 textarea）。 */
@@ -99,6 +100,8 @@ export function mountComposer(opts: ComposerOptions): ComposerHandle {
         EditorView.editorAttributes.of({ class: INPUT_CLASS }),
         EditorView.lineWrapping,
         drawSelection(),
+        // 拖选越过滚动容器边缘时自动滚动（与主笔记编辑器同一实现）。
+        dragScroll(),
         placeholder(opts.placeholder),
         ...markdownEditorExtensions(),
         refExtension(),

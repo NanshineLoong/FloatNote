@@ -5,7 +5,7 @@ FloatNote 使用 Vite 多页面应用：根目录 HTML 是各 WebView 入口。`
 ## 边界
 
 - `src/platform/` 是共享 agent/chat invoke/event gateway 与跨 feature DTO 所在处。`selection-popup.ts` 定义划词快照、一次性翻译和关联提问合同，`selection-message.ts` 是首条 selection callout 的唯一 codec。feature 自己的窗口命令仍在相应 feature 内调用；跨 feature 合同应放在这里。
-- `src/shared/` 放跨 feature 的 UI、Markdown、escape、快捷键和 toast；不能包含 feature 状态。`src/shared/markdown/render.ts` 是气泡与审查预览共用的安全 GFM renderer，`math.ts` 统一识别 `$...$` / `$$...$$` 并通过受限 KaTeX 配置渲染，`editor.ts` 提供主笔记与助手输入器共用的 Lezer 方言配置和源码保留型轻量 preview；完整笔记 widget 仍留在 `src/note/`。`src/shared/ui/modal-paper.ts` 统一管理 body-level 纸张弹窗的 inert、焦点边界、Escape、portal 注册和焦点恢复。
+- `src/shared/` 放跨 feature 的 UI、Markdown、escape、快捷键和 toast；不能包含 feature 状态。`src/shared/markdown/render.ts` 是气泡与审查预览共用的安全 GFM renderer，`math.ts` 统一识别 `$...$` / `$$...$$` 并通过受限 KaTeX 配置渲染，`editor.ts` 提供主笔记与助手输入器共用的 Lezer 方言配置和源码保留型轻量 preview；完整笔记 widget 仍留在 `src/note/`。`src/shared/ui/modal-paper.ts` 统一管理 body-level 纸张弹窗的 inert、焦点边界、Escape、portal 注册和焦点恢复。`src/shared/drag-scroll.ts` 统一各 CodeMirror 实例的拖选自动滚动：运行时按 overflowY 定位真实可滚祖先（grow 模式=外层 #piece-scroll，内滚=.cm-scroller），替代 CM 原生在 grow 下把 overflow:visible 的 #piece-editor-root 误判为滚动容器的机制。
 - `src/styles/` 是设计系统 token 层（`primitives` → `semantic` → `base`/`components`，由 `index.css` 聚合并被四个窗口链入）；`src/shared/ui/` 放跨窗口共享组件（Button/Icon/Menu/Scrollbar/EmptyState）。详见 `docs/development/design-system.md`。
 - `src/note/` 管理 CodeMirror 编辑、项目空间、任务、文本标注、图片与笔记窗口布局。
   Markdown 编辑器使用测量式选区层；live preview 只把独占整行的图片替换为

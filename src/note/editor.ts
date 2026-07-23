@@ -14,6 +14,7 @@ import { imageDropHandler } from "./image-drop";
 import { markdownInputKeymap } from "./markdown-keymap";
 import { hardBreakSpacing } from "./hard-break-spacing";
 import { sharedMarkdownExtensions } from "../shared/markdown/editor";
+import { dragScroll } from "../shared/drag-scroll";
 
 const highlight = HighlightStyle.define([
   { tag: tags.heading, fontWeight: "600" },
@@ -186,6 +187,8 @@ export function createEditor(
       htmlPasteHandler(),
       buildTheme(opts.grow ?? false),
       EditorView.lineWrapping,
+      // 拖选越过滚动容器边缘时自动滚动（grow/内滚两种形态统一走这套）。
+      dragScroll(),
       ...extras,
       EditorView.updateListener.of((update) => {
         if (update.docChanged) onChange(update.state.doc.toString());
